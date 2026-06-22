@@ -18,21 +18,21 @@ const FILMS = [
 
   {
     id:       1,
-    title:    'Senja Terakhir',
-    desc:     'Drama',
-    embed:    'https://www.filmbiru.com/embedframe/oovdbabd850',
+    title:    'Japannesse',
+    desc:     'Drama Japan',
+    embed:    'https://www.xvideos.com/embedframe/okkbeedc45d',
     gradient: 'linear-gradient(135deg, #1c2b52, #2E6FF2)'
   },
 
   // Hapus komentar di bawah ini untuk menambah film:
 
-  // {
-  //   id:       2,
-  //   title:    'Judul Film 2',
-  //   desc:     'Aksi',
-  //   embed:    'https://...',
-  //   gradient: 'linear-gradient(135deg, #3d1f52, #A855F7)'
-  // },
+  {
+    id:       2,
+    title:    'Japannese Two',
+    desc:     'Japan',
+    embed:    'https://www.xvideos.com/embedframe/opiplut26ef',
+    gradient: 'linear-gradient(135deg, #3d1f52, #A855F7)'
+  },
 
   // {
   //   id:       3,
