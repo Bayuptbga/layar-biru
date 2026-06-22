@@ -58,7 +58,7 @@
       </label>
     </div>
 
-    <button class="btn-full" id="btn-login" disabled>
+    <button class="btn-full" id="btn-login" disabled onclick="checkAndLogin()">
       <span id="btn-text">Masuk &amp; Mulai Nonton</span>
     </button>
     <p style="text-align:center;font-size:.72rem;color:var(--muted);margin-top:14px;">
@@ -217,6 +217,51 @@
       </div>
     </div>
 
+    <!-- ===== ADD VIDEO PANEL ===== -->
+    <div class="add-video-panel">
+      <div class="sp-head">
+        <h3>➕ Tambah Video Baru</h3>
+      </div>
+      <div class="add-video-form">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div class="form-group">
+            <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:4px;">Judul Video</label>
+            <input id="add-video-title" type="text" placeholder="Masukkan judul" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg-soft);color:var(--text);font-size:.85rem;"/>
+          </div>
+          <div class="form-group">
+            <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:4px;">Kategori</label>
+            <input id="add-video-category" type="text" placeholder="Contoh: Japan, Romance" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg-soft);color:var(--text);font-size:.85rem;"/>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div class="form-group">
+            <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:4px;">Video ID (xvideos)</label>
+            <input id="add-video-id" type="text" placeholder="Contoh: okkbeedc45d" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg-soft);color:var(--text);font-size:.85rem;"/>
+          </div>
+          <div class="form-group">
+            <label style="font-size:.75rem;color:var(--muted);display:block;margin-bottom:4px;">Thumbnail URL</label>
+            <input id="add-video-thumb" type="text" placeholder="https://..." style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg-soft);color:var(--text);font-size:.85rem;"/>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button id="btn-add-video" onclick="addNewVideo()" style="flex:1;padding:10px;background:var(--green);color:#0A0E1A;border:none;border-radius:7px;font-size:.85rem;font-weight:600;cursor:pointer;transition:opacity .2s;">➕ Tambah Video</button>
+          <button id="btn-refresh-videos" onclick="loadVideos()" style="flex:1;padding:10px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:.85rem;font-weight:600;cursor:pointer;transition:opacity .2s;">🔄 Refresh</button>
+        </div>
+        <div id="add-video-status" style="margin-top:8px;padding:8px;border-radius:6px;font-size:.78rem;display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Video List Panel -->
+    <div class="log-panel">
+      <div class="sp-head">
+        <h3>📹 Daftar Video</h3>
+        <span id="video-count" style="font-size:.75rem;color:var(--muted);">0 video</span>
+      </div>
+      <div class="log-body" id="admin-video-list" style="max-height:200px;overflow-y:auto;">
+        <div style="padding:10px;color:var(--muted);font-size:.8rem;text-align:center;">Memuat...</div>
+      </div>
+    </div>
+
     <!-- Grid video cards -->
     <div class="sessions-grid" id="admin-session-grid">
       <div class="empty-state" style="grid-column:1/-1;">
@@ -288,8 +333,8 @@
 <!-- ================================================================
      SCRIPTS — urutan penting: films.js dulu, baru app.js
      ================================================================ -->
-<script src="/js/films.js" defer></script>
-<script src="/js/app.js" defer></script>
+<script src="/js/films.js"></script>
+<script src="/js/app.js"></script>
 
 </body>
 </html>
