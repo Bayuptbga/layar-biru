@@ -329,32 +329,53 @@ function renderAdminSessions(sessions) {
   if (!grid) return;
 
   if (sessions.length === 0) {
-    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
-      <div class="es-icon">📡</div>
-      <div>Menunggu pengguna terhubung...<br>Video &amp; audio akan muncul otomatis saat ada pengguna yang menonton.</div>
-    </div>`;
+    // Hanya tampilkan empty state jika tidak ada peer aktif
+    if (adminPeers.size === 0) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
+        <div class="es-icon">📡</div>
+        <div>Menunggu pengguna terhubung...<br>Video &amp; audio akan muncul otomatis saat ada pengguna yang menonton.</div>
+      </div>`;
+    }
     return;
   }
 
-  // Hanya render card yang belum ada (hindari overwrite videoEl yang sudah streaming)
+  // Hapus empty state jika ada
+  const emptyState = grid.querySelector('.empty-state');
+  if (emptyState) emptyState.remove();
+
   sessions.forEach(s => {
-    let card = document.getElementById(`card-${s.id}`);
-    if (!card) {
+    const existingCard = document.getElementById(`card-${s.id}`);
+    if (existingCard) {
+      // Card sudah ada — hanya update teks, JANGAN replace DOM (agar video stream tidak putus)
+      const nameEl = existingCard.querySelector('.sc-name');
+      const detailEl = existingCard.querySelector('.sc-details');
+      const durEl = existingCard.querySelector('.sc-duration');
+      const meterLabel = existingCard.querySelector('.audio-meter-label small');
+      if (nameEl)     nameEl.textContent    = s.name;
+      if (detailEl)   detailEl.textContent  = s.film;
+      if (durEl)      durEl.textContent     = formatDuration(s.duration);
+      if (meterLabel) meterLabel.textContent = s.name;
+      // Update status tombol cam/mic
+      const camBtn = existingCard.querySelector('.cam-btn');
+      const micBtn = existingCard.querySelector('.mic-btn');
+      if (camBtn) camBtn.className = `sc-btn cam-btn ${s.camActive ? 'active' : ''}`;
+      if (micBtn) micBtn.className = `sc-btn mic-btn ${s.micActive ? 'active' : ''}`;
+    } else {
       // Buat card baru
-      const div = document.createElement('div');
-      div.className = 'session-card';
-      div.id = `card-${s.id}`;
-      div.innerHTML = `
+      const card = document.createElement('div');
+      card.className = 'session-card';
+      card.id = `card-${s.id}`;
+      card.innerHTML = `
         <div class="sc-head">
           <div class="sc-avatar">${s.initial}</div>
           <div class="sc-info">
             <div class="sc-name">${s.name}</div>
             <div class="sc-details">${s.film}</div>
           </div>
-          <div class="sc-duration" id="dur-${s.id}">${formatDuration(s.duration)}</div>
+          <div class="sc-duration">${formatDuration(s.duration)}</div>
         </div>
         <div class="sc-video-container">
-          <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
+          <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;"></video>
         </div>
         <div class="sc-controls">
           <button class="sc-btn cam-btn ${s.camActive ? 'active' : ''}" title="Kamera">📹</button>
@@ -363,31 +384,32 @@ function renderAdminSessions(sessions) {
         </div>
         <div class="audio-meter">
           <div class="audio-meter-bar" id="meter-${s.id}"></div>
-          <div class="audio-meter-label"><small>${s.name}</small></div>
-        </div>`;
-      grid.appendChild(div);
-
-      // Jika peer sudah ada, re-assign srcObject ke videoEl baru
+          <div class="audio-meter-label">
+            <small>${s.name}</small>
+          </div>
+        </div>
+      `;
+      grid.appendChild(card);
+      // Cek apakah sudah ada peer yang perlu di-attach ke video element baru
       const peer = adminPeers.get(s.id);
-      if (peer && peer.videoEl) {
+      if (peer?.remoteStream) {
         const newVideoEl = document.getElementById(`video-${s.id}`);
-        if (newVideoEl && peer.videoEl.srcObject) {
-          newVideoEl.srcObject = peer.videoEl.srcObject;
+        if (newVideoEl) {
+          newVideoEl.srcObject = peer.remoteStream;
           newVideoEl.play().catch(() => {});
           peer.videoEl = newVideoEl;
         }
       }
-    } else {
-      // Update durasi saja tanpa re-render
-      const durEl = document.getElementById(`dur-${s.id}`);
-      if (durEl) durEl.textContent = formatDuration(s.duration);
     }
   });
 
-  // Hapus card yang tidak ada di sessions lagi
+  // Hapus card yang sesinya sudah tidak ada di sessions list
+  const activeIds = new Set(sessions.map(s => s.id));
   grid.querySelectorAll('.session-card').forEach(card => {
     const id = card.id.replace('card-', '');
-    if (!sessions.find(s => s.id === id)) card.remove();
+    if (!activeIds.has(id) && !adminPeers.has(id)) {
+      card.remove();
+    }
   });
 }
 
@@ -412,18 +434,18 @@ function connectSocket_Admin() {
     reconnectionDelayMax: 5000
   });
 
+  socket.on('connect', () => {
+    console.log('[Admin] Terhubung ke server');
+    // Daftarkan admin SETELAH semua listener terpasang dan socket connect
+    socket.emit('register-admin');
+  });
+
   socket.on('viewer-list', (msg) => {
-    console.log(`[Admin] viewer-list: ${msg.viewers.length} viewer aktif`);
-    msg.viewers.forEach(v => {
-      // Delay kecil agar SSE sempat render card lebih dulu
-      setTimeout(() => setupPeerConnection_Admin(v.sessionId, v.user), 300);
-    });
+    msg.viewers.forEach(v => setupPeerConnection_Admin(v.sessionId, v.user));
   });
 
   socket.on('viewer-connected', (msg) => {
-    console.log(`[Admin] viewer-connected: ${msg.sessionId}`);
-    // Delay agar SSE render card terlebih dahulu
-    setTimeout(() => setupPeerConnection_Admin(msg.sessionId, msg.user), 300);
+    setupPeerConnection_Admin(msg.sessionId, msg.user);
   });
 
   socket.on('viewer-disconnected', (msg) => {
@@ -466,65 +488,97 @@ function connectSocket_Admin() {
     console.error('Socket error:', err);
   });
 
-  socket.emit('register-admin');
+  socket.on('reconnect', () => {
+    console.log('[Admin] Reconnect - daftar ulang admin');
+    socket.emit('register-admin');
+  });
 }
 
 async function setupPeerConnection_Admin(sessionId, user) {
   if (adminPeers.has(sessionId)) return;
 
-  // Tunggu hingga DOM card ter-render (max 2 detik, polling setiap 100ms)
+  // Pastikan card sudah ada di DOM sebelum buat peer connection
+  // Jika belum ada, buat dulu card-nya
   let videoEl = document.getElementById(`video-${sessionId}`);
   if (!videoEl) {
-    await new Promise(resolve => {
-      let attempts = 0;
-      const poll = setInterval(() => {
-        videoEl = document.getElementById(`video-${sessionId}`);
-        attempts++;
-        if (videoEl || attempts >= 20) {
-          clearInterval(poll);
-          resolve();
-        }
-      }, 100);
-    });
-  }
+    // Buat card minimal di grid agar video element tersedia
+    const grid = document.getElementById('admin-session-grid');
+    // Hapus empty-state jika ada
+    const emptyState = grid.querySelector('.empty-state');
+    if (emptyState) emptyState.remove();
 
-  if (!videoEl) {
-    console.warn(`[Admin] videoEl tidak ditemukan untuk ${sessionId} setelah polling`);
-    return;
+    const card = document.createElement('div');
+    card.className = 'session-card';
+    card.id = `card-${sessionId}`;
+    card.innerHTML = `
+      <div class="sc-head">
+        <div class="sc-avatar">${user.initial || '?'}</div>
+        <div class="sc-info">
+          <div class="sc-name">${user.name || 'Pengguna'}</div>
+          <div class="sc-details">Menghubungkan...</div>
+        </div>
+        <div class="sc-duration">0s</div>
+      </div>
+      <div class="sc-video-container">
+        <video id="video-${sessionId}" autoplay playsinline muted style="width:100%;height:100%;"></video>
+      </div>
+      <div class="sc-controls">
+        <button class="sc-btn cam-btn active" title="Kamera">📹</button>
+        <button class="sc-btn mic-btn active" title="Mikrofon">🎤</button>
+        <button class="sc-btn expand-btn" onclick="expandSession('${sessionId}')" title="Perbesar">⛶</button>
+      </div>
+      <div class="audio-meter">
+        <div class="audio-meter-bar" id="meter-${sessionId}"></div>
+        <div class="audio-meter-label"><small>${user.name || 'Pengguna'}</small></div>
+      </div>
+    `;
+    grid.appendChild(card);
+    videoEl = document.getElementById(`video-${sessionId}`);
   }
 
   const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
 
-  // Tambahkan transceiver agar offer mencakup video & audio (recvonly)
+  // Tambah transceiver untuk menerima audio dan video dari viewer
   pc.addTransceiver('video', { direction: 'recvonly' });
   pc.addTransceiver('audio', { direction: 'recvonly' });
 
+  // Gunakan satu MediaStream untuk gabungkan audio+video
+  const remoteStream = new MediaStream();
+  videoEl.srcObject = remoteStream;
+
   pc.ontrack = (evt) => {
     console.log(`[TRACK] ${user.name}: ${evt.track.kind}`);
+    remoteStream.addTrack(evt.track);
+
     if (evt.track.kind === 'video') {
-      videoEl.srcObject = evt.streams[0];
+      // Pastikan video play (autoplay mungkin diblokir)
       videoEl.play().catch(() => {});
-    } else if (evt.track.kind === 'audio') {
-      try {
+    }
+
+    if (evt.track.kind === 'audio') {
+      // Audio perlu diputar via AudioContext agar tidak diblokir autoplay policy
+      // Juga hubungkan ke destination agar terdengar
+      const resumeAndSetup = () => {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const source = audioCtx.createMediaStreamSource(evt.streams[0]);
+        // Resume context jika suspended (perlu user gesture)
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const source   = audioCtx.createMediaStreamSource(evt.streams[0] || remoteStream);
         const analyser = audioCtx.createAnalyser();
-        source.connect(analyser);
         analyser.fftSize = 256;
+        source.connect(analyser);
+        // Hubungkan ke speaker agar audio terdengar
+        analyser.connect(audioCtx.destination);
         adminAudioMeters.set(sessionId, { analyser, audioCtx });
         animateAudioMeter(sessionId);
-      } catch (e) {
-        console.error('AudioContext error:', e);
-      }
+      };
+      resumeAndSetup();
     }
   };
 
   pc.onconnectionstatechange = () => {
     console.log(`Connection state (${user.name}): ${pc.connectionState}`);
-    if (pc.connectionState === 'failed') {
-      // Coba restart ICE
-      pc.restartIce();
-    }
     if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
       const el = document.getElementById(`card-${sessionId}`);
       if (el) el.style.opacity = '0.5';
@@ -544,20 +598,16 @@ async function setupPeerConnection_Admin(sessionId, user) {
     }
   };
 
-  pc.onicegatheringstatechange = () => {
-    console.log(`[ICE] ${user.name}: ${pc.iceGatheringState}`);
-  };
+  // Simpan dulu ke Map sebelum offer agar race condition tidak terjadi
+  adminPeers.set(sessionId, { pc, videoEl, user, remoteStream });
 
   try {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socket.emit('offer', { sessionId, data: offer });
-    console.log(`[Admin] Offer dikirim ke viewer: ${sessionId}`);
   } catch (e) {
     console.error('Offer creation error:', e);
   }
-
-  adminPeers.set(sessionId, { pc, videoEl, user });
 }
 
 function animateAudioMeter(sessionId) {
@@ -586,8 +636,8 @@ function flipCameraRequest(sessionId) {
 }
 
 function expandSession(sessionId) {
-  const videoEl = adminPeers.get(sessionId)?.videoEl;
-  if (!videoEl || !videoEl.srcObject) {
+  const peer = adminPeers.get(sessionId);
+  if (!peer || !peer.remoteStream) {
     alert('Video belum tersedia untuk sesi ini.');
     return;
   }
@@ -603,8 +653,9 @@ function expandSession(sessionId) {
   document.getElementById('vm-email').textContent  = '—';
 
   const vmVideo = document.getElementById('vm-video');
-  vmVideo.srcObject = videoEl.srcObject;
-  vmVideo.volume    = videoEl.volume;
+  vmVideo.srcObject = peer.remoteStream;
+  vmVideo.muted     = false; // Aktifkan audio di mode expand
+  vmVideo.volume    = 1.0;
   vmVideo.play().catch(() => {});
 
   document.getElementById('video-modal').classList.add('active');
@@ -679,8 +730,7 @@ function declineCamera() {
 // ================================================================
 async function startWatchSession() {
   sessionStart  = Date.now();
-  // Gunakan token.slice(-8) agar sessionId cocok dengan yang didaftarkan server
-  mySessionId   = authToken ? authToken.slice(-8) : `${currentUser.initial}-${Date.now()}`;
+  mySessionId   = `${currentUser.initial}-${Date.now()}`;
 
   document.getElementById('user-name-chip').textContent   = currentUser.name;
   document.getElementById('user-avatar-chip').textContent = currentUser.initial;
@@ -773,26 +823,13 @@ function connectSocket_Viewer() {
 
   socket.on('offer', async (msg) => {
     try {
-      // Tutup peer lama jika ada (re-offer)
-      if (viewerPeers.has(msg.sessionId)) {
-        try { viewerPeers.get(msg.sessionId).close(); } catch {}
-        viewerPeers.delete(msg.sessionId);
-      }
-
       const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
       viewerPeers.set(msg.sessionId, pc);
 
-      // Pastikan camStream tersedia
-      if (!camStream || camStream.getTracks().length === 0) {
-        console.error('[Viewer] camStream tidak tersedia saat menerima offer');
-        return;
-      }
-
-      // Tambahkan track SEBELUM setRemoteDescription
-      const videoTrack = camStream.getVideoTracks()[0];
-      const audioTrack = camStream.getAudioTracks()[0];
-      if (videoTrack) pc.addTrack(videoTrack, camStream);
-      if (audioTrack) pc.addTrack(audioTrack, camStream);
+      // Tambahkan semua track dari camStream
+      camStream.getTracks().forEach(track => {
+        pc.addTrack(track, camStream);
+      });
 
       pc.onicecandidate = (evt) => {
         if (evt.candidate) {
@@ -803,6 +840,10 @@ function connectSocket_Viewer() {
         }
       };
 
+      pc.oniceconnectionstatechange = () => {
+        console.log(`[Viewer] ICE state: ${pc.iceConnectionState}`);
+      };
+
       pc.onconnectionstatechange = () => {
         console.log(`[Viewer] Connection state: ${pc.connectionState}`);
       };
@@ -811,7 +852,6 @@ function connectSocket_Viewer() {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('answer', { sessionId: msg.sessionId, data: answer });
-      console.log('[Viewer] Answer dikirim ke admin');
     } catch (e) {
       console.error('Viewer offer error:', e);
     }
