@@ -3,7 +3,7 @@
 // ================================================================
 
 // Banner tunggal — ganti path ini dengan 1 file gambar di repository kamu
-const BANNER_IMG = 'assets/banner.jpg';
+const BANNER_IMG = 'assets/banner.svg';
 
 function film(title, desc, id) {
   film._id = (film._id || 0) + 1;
