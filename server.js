@@ -379,3 +379,27 @@ server.listen(PORT, () => {
   console.log(`  [ADMIN]  Masukkan password: ${ADMIN_USER.password}`);
   console.log('');
 });
+
+// ===========================
+// GRACEFUL SHUTDOWN (Railway SIGTERM)
+// ===========================
+function gracefulShutdown(signal) {
+  console.log(`\n[${signal}] Menutup server dengan graceful...`);
+
+  // Beritahu semua client bahwa server akan restart
+  io.emit('server-restart', { message: 'Server sedang restart, harap refresh.' });
+
+  server.close(() => {
+    console.log('[SHUTDOWN] HTTP server ditutup.');
+    process.exit(0);
+  });
+
+  // Paksa keluar setelah 8 detik jika ada yang gantung
+  setTimeout(() => {
+    console.error('[SHUTDOWN] Timeout, force exit.');
+    process.exit(1);
+  }, 8000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
