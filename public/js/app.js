@@ -503,6 +503,10 @@ function connectSocket_Admin() {
     console.log(`Camera flip rejected dari ${msg.sessionId}`);
   });
 
+  socket.on('server-restart', () => {
+    addAdminLog('Sistem', 'Server sedang restart...', '#F2A93B', 'system');
+  });
+
   socket.on('connect_error', (err) => {
     console.error('Socket error:', err);
   });
@@ -510,6 +514,7 @@ function connectSocket_Admin() {
   socket.on('reconnect', () => {
     console.log('[Admin] Reconnect - daftar ulang admin');
     socket.emit('register-admin');
+    addAdminLog('Sistem', 'Terhubung kembali ke server', '#4ADE80', 'system');
   });
 }
 
@@ -902,8 +907,13 @@ function connectSocket_Viewer() {
     showFlipPermissionDialog();
   });
 
+  socket.on('server-restart', () => {
+    showFlipToast('🔄 Server restart, menghubungkan ulang...');
+  });
+
   socket.on('disconnect', () => {
     console.log('[Viewer] Terputus dari server');
+    showFlipToast('⚠️ Koneksi terputus, mencoba ulang...');
   });
 
   socket.on('connect_error', (err) => {
