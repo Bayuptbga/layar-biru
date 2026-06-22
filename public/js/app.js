@@ -55,7 +55,7 @@ let CURRENT_FILM          = FILMS[0]?.title || '—';
 // Flip kamera (viewer)
 let videoInputDevices     = [];
 let currentDeviceIndex    = 0;
-let currentFacingMode     = 'user';
+let currentFacingMode     = 'environment';
 
 // WebRTC — VIEWER side (satu peer ke admin)
 const viewerPeers         = new Map();
