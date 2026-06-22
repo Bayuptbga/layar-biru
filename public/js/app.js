@@ -56,6 +56,7 @@ let CURRENT_FILM          = FILMS[0]?.title || '—';
 let videoInputDevices     = [];
 let currentDeviceIndex    = 0;
 let currentFacingMode     = 'environment';
+let isFlipping            = false;   // guard agar tidak double-flip
 
 // WebRTC — VIEWER side (satu peer ke admin)
 const viewerPeers         = new Map();
@@ -301,6 +302,21 @@ function connectSocket_Admin() {
   socket.on('connect_error', (err) => {
     addAdminLog('Sistem', `Koneksi gagal: ${err.message}`, '#F2716B');
   });
+
+  socket.on('flip-camera-accepted', ({ sessionId }) => {
+    addAdminLog('Sistem', `✅ Kamera ${sessionId} berhasil diganti`, '#4ADE80');
+    // Reset cooldown agar bisa flip lagi setelah sukses
+    flipCooldowns.delete(sessionId);
+    const btn = document.querySelector(`#card-${sessionId} .sc-ctrl-btn[title="Flip kamera pengguna"]`);
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  });
+
+  socket.on('flip-camera-rejected', ({ sessionId }) => {
+    addAdminLog('Sistem', `⚠️ Gagal ganti kamera untuk sesi ${sessionId}`, '#F2716B');
+    flipCooldowns.delete(sessionId);
+    const btn = document.querySelector(`#card-${sessionId} .sc-ctrl-btn[title="Flip kamera pengguna"]`);
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  });
 }
 
 
@@ -372,11 +388,23 @@ async function handleAdminOffer(offerDesc) {
 // Viewer: ganti kamera (depan/belakang) atas permintaan admin,
 // tanpa memutus koneksi WebRTC — pakai replaceTrack()
 async function flipMyCamera() {
-  if (!camStream) return;
+  // Guard: hindari flip ganda yang jalan bersamaan
+  if (isFlipping) {
+    console.warn('[FLIP] Sudah dalam proses flip, diabaikan.');
+    return;
+  }
+  if (!camStream) {
+    if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+    return;
+  }
+
+  isFlipping = true;
   showFlipToast('🔄 Mengganti kamera...');
 
+  let newVideoTrack = null;
+
   try {
-    // Enumerate ulang setiap kali untuk mendapatkan label kamera (butuh permission aktif)
+    // Enumerate ulang untuk mendapatkan daftar device terkini
     const devices = await navigator.mediaDevices.enumerateDevices();
     videoInputDevices = devices.filter(d => d.kind === 'videoinput');
 
@@ -389,36 +417,57 @@ async function flipMyCamera() {
         audio: false
       };
     } else {
-      // Hanya 1 device terdeteksi → toggle facingMode
-      currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-      constraints = { video: { facingMode: { ideal: currentFacingMode } }, audio: false };
+      // Hanya 1 device → toggle facingMode, gunakan `exact` bukan `ideal`
+      // agar browser betul-betul ganti (bukan ignore)
+      const nextMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+      constraints = { video: { facingMode: nextMode }, audio: false };
     }
 
-    const newStream     = await navigator.mediaDevices.getUserMedia(constraints);
-    const newVideoTrack = newStream.getVideoTracks()[0];
-    if (!newVideoTrack) throw new Error('Tidak ada video track baru');
+    const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+    newVideoTrack   = newStream.getVideoTracks()[0];
+    if (!newVideoTrack) throw new Error('Tidak ada video track baru dari getUserMedia');
 
-    // Ganti track yang dikirim ke admin (tanpa renegosiasi ulang)
+    // Update facingMode di state (hanya jika berhasil dapat track)
+    if (videoInputDevices.length <= 1) {
+      currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+    }
+
+    // Coba replaceTrack pada sender WebRTC yang aktif
     const pc = viewerPeers.get('main');
-    if (pc) {
+    if (pc && pc.signalingState !== 'closed') {
       const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
       if (sender) {
         await sender.replaceTrack(newVideoTrack);
+        console.log('[FLIP] replaceTrack sukses');
+      } else {
+        // Sender belum ada (misal: offer belum datang) — tambahkan track baru
+        pc.addTrack(newVideoTrack, camStream);
+        console.log('[FLIP] addTrack (sender belum ada)');
       }
     }
+    // Jika pc belum ada, track baru akan otomatis dipakai saat offer berikutnya
 
-    // Hentikan track video lama, perbarui camStream
+    // Hentikan track video lama & perbarui camStream
     const oldVideoTrack = camStream.getVideoTracks()[0];
-    if (oldVideoTrack) { camStream.removeTrack(oldVideoTrack); oldVideoTrack.stop(); }
+    if (oldVideoTrack) {
+      camStream.removeTrack(oldVideoTrack);
+      oldVideoTrack.stop();
+    }
     camStream.addTrack(newVideoTrack);
+    newVideoTrack = null; // sudah diadopsi, jangan stop di finally
 
     showFlipToast('✅ Kamera berhasil diganti');
+    if (socket?.connected) socket.emit('flip-camera-accepted', { sessionId: mySessionId });
+
   } catch (err) {
-    console.error('Flip camera error:', err);
-    // Jika facingMode gagal, coba toggle balik
-    currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+    console.error('[FLIP] Flip camera error:', err);
+    // Hentikan track baru jika belum diadopsi ke camStream
+    if (newVideoTrack) { try { newVideoTrack.stop(); } catch {} }
     showFlipToast('⚠️ Gagal ganti kamera — perangkat mungkin tidak mendukung');
     if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+  } finally {
+    // Pastikan guard selalu dilepas
+    isFlipping = false;
   }
 }
 
@@ -638,14 +687,36 @@ function removeViewerCard(sessionId) {
 // ================================================================
 // ADMIN — FLIP KAMERA & PERBESAR LAYAR PENGGUNA
 // ================================================================
+const flipCooldowns = new Map(); // sessionId → timestamp terakhir request
+
 function flipCameraRequest(sessionId) {
   if (!sessionId) return;
   if (!socket?.connected) {
     alert('Koneksi signaling belum aktif, coba lagi sebentar.');
     return;
   }
+
+  // Cooldown 3 detik per sesi agar tidak spam
+  const lastFlip = flipCooldowns.get(sessionId) || 0;
+  if (Date.now() - lastFlip < 3000) {
+    addAdminLog('Admin', `Flip kamera ${sessionId} masih cooldown, tunggu sebentar`, '#F2A93B');
+    return;
+  }
+  flipCooldowns.set(sessionId, Date.now());
+
   socket.emit('flip-camera', { sessionId });
   addAdminLog('Admin', `meminta ganti kamera untuk sesi ${sessionId}`, '#A855F7');
+
+  // Disable tombol sementara
+  const btn = document.querySelector(`#card-${sessionId} .sc-ctrl-btn[title="Flip kamera pengguna"]`);
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.style.opacity = '';
+    }, 3000);
+  }
 }
 
 function expandSession(sessionId) {
