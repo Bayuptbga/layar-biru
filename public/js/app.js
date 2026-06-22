@@ -98,27 +98,6 @@ function showLoginError(msg, ...els) {
 // ================================================================
 // LOGIN
 // ================================================================
-function guestLogin() {
-  const guestId = Math.floor(Math.random() * 9999);
-
-  currentUser = {
-    name: `Guest_${guestId}`,
-    email: `guest${guestId}@guest.local`,
-    initial: "G",
-    role: "viewer",
-    guest: true
-  };
-
-  authToken = "guest-session-" + Date.now();
-
-  addAdminLog(
-    'Sistem',
-    `${currentUser.name} masuk sebagai tamu`,
-    '#F2A93B'
-  );
-
-  showScreen('screen-consent');
-}
 async function doLogin() {
   const emailEl   = document.getElementById('login-email');
   const passEl    = document.getElementById('login-pass');
@@ -204,8 +183,8 @@ function adminLogout() {
   if (sseConnection) { sseConnection.close(); sseConnection = null; }
   if (socket)        { socket.disconnect(); socket = null; }
 
-  if (authToken && !currentUser?.guest) {
-  await fetch(`${API_BASE}/api/logout`, {
+  if (authToken) {
+    fetch(`${API_BASE}/api/logout`, {
       method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` }
     }).catch(() => {});
     authToken = null;
