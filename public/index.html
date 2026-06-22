@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Layar Biru — Nonton Film</title>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+
+  <!-- Style -->
+  <link rel="stylesheet" href="/css/style.css"/>
+
+  <!-- Socket.IO -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+
+<!-- ================================================================
+     1. LOGIN
+     ================================================================ -->
+<div class="screen active" id="screen-login">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="dot"></div>
+      <span>Layar Biru</span>
+    </div>
+    <h2>Masuk ke Akunmu</h2>
+    <p class="sub">Akun penonton masuk ke halaman nonton · Akun admin masuk ke dashboard monitoring.</p>
+
+    <div class="error-msg" id="login-error">
+      <span>🚫</span><span id="login-error-text">Email atau password salah.</span>
+    </div>
+
+    <div class="form-group">
+      <label>Email</label>
+      <input id="login-email" type="email" placeholder="email@kamu.com" autocomplete="username"/>
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+
+    <div class="consent-box">
+      <div class="consent-title">⚠️ Informasi Pemantauan Sesi</div>
+      <p>Platform ini memantau sesi menonton melalui kamera dan mikrofon. Admin dapat melihat video dan audio kamu secara langsung selama menonton.</p>
+      <label class="consent-check">
+        <input id="chk-consent" type="checkbox"
+          onchange="document.getElementById('btn-login').disabled=!this.checked"/>
+        <span>Saya mengerti dan menyetujui pemantauan sesi oleh admin platform Layar Biru.</span>
+      </label>
+    </div>
+
+    <button class="btn-full" id="btn-login" disabled onclick="doLogin()">
+      Masuk &amp; Mulai Nonton
+    </button>
+    <p style="text-align:center;font-size:.72rem;color:var(--muted);margin-top:14px;">
+      Layar Biru v2.1 · WebRTC Live Monitoring
+    </p>
+  </div>
+</div>
+
+
+<!-- ================================================================
+     2. CONSENT KAMERA
+     ================================================================ -->
+<div class="screen" id="screen-consent">
+  <div class="consent-card">
+    <div class="icon-big">📹</div>
+    <h2>Izinkan Akses Kamera &amp; Mikrofon</h2>
+    <p class="desc">Sebelum mulai menonton, Layar Biru membutuhkan akses kamera dan mikrofon kamu.</p>
+
+    <div class="info-list">
+      <div class="info-item">
+        <span class="ii-icon">📡</span>
+        <div class="ii-text">
+          <strong>Stream video &amp; audio langsung ke admin</strong>
+          <span>Admin dapat melihat video kamera dan mendengar mikrofon kamu secara realtime melalui teknologi WebRTC terenkripsi.</span>
+        </div>
+      </div>
+      <div class="info-item">
+        <span class="ii-icon">🔴</span>
+        <div class="ii-text">
+          <strong>Indikator monitoring selalu tampil</strong>
+          <span>Banner merah di layarmu selalu aktif selama sesi berlangsung.</span>
+        </div>
+      </div>
+      <div class="info-item">
+        <span class="ii-icon">⏹️</span>
+        <div class="ii-text">
+          <strong>Stream berhenti otomatis saat keluar</strong>
+          <span>Menutup browser otomatis mengakhiri sesi dan stream kamera/mikrofon.</span>
+        </div>
+      </div>
+      <div class="info-item">
+        <span class="ii-icon">🔒</span>
+        <div class="ii-text">
+          <strong>Tidak direkam ke server</strong>
+          <span>Stream hanya peer-to-peer antara perangkatmu dan admin, tidak disimpan.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-agree" onclick="requestCamera()">✅ Izinkan Akses Kamera &amp; Mikrofon</button>
+      <button class="btn-decline" onclick="declineCamera()">Tolak &amp; Keluar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ================================================================
+     3. WATCH SCREEN
+     ================================================================ -->
+<div class="screen" id="screen-watch">
+  <!-- Banner monitoring -->
+  <div class="monitor-banner">
+    <div class="banner-left">
+      <div class="rec-dot"></div>
+      <span>🔴 VIDEO &amp; MIKROFON KAMU SEDANG DIPANTAU ADMIN SECARA REALTIME</span>
+    </div>
+    <div class="banner-right">
+      <span class="session-timer" id="session-timer">00:00:00</span>
+    </div>
+  </div>
+
+  <!-- Navbar -->
+  <div class="watch-nav">
+    <div class="watch-logo"><div class="dot"></div>Layar Biru</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="user-chip">
+        <div class="avatar" id="user-avatar-chip">U</div>
+        <span id="user-name-chip">Pengguna</span>
+      </div>
+      <button class="btn-end-session" onclick="endSession()">⏹ Akhiri Sesi</button>
+    </div>
+  </div>
+
+  <!-- Konten -->
+  <div class="watch-content">
+    <!-- Player -->
+    <div class="now-playing">
+      <div class="iframe-wrap">
+        <iframe id="film-iframe"
+          src="about:blank"
+          frameborder="0"
+          allowfullscreen
+          scrolling="no"
+          allow="autoplay; fullscreen"
+          style="width:100%;height:100%;border:0;display:block;">
+        </iframe>
+      </div>
+      <div class="video-info">
+        <h3 id="now-playing-title">Memuat...</h3>
+        <p id="now-playing-desc">Sedang diputar</p>
+      </div>
+    </div>
+
+    <!-- Pilih Film -->
+    <div class="section-title">Pilih Film</div>
+    <div class="film-grid" id="film-grid">
+      <!-- diisi oleh renderFilmGrid() di app.js -->
+    </div>
+  </div>
+</div>
+
+
+<!-- ================================================================
+     4. ADMIN DASHBOARD
+     ================================================================ -->
+<div class="screen" id="screen-admin">
+  <!-- Topbar -->
+  <div class="admin-topbar">
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <h1>Admin Dashboard</h1>
+        <span class="admin-badge">👑 ADMIN</span>
+      </div>
+      <p style="font-size:.75rem;color:var(--muted);" id="admin-username">Monitor sesi pengguna aktif</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div class="sse-status">
+        <div class="sse-dot" id="sse-dot"></div>
+        <span id="sse-status-text">Menghubungkan...</span>
+      </div>
+      <div class="live-pill"><div class="rec-dot" style="width:8px;height:8px;"></div>LIVE</div>
+      <button class="switch-btn" onclick="adminLogout()">← Logout</button>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="admin-body">
+    <!-- Stats -->
+    <div class="admin-stats">
+      <div class="astat">
+        <div class="alabel">Sesi Aktif</div>
+        <div class="aval" id="admin-stat-active" style="color:var(--red)">0</div>
+      </div>
+      <div class="astat">
+        <div class="alabel">Video Live</div>
+        <div class="aval" id="admin-stat-video" style="color:var(--green)">0</div>
+      </div>
+      <div class="astat">
+        <div class="alabel">Audio Aktif</div>
+        <div class="aval" id="admin-stat-audio" style="color:var(--blue-glow)">0</div>
+      </div>
+      <div class="astat">
+        <div class="alabel">Update</div>
+        <div class="aval" id="admin-stat-time" style="font-size:.9rem;color:var(--muted)">—</div>
+      </div>
+    </div>
+
+    <!-- Grid video cards -->
+    <div class="sessions-grid" id="admin-session-grid">
+      <div class="empty-state" style="grid-column:1/-1;">
+        <div class="es-icon">📡</div>
+        <div>Menunggu pengguna terhubung...<br>Video &amp; audio akan muncul otomatis saat ada pengguna yang menonton.</div>
+      </div>
+    </div>
+
+    <!-- Log aktivitas -->
+    <div class="log-panel">
+      <div class="sp-head">
+        <h3>📋 Log Aktivitas</h3>
+        <button class="si-btn" onclick="clearAdminLog()">Bersihkan</button>
+      </div>
+      <div class="log-body" id="admin-log"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ================================================================
+     5. ENDED SCREEN
+     ================================================================ -->
+<div class="screen" id="screen-ended">
+  <div class="ended-card">
+    <div class="ended-icon">✅</div>
+    <h2>Sesi Selesai</h2>
+    <p>Terima kasih sudah menonton di Layar Biru. Stream kamera dan mikrofon telah berakhir.</p>
+    <div class="ended-stats">
+      <div class="ended-stat">
+        <div class="es-val" id="ended-duration">00:00</div>
+        <div class="es-label">Durasi Sesi</div>
+      </div>
+      <div class="ended-stat">
+        <div class="es-val">1</div>
+        <div class="es-label">Film Ditonton</div>
+      </div>
+    </div>
+    <button class="btn-full" onclick="showScreen('screen-login');resetLogin();">Masuk Lagi</button>
+  </div>
+</div>
+
+
+<!-- ================================================================
+     SCRIPTS — urutan penting: films.js dulu, baru app.js
+     ================================================================ -->
+<script src="/js/films.js"></script>
+<script src="/js/app.js"></script>
+
+</body>
+</html>
