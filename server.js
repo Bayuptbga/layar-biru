@@ -153,6 +153,13 @@ io.on('connection', (socket) => {
       io.to(`viewer:${msg.sessionId}`).emit('ice-candidate', { ...msg, from: 'admin' });
     });
 
+    // Admin meminta viewer membalik kamera (depan/belakang)
+    socket.on('flip-camera', ({ sessionId }) => {
+      if (!sessionId) return;
+      io.to(`viewer:${sessionId}`).emit('flip-camera');
+      console.log(`[SIO] Admin ${user.name} minta flip kamera → ${sessionId}`);
+    });
+
     socket.on('disconnect', () => {
       console.log(`[SIO] Admin putus: ${user.name}`);
     });
