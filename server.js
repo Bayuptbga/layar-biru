@@ -121,6 +121,15 @@ io.on('connection', (socket) => {
       io.to('admins').emit('ice-candidate', { ...msg, from: 'viewer' });
     });
 
+    // Teruskan feedback flip kamera ke semua admin
+    socket.on('flip-camera-accepted', ({ sessionId }) => {
+      io.to('admins').emit('flip-camera-accepted', { sessionId });
+    });
+
+    socket.on('flip-camera-rejected', ({ sessionId }) => {
+      io.to('admins').emit('flip-camera-rejected', { sessionId });
+    });
+
     socket.on('disconnect', () => {
       if (socket._sessionId) {
         io.to('admins').emit('viewer-disconnected', { sessionId: socket._sessionId });
