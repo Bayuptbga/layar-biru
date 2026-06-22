@@ -16,7 +16,7 @@
   --text:      #E9ECF6;
   --muted:     #8A91AC;
   --line:      rgba(233, 236, 246, 0.08);
-  --banner-img: url('assets/banner.jpg'); /* 1 gambar untuk semua film card */
+  --banner-img: url('assets/banner.svg'); /* 1 gambar untuk semua film card */
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
