@@ -279,8 +279,9 @@ a { color: inherit; text-decoration: none; }
 .sc-video-container  { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; }
 .sc-video-container video { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-/* sc-controls: tombol di pojok kanan atas area video */
-.sc-controls      { position: absolute; top: 46px; right: 10px; z-index: 3; display: flex; gap: 6px; }
+/* sc-controls: tombol di pojok kanan atas area VIDEO (harus di dalam .sc-video-container yg position:relative) */
+.sc-video-container .sc-controls { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; gap: 6px; }
+.sc-controls      { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; gap: 6px; }
 .sc-btn           {
   padding: 5px 9px; border-radius: 7px; font-size: .78rem;
   background: rgba(10,14,26,.72); border: 1px solid rgba(233,236,246,.18);
@@ -296,7 +297,9 @@ a { color: inherit; text-decoration: none; }
 /* audio meter di bawah card */
 .audio-meter        { padding: 8px 14px 12px; }
 .audio-meter-label  { font-size: .68rem; color: var(--muted); margin-bottom: 4px; }
-.audio-meter-bar    { height: 5px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; transition: width .05s linear; border-radius: 3px; background: linear-gradient(90deg, var(--green), var(--amber), var(--red)); width: 0%; }
+/* wrapper track abu-abu, bar-nya yang bergerak */
+.audio-meter-track  { height: 5px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; }
+.audio-meter-bar    { height: 5px; background: linear-gradient(90deg, var(--green), var(--amber), var(--red)); border-radius: 3px; width: 0%; transition: width .05s linear; }
 
 .sc-ctrl-btn      {
   width: 30px; height: 30px; border-radius: 7px;
