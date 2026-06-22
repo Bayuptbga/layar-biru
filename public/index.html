@@ -254,6 +254,31 @@
 
 
 <!-- ================================================================
+     6. ADMIN — MODAL PERBESAR LAYAR PENGGUNA
+     ================================================================ -->
+<div class="video-modal" id="video-modal">
+  <div class="video-modal-inner">
+    <div class="vm-header">
+      <div class="vm-user">
+        <div class="vm-avatar" id="vm-avatar">U</div>
+        <div class="vm-userinfo">
+          <div class="vm-name" id="vm-name">Pengguna</div>
+          <div class="vm-email" id="vm-email">—</div>
+        </div>
+      </div>
+      <div class="vm-actions">
+        <button class="vm-btn" onclick="flipCameraRequest(currentExpandedSession)">🔄 Flip Kamera</button>
+        <button class="vm-btn vm-close" onclick="closeExpandSession()">✕ Tutup</button>
+      </div>
+    </div>
+    <div class="vm-video-wrap">
+      <video id="vm-video" autoplay playsinline></video>
+    </div>
+  </div>
+</div>
+
+
+<!-- ================================================================
      SCRIPTS — urutan penting: films.js dulu, baru app.js
      ================================================================ -->
 <script src="/js/films.js"></script>
