@@ -499,7 +499,7 @@ async function flipMyCamera() {
       // Hanya 1 device → toggle facingMode, gunakan `exact` bukan `ideal`
       // agar browser betul-betul ganti (bukan ignore)
       const nextMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-      constraints = { video: { facingMode: nextMode }, audio: false };
+      constraints = { video: { facingMode: { exact: nextMode } },  audio: false };
     }
 
     const newStream = await navigator.mediaDevices.getUserMedia(constraints);
