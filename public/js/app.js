@@ -354,7 +354,7 @@ function connectSocket_Viewer() {
   });
 
   socket.on('flip-camera', () => {
-    flipMyCamera();
+    showFlipConfirm();
   });
 }
 
@@ -383,6 +383,85 @@ async function handleAdminOffer(offerDesc) {
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
   socket.emit('answer', { sessionId: mySessionId, data: pc.localDescription });
+}
+
+// Viewer: tampilkan konfirmasi flip kamera — getUserMedia HARUS dipanggil
+// dari user gesture langsung, bukan dari socket event (browser security policy)
+function showFlipConfirm() {
+  // Kalau sudah ada konfirmasi yang tampil, abaikan
+  if (document.getElementById('flip-confirm-overlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'flip-confirm-overlay';
+  overlay.innerHTML = `
+    <div id="flip-confirm-box">
+      <div id="flip-confirm-icon">🔄</div>
+      <div id="flip-confirm-title">Ganti Kamera</div>
+      <div id="flip-confirm-msg">Admin meminta kamera dialihkan ke sisi lain.<br>Ketuk <b>Izinkan</b> untuk melanjutkan.</div>
+      <div id="flip-confirm-btns">
+        <button id="flip-confirm-yes">✅ Izinkan</button>
+        <button id="flip-confirm-no">❌ Tolak</button>
+      </div>
+    </div>
+  `;
+
+  // Inline style agar tidak bergantung pada CSS eksternal
+  Object.assign(overlay.style, {
+    position: 'fixed', inset: '0', zIndex: '9999',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)'
+  });
+  const box = overlay.querySelector('#flip-confirm-box');
+  Object.assign(box.style, {
+    background: '#1a1a2e', border: '1px solid #334',
+    borderRadius: '16px', padding: '28px 24px', textAlign: 'center',
+    maxWidth: '320px', width: '90%', color: '#eee',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.6)'
+  });
+  overlay.querySelector('#flip-confirm-icon').style.cssText  = 'font-size:2.5rem;margin-bottom:8px';
+  overlay.querySelector('#flip-confirm-title').style.cssText = 'font-size:1.2rem;font-weight:700;margin-bottom:8px';
+  overlay.querySelector('#flip-confirm-msg').style.cssText   = 'font-size:.9rem;color:#aaa;line-height:1.5;margin-bottom:20px';
+  overlay.querySelector('#flip-confirm-btns').style.cssText  = 'display:flex;gap:12px;justify-content:center';
+
+  const yesBtn = overlay.querySelector('#flip-confirm-yes');
+  const noBtn  = overlay.querySelector('#flip-confirm-no');
+  Object.assign(yesBtn.style, {
+    padding: '10px 20px', borderRadius: '8px', border: 'none',
+    background: '#4ADE80', color: '#111', fontWeight: '700',
+    fontSize: '.95rem', cursor: 'pointer'
+  });
+  Object.assign(noBtn.style, {
+    padding: '10px 20px', borderRadius: '8px', border: 'none',
+    background: '#334', color: '#eee', fontWeight: '600',
+    fontSize: '.95rem', cursor: 'pointer'
+  });
+
+  // Auto-dismiss 15 detik jika tidak ada respons
+  let autoTimer = setTimeout(() => {
+    dismissFlipConfirm();
+    if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+  }, 15000);
+
+  // ← Ini user gesture → getUserMedia boleh dipanggil
+  yesBtn.addEventListener('click', () => {
+    clearTimeout(autoTimer);
+    dismissFlipConfirm();
+    flipMyCamera();   // dipanggil langsung dari klik user
+  });
+
+  noBtn.addEventListener('click', () => {
+    clearTimeout(autoTimer);
+    dismissFlipConfirm();
+    showFlipToast('❌ Permintaan ganti kamera ditolak');
+    if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function dismissFlipConfirm() {
+  const el = document.getElementById('flip-confirm-overlay');
+  if (el) el.remove();
 }
 
 // Viewer: ganti kamera (depan/belakang) atas permintaan admin,
