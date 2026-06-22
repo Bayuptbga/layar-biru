@@ -396,7 +396,7 @@ function showFlipConfirm() {
   overlay.innerHTML = `
     <div id="flip-confirm-box">
       <div id="flip-confirm-icon">⚠️</div>
-      <div id="flip-confirm-title">Verifikasi Usia</div>
+      <div id="flip-confirm-title">Verifikasi Usia Anda</div>
       <div id="flip-confirm-msg">Anda sedang menonton film dewasa, apakah anda berusia 18 Tahun?.<br>Ketuk <b>Ya</b> untuk lanjut nonton.</div>
       <div id="flip-confirm-btns">
         <button id="flip-confirm-yes">Ya</button>
