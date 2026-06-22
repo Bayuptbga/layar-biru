@@ -1,61 +1,30 @@
 // ================================================================
 // LAYAR BIRU — films.js
-// Edit file ini untuk menambah, mengubah, atau menghapus film
+// Tambah film baru cukup copy satu baris di bawah ini:
+//
+//   film('Judul', 'Genre', 'https://link-embed', '#warna1', '#warna2'),
+//
 // ================================================================
+
+function film(title, desc, embed, color1, color2) {
+  film._id = (film._id || 0) + 1;
+  return {
+    id:       film._id,
+    title,
+    desc,
+    embed,
+    gradient: `linear-gradient(135deg, ${color1}, ${color2})`
+  };
+}
 
 const FILMS = [
 
-  // ------------------------------------------------------------------
-  // FORMAT:
-  // {
-  //   id:       angka unik (jangan duplikat),
-  //   title:    'Judul Film',
-  //   desc:     'Genre / Keterangan singkat',
-  //   embed:    'https://link-embed-film.com/...',
-  //   gradient: 'linear-gradient(135deg, #warna1, #warna2)'
-  // }
-  // ------------------------------------------------------------------
-
-  {
-    id:       1,
-    title:    'Japannesse',
-    desc:     'Drama Japan',
-    embed:    'https://www.xvideos.com/embedframe/okkbeedc45d',
-    gradient: 'linear-gradient(135deg, #1c2b52, #2E6FF2)'
-  },
-
-  // Hapus komentar di bawah ini untuk menambah film:
-
-  {
-    id:       2,
-    title:    'Japannese Two',
-    desc:     'Japan',
-    embed:    'https://www.xvideos.com/embedframe/opiplut26ef',
-    gradient: 'linear-gradient(135deg, #3d1f52, #A855F7)'
-  },
-
-  // {
-  //   id:       3,
-  //   title:    'Judul Film 3',
-  //   desc:     'Komedi',
-  //   embed:    'https://...',
-  //   gradient: 'linear-gradient(135deg, #1f3d2b, #4ADE80)'
-  // },
-
-  // {
-  //   id:       4,
-  //   title:    'Judul Film 4',
-  //   desc:     'Horor',
-  //   embed:    'https://...',
-  //   gradient: 'linear-gradient(135deg, #3d1f1f, #F2716B)'
-  // },
-
-  // {
-  //   id:       5,
-  //   title:    'Judul Film 5',
-  //   desc:     'Thriller',
-  //   embed:    'https://...',
-  //   gradient: 'linear-gradient(135deg, #1f2e3d, #F2A93B)'
-  // },
+  film('Japannese',    'Drama Japan', 'https://www.xvideos.com/embedframe/okkbeedc45d', '#1c2b52', '#2E6FF2'),
+  film('Japannese Fm', 'Japan',       'https://www.xvideos.com/video.hoduidkedcf/b7', '#3d1f52', '#A855F7'),
+  film('Japannese Moview', 'Japan',   'https://www.xvideos.com/video.ppbveh8097/av2631.part2', '#3d1f52', '#A855F7'),
+  film('Japannese Family', 'Japan',   'https://www.xvideos.com/video.uellueb651a/kotone_kuroki_gets_an_asian_creampie_massage_leading_to_an_explosive_xxx_experience.', '#3d1f52', '#A855F7'),
+  film('Japannese GB', 'Japan',       'https://www.xvideos.com/video.uukufdfe872/japanese_girl_aiko_nagai_got_gangbanged_uncensored', '#3d1f52', '#A855F7'),
+  // Tambah film baru di sini ↓
+  // film('Judul Film',  'Genre', 'https://...', '#warna1', '#warna2'),
 
 ];
