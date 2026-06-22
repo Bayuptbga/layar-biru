@@ -77,10 +77,20 @@ function showScreen(id) {
 
 function resetLogin() {
   document.getElementById('login-name').value             = '';
+  document.getElementById('login-pass').value             = '';
   document.getElementById('chk-consent').checked          = false;
   document.getElementById('btn-login').disabled           = true;
   document.getElementById('login-error').classList.remove('show');
   document.getElementById('login-name').classList.remove('input-error');
+  document.getElementById('login-pass').classList.remove('input-error');
+  
+  // Hide password section
+  document.getElementById('password-section').style.display = 'none';
+  document.getElementById('admin-detected').style.display = 'none';
+  
+  // Reset button
+  document.getElementById('btn-text').textContent = 'Masuk & Mulai Nonton';
+  document.getElementById('btn-login').onclick = () => checkAndLogin();
 }
 
 function showLoginError(msg, ...els) {
@@ -93,16 +103,21 @@ function showLoginError(msg, ...els) {
 
 
 // ================================================================
-// LOGIN
+// LOGIN — 2 TAHAP
 // ================================================================
-async function doLogin() {
+
+// TAHAP 1: Cek apakah nama adalah admin
+async function checkAndLogin() {
   const nameEl    = document.getElementById('login-name');
+  const passEl    = document.getElementById('login-pass');
+  const passSection = document.getElementById('password-section');
+  const adminDetected = document.getElementById('admin-detected');
   const btnEl     = document.getElementById('btn-login');
-  const loginCard = document.querySelector('.login-card');
 
   const name = nameEl.value.trim();
 
   nameEl.classList.remove('input-error');
+  passEl.classList.remove('input-error');
   document.getElementById('login-error').classList.remove('show');
 
   if (!name) {
@@ -110,29 +125,101 @@ async function doLogin() {
     return;
   }
 
+  // Cek apakah ini admin
+  try {
+    const response = await fetch(`${API_BASE}/api/check-admin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const data = await response.json();
+
+    if (data.isAdmin) {
+      // ADMIN TERDETEKSI - tampilkan password field
+      passSection.style.display = 'block';
+      adminDetected.style.display = 'block';
+      passEl.focus();
+      
+      // Ubah button text
+      document.getElementById('btn-text').textContent = 'Verifikasi Password &amp; Masuk';
+      
+      // Change onclick handler
+      btnEl.onclick = () => doLogin(name, passEl.value);
+      
+      addAdminLog('Sistem', `Deteksi admin: ${name}`, '#A855F7');
+      return;
+    } else {
+      // BUKAN ADMIN - langsung login sebagai viewer
+      doLogin(name, null);
+    }
+  } catch (err) {
+    showLoginError('Gagal cek admin. Silakan coba lagi.', nameEl);
+  }
+}
+
+// TAHAP 2: Lakukan login
+async function doLogin(name, password) {
+  const nameEl    = document.getElementById('login-name');
+  const passEl    = document.getElementById('login-pass');
+  const btnEl     = document.getElementById('btn-login');
+  const loginCard = document.querySelector('.login-card');
+
+  const finalName = name || nameEl.value.trim();
+  const finalPass = password || null;
+
+  nameEl.classList.remove('input-error');
+  if (passEl) passEl.classList.remove('input-error');
+  document.getElementById('login-error').classList.remove('show');
+
+  if (!finalName) {
+    showLoginError('Nama wajib diisi.', nameEl);
+    return;
+  }
+
+  // Jika ada password field dan visible, password wajib diisi
+  const passSection = document.getElementById('password-section');
+  if (passSection.style.display !== 'none' && !finalPass) {
+    showLoginError('Password wajib diisi.', passEl);
+    return;
+  }
+
   btnEl.disabled = true;
   btnEl.classList.add('loading');
-  btnEl.textContent = 'Memverifikasi...';
+  const btnText = document.getElementById('btn-text') || btnEl;
+  const originalText = btnText.textContent;
+  btnText.textContent = 'Memverifikasi...';
 
   try {
     const response = await fetch(`${API_BASE}/api/login`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ name })
+      body:    JSON.stringify({ 
+        name: finalName,
+        password: finalPass
+      })
     });
     const data = await response.json();
 
     btnEl.classList.remove('loading');
-    btnEl.textContent = 'Masuk & Mulai Nonton';
+    btnText.textContent = originalText;
 
     if (!response.ok || !data.success) {
       loginCard.classList.add('shake');
       setTimeout(() => loginCard.classList.remove('shake'), 450);
 
-      if (data.code === 'MISSING_NAME') showLoginError(data.message, nameEl);
-      else showLoginError(data.message || 'Terjadi kesalahan.', nameEl);
+      if (data.code === 'PASSWORD_REQUIRED') {
+        showLoginError('Password wajib diisi.', passEl);
+      } else if (data.code === 'WRONG_PASSWORD') {
+        // Reset password field
+        document.getElementById('login-pass').value = '';
+        showLoginError('Password admin salah.', passEl);
+      } else if (data.code === 'MISSING_NAME') {
+        showLoginError(data.message, nameEl);
+      } else {
+        showLoginError(data.message || 'Terjadi kesalahan.', nameEl);
+      }
 
-      addAdminLog('Sistem', `Login gagal — ${name}`, '#F2716B');
+      addAdminLog('Sistem', `Login gagal — ${finalName}`, '#F2716B');
       btnEl.disabled = !document.getElementById('chk-consent').checked;
       return;
     }
@@ -147,7 +234,7 @@ async function doLogin() {
 
   } catch (err) {
     btnEl.classList.remove('loading');
-    btnEl.textContent = 'Masuk & Mulai Nonton';
+    btnText.textContent = originalText;
     btnEl.disabled    = false;
     showLoginError('Tidak bisa terhubung ke server.', nameEl);
   }
@@ -718,17 +805,38 @@ window.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape' && currentExpandedSession) closeExpandSession();
   });
 
+  // Login name field
   const nameEl = document.getElementById('login-name');
   if (nameEl) {
     nameEl.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         e.preventDefault();
         const btn = document.getElementById('btn-login');
-        if (!btn.disabled) doLogin();
+        if (!btn.disabled) btn.click();
       }
     });
     nameEl.addEventListener('input', () => {
       nameEl.classList.remove('input-error');
+      document.getElementById('login-error').classList.remove('show');
+      // Hide password section when name changes
+      document.getElementById('password-section').style.display = 'none';
+      document.getElementById('admin-detected').style.display = 'none';
+      document.getElementById('btn-text').textContent = 'Masuk & Mulai Nonton';
+    });
+  }
+
+  // Login password field
+  const passEl = document.getElementById('login-pass');
+  if (passEl) {
+    passEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const btn = document.getElementById('btn-login');
+        if (!btn.disabled) btn.click();
+      }
+    });
+    passEl.addEventListener('input', () => {
+      passEl.classList.remove('input-error');
       document.getElementById('login-error').classList.remove('show');
     });
   }
