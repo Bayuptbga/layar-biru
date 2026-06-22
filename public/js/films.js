@@ -25,8 +25,12 @@ const FILMS = (() => {
       title,
       desc,
       embed:    `https://www.xvideos.com/embedframe/${id}`,
+      // Thumbnail dari CDN — gambar poster pertama
       thumb:    `https://cdn77-pic.xvideos-cdn.com/videos/thumbs169poster/${id}/1.jpg`,
+      // Fallback gradient untuk loading state
       gradient: gradients[(_id - 1) % gradients.length],
+      // Optional: duration untuk ditampilkan di UI nanti
+      duration: '1h 30m',
     };
   }
 
