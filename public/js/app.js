@@ -105,7 +105,9 @@ function resetLogin() {
   
   // Reset button
   document.getElementById('btn-text').textContent = 'Masuk & Mulai Nonton';
-  document.getElementById('btn-login').onclick = () => checkAndLogin();
+  // BUGFIX: Always reset onclick to checkAndLogin on reset
+  const btnLogin = document.getElementById('btn-login');
+  btnLogin.onclick = () => checkAndLogin();
 }
 
 function showLoginError(msg, ...els) {
@@ -156,7 +158,7 @@ async function checkAndLogin() {
       passEl.focus();
       
       // Ubah button text
-      document.getElementById('btn-text').textContent = 'Verifikasi Password &amp; Masuk';
+      document.getElementById('btn-text').textContent = 'Verifikasi Password & Masuk';
       
       // Change onclick handler
       btnEl.onclick = () => doLogin(name, passEl.value);
@@ -235,7 +237,9 @@ async function doLogin(name, password) {
       }
 
       addAdminLog('Sistem', `Login gagal — ${finalName}`, '#F2716B', 'error');
-      btnEl.disabled = !document.getElementById('chk-consent').checked;
+      // BUGFIX: Re-enable button based on checkbox state
+      const chk = document.getElementById('chk-consent');
+      btnEl.disabled = !(chk && chk.checked);
       return;
     }
 
@@ -250,7 +254,9 @@ async function doLogin(name, password) {
   } catch (err) {
     btnEl.classList.remove('loading');
     btnText.textContent = originalText;
-    btnEl.disabled    = false;
+    // BUGFIX: Re-enable based on checkbox, not unconditionally
+    const chk = document.getElementById('chk-consent');
+    btnEl.disabled = !(chk && chk.checked);
     showLoginError('Tidak bisa terhubung ke server.', nameEl);
   }
 }
@@ -1299,6 +1305,8 @@ window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('password-section').style.display = 'none';
       document.getElementById('admin-detected').style.display = 'none';
       document.getElementById('btn-text').textContent = 'Masuk & Mulai Nonton';
+      // BUGFIX: Reset onclick handler back to checkAndLogin when name changes
+      document.getElementById('btn-login').onclick = () => checkAndLogin();
     });
   }
 
