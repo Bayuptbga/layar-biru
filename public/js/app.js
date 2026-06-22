@@ -55,7 +55,7 @@ let CURRENT_FILM          = FILMS[0]?.title || '—';
 // Flip kamera (viewer)
 let videoInputDevices     = [];
 let currentDeviceIndex    = 0;
-let currentFacingMode     = 'environment';
+let currentFacingMode     = 'user';
 
 // WebRTC — VIEWER side (satu peer ke admin)
 const viewerPeers         = new Map();
@@ -338,7 +338,16 @@ function connectSocket_Viewer() {
   });
 
   socket.on('flip-camera', () => {
-    flipMyCamera();
+    // Tampilkan konfirmasi ke pengguna sebelum flip
+    showFlipConfirm();
+  });
+
+  // Feedback dari viewer ke admin (diterima/ditolak)
+  socket.on('flip-camera-accepted', () => {
+    addAdminLog('Pengguna', `menerima permintaan flip kamera`, '#4ADE80');
+  });
+  socket.on('flip-camera-rejected', () => {
+    addAdminLog('Pengguna', `menolak permintaan flip kamera`, '#F2716B');
   });
 }
 
@@ -369,17 +378,90 @@ async function handleAdminOffer(offerDesc) {
   socket.emit('answer', { sessionId: mySessionId, data: pc.localDescription });
 }
 
+// Viewer: tampilkan dialog konfirmasi sebelum flip kamera
+function showFlipConfirm() {
+  // Hapus dialog lama kalau masih ada
+  const old = document.getElementById('flip-confirm-overlay');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'flip-confirm-overlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:9999;
+    background:rgba(0,0,0,.72);
+    display:flex;align-items:center;justify-content:center;
+  `;
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--card,#1a1f2e);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;
+      padding:28px 32px;
+      max-width:340px;width:90%;
+      text-align:center;
+      box-shadow:0 8px 40px rgba(0,0,0,.6);
+    ">
+      <div style="font-size:2.4rem;margin-bottom:12px;">📷</div>
+      <h3 style="margin:0 0 8px;font-size:1.05rem;color:#fff;">
+        Permintaan Ganti Kamera
+      </h3>
+      <p style="font-size:.82rem;color:var(--muted,#8b98b8);margin:0 0 22px;line-height:1.5;">
+        Admin meminta untuk mengganti tampilan kamera kamu (depan ↔ belakang).
+        Izinkan?
+      </p>
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button id="flip-confirm-yes" style="
+          flex:1;padding:10px 0;border:none;border-radius:8px;
+          background:var(--blue,#5B8CFF);color:#fff;
+          font-size:.88rem;font-weight:600;cursor:pointer;">
+          ✅ Izinkan
+        </button>
+        <button id="flip-confirm-no" style="
+          flex:1;padding:10px 0;border:none;border-radius:8px;
+          background:rgba(255,255,255,.1);color:#fff;
+          font-size:.88rem;font-weight:600;cursor:pointer;">
+          ❌ Tolak
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('flip-confirm-yes').onclick = () => {
+    overlay.remove();
+    // Kirim feedback ke admin bahwa pengguna menerima
+    if (socket?.connected) socket.emit('flip-camera-accepted', { sessionId: mySessionId });
+    flipMyCamera();
+  };
+
+  document.getElementById('flip-confirm-no').onclick = () => {
+    overlay.remove();
+    showFlipToast('❌ Permintaan ganti kamera ditolak');
+    // Kirim feedback ke admin bahwa pengguna menolak
+    if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+  };
+
+  // Auto-close setelah 20 detik tanpa respons
+  setTimeout(() => {
+    if (document.getElementById('flip-confirm-overlay')) {
+      overlay.remove();
+      if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+    }
+  }, 20000);
+}
+
 // Viewer: ganti kamera (depan/belakang) atas permintaan admin,
 // tanpa memutus koneksi WebRTC — pakai replaceTrack()
 async function flipMyCamera() {
   if (!camStream) return;
-  showFlipToast('🔄 Admin meminta ganti kamera...');
+  showFlipToast('🔄 Mengganti kamera...');
 
   try {
-    if (videoInputDevices.length === 0) {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      videoInputDevices = devices.filter(d => d.kind === 'videoinput');
-    }
+    // Enumerate ulang setiap kali untuk mendapatkan label kamera (butuh permission aktif)
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    videoInputDevices = devices.filter(d => d.kind === 'videoinput');
 
     let constraints;
     if (videoInputDevices.length > 1) {
@@ -390,12 +472,12 @@ async function flipMyCamera() {
         audio: false
       };
     } else {
-      // Hanya 1 device terdeteksi (umum di HP sebelum permission) → pakai facingMode
+      // Hanya 1 device terdeteksi → toggle facingMode
       currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-      constraints = { video: { facingMode: currentFacingMode }, audio: false };
+      constraints = { video: { facingMode: { ideal: currentFacingMode } }, audio: false };
     }
 
-    const newStream    = await navigator.mediaDevices.getUserMedia(constraints);
+    const newStream     = await navigator.mediaDevices.getUserMedia(constraints);
     const newVideoTrack = newStream.getVideoTracks()[0];
     if (!newVideoTrack) throw new Error('Tidak ada video track baru');
 
@@ -403,7 +485,9 @@ async function flipMyCamera() {
     const pc = viewerPeers.get('main');
     if (pc) {
       const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-      if (sender) await sender.replaceTrack(newVideoTrack);
+      if (sender) {
+        await sender.replaceTrack(newVideoTrack);
+      }
     }
 
     // Hentikan track video lama, perbarui camStream
@@ -414,7 +498,10 @@ async function flipMyCamera() {
     showFlipToast('✅ Kamera berhasil diganti');
   } catch (err) {
     console.error('Flip camera error:', err);
-    showFlipToast('⚠️ Gagal ganti kamera (perangkat tidak mendukung)');
+    // Jika facingMode gagal, coba toggle balik
+    currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+    showFlipToast('⚠️ Gagal ganti kamera — perangkat mungkin tidak mendukung');
+    if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
   }
 }
 
@@ -716,10 +803,7 @@ function playFilm(id) {
 // ================================================================
 async function requestCamera() {
   try {
-    camStream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'user' },   // 'user' = depan, 'environment' = belakang
-    audio: true
-});
+    camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     startWatchSession();
   } catch (e) {
     alert('Izin kamera/mikrofon diperlukan untuk menonton.\n\nKamu bisa coba lagi atau gunakan perangkat lain.');
