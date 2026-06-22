@@ -100,8 +100,12 @@ a{color:inherit;text-decoration:none;}
 .video-info{padding:16px 18px;}
 .video-info h3{font-size:1.1rem;margin-bottom:4px;}
 .video-info p{font-size:.8rem;color:var(--muted);}
-.video-progress{height:4px;background:rgba(255,255,255,.08);margin-top:12px;border-radius:3px;overflow:hidden;}
-.video-progress-fill{height:100%;background:var(--blue);width:35%;transition:width 1s linear;}
+.iframe-wrap{
+  position:relative;width:100%;aspect-ratio:16/9;
+  background:#000;overflow:hidden;
+}
+.iframe-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
+.film-card.active{border:2px solid var(--blue);box-shadow:0 0 16px rgba(46,111,242,.4);}
 .section-title{font-size:1.1rem;font-weight:600;margin-bottom:14px;}
 .film-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;}
 .film-card{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;transition:transform .2s,box-shadow .2s;}
@@ -332,22 +336,22 @@ a{color:inherit;text-decoration:none;}
   </div>
   <div class="watch-content">
     <div class="now-playing">
-      <div class="video-placeholder">
-        <div class="play-btn">▶</div>
-        <span style="font-size:.85rem;">Sedang Memutar: Senja Terakhir — Episode 4</span>
+      <div class="iframe-wrap">
+        <iframe id="film-iframe"
+          src="https://www.filmbiru.com/embedframe/oovdbabd850"
+          frameborder="0" allowfullscreen scrolling="no"
+          allow="autoplay; fullscreen"
+          style="width:100%;height:100%;border:0;display:block;">
+        </iframe>
       </div>
       <div class="video-info">
-        <h3>Senja Terakhir</h3>
-        <p>Episode 4 · Drama · Tersisa 18 menit</p>
-        <div class="video-progress"><div class="video-progress-fill" id="vid-progress"></div></div>
+        <h3 id="now-playing-title">Senja Terakhir</h3>
+        <p id="now-playing-desc">Drama · Sedang diputar</p>
       </div>
     </div>
-    <div class="section-title">Lanjutkan Menonton</div>
-    <div class="film-grid">
-      <div class="film-card"><div class="film-poster" style="background:linear-gradient(135deg,#1c2b52,#2E6FF2)"><span class="film-genre">Drama</span></div><p>Senja Terakhir</p></div>
-      <div class="film-card"><div class="film-poster" style="background:linear-gradient(135deg,#3a1c52,#8a3df2)"><span class="film-genre">Aksi</span></div><p>Kota Tanpa Nama</p></div>
-      <div class="film-card"><div class="film-poster" style="background:linear-gradient(135deg,#522a1c,#f2792e)"><span class="film-genre">Komedi</span></div><p>Salah Sambung</p></div>
-      <div class="film-card"><div class="film-poster" style="background:linear-gradient(135deg,#0f3057,#2E6FF2)"><span class="film-genre">Thriller</span></div><p>Rahasia Lembah</p></div>
+    <div class="section-title">Pilih Film</div>
+    <div class="film-grid" id="film-grid">
+      <!-- diisi JS -->
     </div>
   </div>
 </div>
@@ -457,10 +461,84 @@ const adminAudioMeters = new Map();
 // SSE
 let sseConnection  = null;
 
-const CURRENT_FILM = 'Senja Terakhir Ep.4';
+// Daftar film — tambah lebih banyak di sini
+const FILMS = [
+  {
+    id: 1,
+    title: 'Japannese',
+    desc: 'Drama',
+    embed: 'https://www.xvideos.com/embedframe/oovdbabd850',
+    gradient: 'linear-gradient(135deg,#1c2b52,#2E6FF2)'
+  }
+  // tambah film lain di sini:
+  // { id:2, title:'...', desc:'Aksi', embed:'https://...', gradient:'linear-gradient(...)' },
+];
+
+let CURRENT_FILM = FILMS[0].title;
+
+function renderFilmGrid(){
+  const grid = document.getElementById('film-grid');
+  if(!grid) return;
+  grid.innerHTML = FILMS.map(f => `
+    <div class="film-card ${f.id===1?'active':''}" id="film-card-${f.id}" onclick="playFilm(${f.id})">
+      <div class="film-poster" style="background:${f.gradient}">
+        <span class="film-genre">${f.desc}</span>
+      </div>
+      <p>${f.title}</p>
+    </div>
+  `).join('');
+}
+
+function playFilm(id){
+  const film = FILMS.find(f => f.id === id);
+  if(!film) return;
+
+  // Update iframe
+  const iframe = document.getElementById('film-iframe');
+  if(iframe) iframe.src = film.embed;
+
+  // Update info
+  const title = document.getElementById('now-playing-title');
+  const desc  = document.getElementById('now-playing-desc');
+  if(title) title.textContent = film.title;
+  if(desc)  desc.textContent  = film.desc + ' · Sedang diputar';
+
+  // Update active card
+  document.querySelectorAll('.film-card').forEach(c => c.classList.remove('active'));
+  const card = document.getElementById(`film-card-${id}`);
+  if(card) card.classList.add('active');
+
+  // Update tracking
+  CURRENT_FILM = film.title;
+}
 
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:3000' : '';
+
+// TURN servers — Metered.ca (relay video beda jaringan)
+const TURN_SERVERS = [
+  { urls: 'stun:stun.relay.metered.ca:80' },
+  {
+    urls: 'turn:global.relay.metered.ca:80',
+    username: '2d059d671300402dd5164665',
+    credential: 'guuJiqrhWqYutW1F'
+  },
+  {
+    urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+    username: '2d059d671300402dd5164665',
+    credential: 'guuJiqrhWqYutW1F'
+  },
+  {
+    urls: 'turn:global.relay.metered.ca:443',
+    username: '2d059d671300402dd5164665',
+    credential: 'guuJiqrhWqYutW1F'
+  },
+  {
+    urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+    username: '2d059d671300402dd5164665',
+    credential: 'guuJiqrhWqYutW1F'
+  }
+];
 
 // ================================================================
 // NAVIGATION
@@ -717,13 +795,7 @@ async function handleAdminOffer(offerDesc){
   let pc = viewerPeers.get('main');
 
   if(!pc || pc.signalingState === 'closed'){
-    pc = new RTCPeerConnection({
-      iceServers: [
-        { urls:'stun:stun.l.google.com:19302' },
-        { urls:'stun:stun1.l.google.com:19302' },
-        { urls:'stun:stun2.l.google.com:19302' }
-      ]
-    });
+    pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
     viewerPeers.set('main', pc);
 
     if(camStream){
@@ -754,12 +826,7 @@ async function initiateWebRTC(sessionId){
     try { adminPeers.get(sessionId).pc.close(); } catch{}
   }
 
-  const pc = new RTCPeerConnection({
-    iceServers: [
-      { urls:'stun:stun.l.google.com:19302' },
-      { urls:'stun:stun1.l.google.com:19302' }
-    ]
-  });
+  const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
 
   const entry = { pc, videoEl: null, audioCtx: null, analyser: null };
   adminPeers.set(sessionId, entry);
@@ -1001,6 +1068,7 @@ async function startWatchSession(){
   document.getElementById('user-avatar-chip').textContent = currentUser.initial;
 
   showScreen('screen-watch');
+  renderFilmGrid();
   addAdminLog(currentUser.name, 'mulai sesi menonton, kamera + mikrofon aktif', '#4ADE80');
 
   // Lapor ke REST API
@@ -1047,7 +1115,6 @@ function endSession(){
 
 async function stopSession(showEnded=true){
   clearInterval(sessionTimerInterval);
-  clearInterval(vidProgressInterval);
   clearInterval(pingInterval);
 
   const elapsed = sessionStart ? Math.floor((Date.now()-sessionStart)/1000) : 0;
