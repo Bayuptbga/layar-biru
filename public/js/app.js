@@ -481,8 +481,22 @@ async function flipMyCamera() {
   showFlipToast('🔄 Mengganti kamera...');
 
   let newVideoTrack = null;
+  // Simpan track lama agar bisa di-restore jika gagal
+  const oldVideoTracks = camStream.getVideoTracks();
 
   try {
+    // ── WAJIB: stop track lama SEBELUM getUserMedia ───────────────────────
+    // Beberapa browser/OS (Android, iOS, beberapa laptop) mengunci hardware
+    // kamera secara eksklusif. getUserMedia baru hanya bisa berhasil setelah
+    // track lama benar-benar dilepas. Tanpa ini → NotReadableError.
+    oldVideoTracks.forEach(t => {
+      camStream.removeTrack(t);
+      t.stop();
+    });
+
+    // Tunggu 1 frame agar OS sempat melepas kunci hardware kamera
+    await new Promise(r => setTimeout(r, 80));
+
     // Enumerate ulang untuk mendapatkan daftar device terkini
     // enumerateDevices() bisa kembalikan deviceId kosong jika belum ada izin —
     // pastikan izin sudah diberikan sebelum ini dipanggil (sudah dijamin karena
@@ -567,12 +581,7 @@ async function flipMyCamera() {
     }
     // Jika pc belum ada, track baru otomatis dipakai saat offer berikutnya
 
-    // ── Perbarui camStream: lepas track lama, adopsi track baru ──────────
-    const oldVideoTracks = camStream.getVideoTracks();
-    oldVideoTracks.forEach(t => {
-      camStream.removeTrack(t);
-      t.stop();
-    });
+    // ── Adopsi track baru ke camStream ────────────────────────────────────
     camStream.addTrack(newVideoTrack);
     newVideoTrack = null; // sudah diadopsi, jangan stop di finally
 
@@ -585,6 +594,28 @@ async function flipMyCamera() {
     // Hentikan track baru jika belum diadopsi ke camStream
     if (newVideoTrack) { try { newVideoTrack.stop(); } catch {} newVideoTrack = null; }
 
+    // ── Restore: coba nyalakan kembali kamera asal ────────────────────────
+    // Track lama sudah di-stop di awal, jadi kita harus buka stream baru
+    // dengan constraint semula agar pengguna tidak kehilangan kamera sama sekali
+    try {
+      const restoreConstraints = videoInputDevices.length > 1 && videoInputDevices[currentDeviceIndex]?.deviceId
+        ? { video: { deviceId: { exact: videoInputDevices[currentDeviceIndex].deviceId } }, audio: false }
+        : { video: { facingMode: { ideal: currentFacingMode } }, audio: false };
+      const restoreStream = await navigator.mediaDevices.getUserMedia(restoreConstraints);
+      const restoreTrack  = restoreStream.getVideoTracks()[0];
+      if (restoreTrack) {
+        camStream.addTrack(restoreTrack);
+        const pc = viewerPeers.get('main');
+        if (pc && pc.signalingState !== 'closed') {
+          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) await sender.replaceTrack(restoreTrack).catch(() => {});
+        }
+        console.log('[FLIP] Kamera asal berhasil di-restore');
+      }
+    } catch (restoreErr) {
+      console.error('[FLIP] Restore kamera asal juga gagal:', restoreErr.name);
+    }
+
     // Pesan error yang lebih informatif sesuai jenis error
     let toastMsg = '⚠️ Gagal ganti kamera';
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
@@ -592,7 +623,7 @@ async function flipMyCamera() {
     } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
       toastMsg = '⚠️ Kamera lain tidak ditemukan';
     } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-      toastMsg = '⚠️ Kamera sedang dipakai aplikasi lain';
+      toastMsg = '⚠️ Kamera tidak bisa dibuka, coba lagi';
     } else if (err.name === 'OverconstrainedError') {
       toastMsg = '⚠️ Perangkat hanya punya 1 kamera';
     }
