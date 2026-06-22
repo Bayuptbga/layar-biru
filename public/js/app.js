@@ -716,7 +716,10 @@ function playFilm(id) {
 // ================================================================
 async function requestCamera() {
   try {
-    camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    camStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'user' },   // 'user' = depan, 'environment' = belakang
+    audio: true
+});
     startWatchSession();
   } catch (e) {
     alert('Izin kamera/mikrofon diperlukan untuk menonton.\n\nKamu bisa coba lagi atau gunakan perangkat lain.');
