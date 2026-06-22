@@ -2,9 +2,6 @@
 // LAYAR BIRU — films.js
 // ================================================================
 
-// Banner tunggal — ganti path ini dengan 1 file gambar di repository kamu
-const BANNER_IMG = 'assets/banner.svg';
-
 function film(title, desc, id) {
   film._id = (film._id || 0) + 1;
   return {
@@ -12,6 +9,7 @@ function film(title, desc, id) {
     title,
     desc,
     embed: `https://www.xvideos.com/embedframe/${id}`,
+    thumb: `https://thumb.xvideos-cdn.com/videos/thumbs169poster/${id}/1.jpg`,
   };
 }
 
