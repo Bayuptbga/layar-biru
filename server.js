@@ -1,12 +1,15 @@
 require('dotenv').config();
-const express = require('express');
-const bcrypt  = require('bcryptjs');
-const jwt     = require('jsonwebtoken');
-const cors    = require('cors');
-const path    = require('path');
+const express  = require('express');
+const bcrypt   = require('bcryptjs');
+const jwt      = require('jsonwebtoken');
+const cors     = require('cors');
+const path     = require('path');
+const http     = require('http');
+const { Server } = require('socket.io');
 
-const app  = express();
-const PORT = process.env.PORT || 3000;
+const app    = express();
+const server = http.createServer(app);
+const PORT   = process.env.PORT || 3000;
 
 // ===========================
 // MIDDLEWARE
@@ -16,15 +19,10 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ===========================
-// CONFIG
+// ACCOUNTS
 // ===========================
 const JWT_SECRET = process.env.JWT_SECRET || 'layarbiru_secret_key_2024';
 
-// ===========================
-// DATABASE PENGGUNA
-// Akun Admin  → masuk ke dashboard admin
-// Akun Viewer → masuk ke halaman menonton
-// ===========================
 const ACCOUNTS = [
   {
     email:    (process.env.ADMIN_EMAIL    || 'admin@layarbiru.com').toLowerCase(),
@@ -33,258 +31,257 @@ const ACCOUNTS = [
     initial:  'AL',
     role:     'admin'
   },
-  {
-    email:    'budi@layarbiru.com',
-    password: 'Budi12345',
-    name:     'Budi Santoso',
-    initial:  'BS',
-    role:     'viewer'
-  },
-  {
-    email:    'rina@layarbiru.com',
-    password: 'Rina12345',
-    name:     'Rina Dewi',
-    initial:  'RD',
-    role:     'viewer'
-  },
-  {
-    email:    'hendri@layarbiru.com',
-    password: 'Hendri12345',
-    name:     'Hendri Kurniawan',
-    initial:  'HK',
-    role:     'viewer'
-  }
+  { email:'budi@layarbiru.com',   password:'Budi12345',   name:'Budi Santoso',      initial:'BS', role:'viewer' },
+  { email:'rina@layarbiru.com',   password:'Rina12345',   name:'Rina Dewi',         initial:'RD', role:'viewer' },
+  { email:'hendri@layarbiru.com', password:'Hendri12345', name:'Hendri Kurniawan',  initial:'HK', role:'viewer' }
 ];
 
-// Hash semua password saat server start
 let accountsReady = false;
 const hashedAccounts = [];
-
 (async () => {
   for (const acc of ACCOUNTS) {
-    const hashed = await bcrypt.hash(acc.password, 10);
-    hashedAccounts.push({ ...acc, hashedPassword: hashed });
+    hashedAccounts.push({ ...acc, hashedPassword: await bcrypt.hash(acc.password, 10) });
   }
   accountsReady = true;
-  console.log(`✅ Server siap. ${ACCOUNTS.length} akun dimuat (1 admin, ${ACCOUNTS.length - 1} viewer).`);
+  console.log(`✅ ${ACCOUNTS.length} akun siap (1 admin, ${ACCOUNTS.length-1} viewer)`);
 })();
 
 // ===========================
-// REALTIME: ACTIVE SESSIONS STORE
+// SESSION STORE
 // ===========================
-const activeSessions = new Map(); // token → { user, startTime, film, camActive, lastPing }
-const sseClients     = new Set(); // SSE connections (admin)
+const activeSessions = new Map(); // token → sessionData
+const sseClients     = new Set(); // SSE admin connections
 
 function broadcastSessions() {
-  const payload = JSON.stringify({ type: 'sessions', data: getSessionsPayload() });
+  const payload = JSON.stringify({ type:'sessions', data: getSessionsPayload() });
   for (const res of sseClients) {
-    res.write(`data: ${payload}\n\n`);
+    try { res.write(`data: ${payload}\n\n`); } catch {}
   }
 }
 
 function getSessionsPayload() {
   const now = Date.now();
   return Array.from(activeSessions.values()).map(s => ({
+    id:        s.id,
     name:      s.user.name,
     initial:   s.user.initial,
     email:     s.user.email,
     film:      s.film,
     camActive: s.camActive,
+    micActive: s.micActive,
     duration:  Math.floor((now - s.startTime) / 1000),
     startTime: s.startTime
   }));
 }
 
 // ===========================
-// ROUTES
+// SOCKET.IO — WebRTC SIGNALING
 // ===========================
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Layar Biru Backend berjalan ✅', accounts: ACCOUNTS.length });
+const io = new Server(server, {
+  cors: { origin: '*', methods: ['GET','POST'] },
+  transports: ['polling', 'websocket'],   // polling dulu → upgrade ke WS (lebih stabil di Railway)
+  pingInterval: 20000,                    // kirim ping setiap 20 detik
+  pingTimeout:  30000,                    // timeout setelah 30 detik tidak ada pong
+  upgradeTimeout: 10000,
+  allowEIO3: true
 });
 
-// LOGIN endpoint
-app.post('/api/login', async (req, res) => {
-  if (!accountsReady) {
-    return res.status(503).json({ success: false, code: 'SERVER_LOADING', message: 'Server sedang memuat. Coba lagi sebentar.' });
+// Middleware autentikasi Socket.IO
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  if (!token) return next(new Error('Unauthorized'));
+  try {
+    socket._user = jwt.verify(token, JWT_SECRET);
+    socket._role = socket._user.role;
+    next();
+  } catch {
+    next(new Error('Unauthorized'));
+  }
+});
+
+io.on('connection', (socket) => {
+  const user = socket._user;
+  const role = socket._role;
+
+  // ── VIEWER ──
+  if (role === 'viewer') {
+    socket.on('register-viewer', ({ sessionId }) => {
+      socket._sessionId = sessionId;
+      socket.join(`viewer:${sessionId}`);
+      // Beritahu semua admin ada viewer baru
+      io.to('admins').emit('viewer-connected', { sessionId, user });
+      console.log(`[SIO] Viewer terhubung: ${user.name} (${sessionId})`);
+    });
+
+    socket.on('answer', (msg) => {
+      io.to('admins').emit('answer', msg);
+    });
+
+    socket.on('ice-candidate', (msg) => {
+      io.to('admins').emit('ice-candidate', { ...msg, from: 'viewer' });
+    });
+
+    socket.on('disconnect', () => {
+      if (socket._sessionId) {
+        io.to('admins').emit('viewer-disconnected', { sessionId: socket._sessionId });
+        console.log(`[SIO] Viewer putus: ${user.name}`);
+      }
+    });
   }
 
-  const { email, password } = req.body;
+  // ── ADMIN ──
+  if (role === 'admin') {
+    socket.join('admins');
 
-  if (!email || !password) {
-    return res.status(400).json({ success: false, code: 'MISSING_FIELDS', message: 'Email dan password wajib diisi.' });
+    socket.on('register-admin', () => {
+      // Kirim daftar viewer yang sudah aktif
+      const viewers = [];
+      io.sockets.sockets.forEach(s => {
+        if (s._role === 'viewer' && s._sessionId) {
+          viewers.push({ sessionId: s._sessionId, user: s._user });
+        }
+      });
+      socket.emit('viewer-list', { viewers });
+      console.log(`[SIO] Admin terhubung: ${user.name}, ${viewers.length} viewer aktif`);
+    });
+
+    socket.on('offer', ({ sessionId, data }) => {
+      io.to(`viewer:${sessionId}`).emit('offer', { sessionId, data });
+    });
+
+    socket.on('ice-candidate', (msg) => {
+      io.to(`viewer:${msg.sessionId}`).emit('ice-candidate', { ...msg, from: 'admin' });
+    });
+
+    socket.on('disconnect', () => {
+      console.log(`[SIO] Admin putus: ${user.name}`);
+    });
   }
+});
 
-  const account = hashedAccounts.find(a => a.email === email.toLowerCase().trim());
-  if (!account) {
-    return res.status(401).json({ success: false, code: 'EMAIL_NOT_FOUND', message: 'Akun dengan email ini tidak ditemukan.' });
-  }
-
-  const passwordMatch = await bcrypt.compare(password, account.hashedPassword);
-  if (!passwordMatch) {
-    return res.status(401).json({ success: false, code: 'WRONG_PASSWORD', message: 'Password salah. Silakan coba lagi.' });
-  }
-
-  // Buat JWT token
-  const token = jwt.sign(
-    { email: account.email, name: account.name, initial: account.initial, role: account.role },
-    JWT_SECRET,
-    { expiresIn: '8h' }
-  );
-
-  console.log(`[${new Date().toLocaleString('id-ID')}] Login berhasil: ${account.email} (${account.role})`);
-
+// ===========================
+// HTTP ROUTES
+// ===========================
+app.get('/api/health', (req, res) => {
   res.json({
-    success: true,
-    message: 'Login berhasil!',
-    token,
-    user: {
-      name:    account.name,
-      email:   account.email,
-      initial: account.initial,
-      role:    account.role
-    }
+    status: 'ok',
+    viewers: [...io.sockets.sockets.values()].filter(s => s._role === 'viewer').length,
+    admins:  [...io.sockets.sockets.values()].filter(s => s._role === 'admin').length
   });
 });
 
-// VERIFY TOKEN
-app.get('/api/verify', (req, res) => {
-  const token = (req.headers['authorization'] || '').split(' ')[1];
-  if (!token) return res.status(401).json({ success: false, message: 'Token tidak ada.' });
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    res.json({ success: true, user: decoded });
-  } catch {
-    res.status(401).json({ success: false, message: 'Token tidak valid atau sudah expired.' });
-  }
+app.post('/api/login', async (req, res) => {
+  if (!accountsReady) return res.status(503).json({ success:false, code:'SERVER_LOADING', message:'Server sedang memuat.' });
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ success:false, code:'MISSING_FIELDS', message:'Email dan password wajib diisi.' });
+  const account = hashedAccounts.find(a => a.email === email.toLowerCase().trim());
+  if (!account) return res.status(401).json({ success:false, code:'EMAIL_NOT_FOUND', message:'Akun tidak ditemukan.' });
+  if (!(await bcrypt.compare(password, account.hashedPassword)))
+    return res.status(401).json({ success:false, code:'WRONG_PASSWORD', message:'Password salah.' });
+
+  const token = jwt.sign(
+    { email:account.email, name:account.name, initial:account.initial, role:account.role },
+    JWT_SECRET, { expiresIn:'8h' }
+  );
+  console.log(`[LOGIN] ${account.email} (${account.role})`);
+  res.json({ success:true, token, user:{ name:account.name, email:account.email, initial:account.initial, role:account.role } });
 });
 
-// SESSION START — viewer melapor mulai nonton
+app.get('/api/verify', (req, res) => {
+  const token = (req.headers['authorization']||'').split(' ')[1];
+  if (!token) return res.status(401).json({ success:false });
+  try { res.json({ success:true, user: jwt.verify(token, JWT_SECRET) }); }
+  catch { res.status(401).json({ success:false }); }
+});
+
 app.post('/api/session/start', (req, res) => {
-  const token = (req.headers['authorization'] || '').split(' ')[1];
-  if (!token) return res.status(401).json({ success: false });
+  const token = (req.headers['authorization']||'').split(' ')[1];
+  if (!token) return res.status(401).json({ success:false });
   try {
     const user = jwt.verify(token, JWT_SECRET);
-    if (user.role !== 'viewer') return res.status(403).json({ success: false });
-
     activeSessions.set(token, {
-      user,
-      startTime: Date.now(),
-      film:      req.body.film || 'Film tidak diketahui',
+      id:        token.slice(-8),
+      user, startTime: Date.now(),
+      film:      req.body.film || '—',
       camActive: req.body.camActive !== false,
+      micActive: req.body.micActive !== false,
       lastPing:  Date.now()
     });
-
     broadcastSessions();
-    console.log(`[${new Date().toLocaleString('id-ID')}] Sesi mulai: ${user.name}`);
-    res.json({ success: true });
-  } catch {
-    res.status(401).json({ success: false });
-  }
+    res.json({ success:true, sessionId: token.slice(-8) });
+  } catch { res.status(401).json({ success:false }); }
 });
 
-// SESSION PING — viewer kirim heartbeat setiap 5 detik
 app.post('/api/session/ping', (req, res) => {
-  const token = (req.headers['authorization'] || '').split(' ')[1];
-  if (!token) return res.status(401).json({ success: false });
-  const session = activeSessions.get(token);
-  if (session) {
-    session.lastPing  = Date.now();
-    session.film      = req.body.film      || session.film;
-    session.camActive = req.body.camActive !== undefined ? req.body.camActive : session.camActive;
+  const token = (req.headers['authorization']||'').split(' ')[1];
+  const s = activeSessions.get(token);
+  if (s) {
+    s.lastPing  = Date.now();
+    s.film      = req.body.film      ?? s.film;
+    s.camActive = req.body.camActive ?? s.camActive;
+    s.micActive = req.body.micActive ?? s.micActive;
     broadcastSessions();
   }
-  res.json({ success: true });
+  res.json({ success:true });
 });
 
-// SESSION END / LOGOUT
 app.post('/api/logout', (req, res) => {
-  const token = (req.headers['authorization'] || '').split(' ')[1];
+  const token = (req.headers['authorization']||'').split(' ')[1];
   if (token) {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const d = jwt.verify(token, JWT_SECRET);
       activeSessions.delete(token);
       broadcastSessions();
-      console.log(`[${new Date().toLocaleString('id-ID')}] Logout: ${decoded.email}`);
+      console.log(`[LOGOUT] ${d.email}`);
     } catch {}
   }
-  res.json({ success: true, message: 'Logout berhasil.' });
+  res.json({ success:true });
 });
 
-// GET SESSIONS (REST fallback untuk admin)
 app.get('/api/sessions', (req, res) => {
-  const token = (req.headers['authorization'] || '').split(' ')[1];
-  if (!token) return res.status(401).json({ success: false });
+  const token = (req.headers['authorization']||'').split(' ')[1];
+  if (!token) return res.status(401).json({ success:false });
   try {
-    const user = jwt.verify(token, JWT_SECRET);
-    if (user.role !== 'admin') return res.status(403).json({ success: false });
-    res.json({ success: true, sessions: getSessionsPayload(), count: activeSessions.size });
-  } catch {
-    res.status(401).json({ success: false });
-  }
+    const u = jwt.verify(token, JWT_SECRET);
+    if (u.role !== 'admin') return res.status(403).json({ success:false });
+    res.json({ success:true, sessions: getSessionsPayload() });
+  } catch { res.status(401).json({ success:false }); }
 });
 
-// SSE — admin subscribe ke realtime session updates
+// SSE stream untuk admin (stats counter)
 app.get('/api/sessions/stream', (req, res) => {
-  const token = req.query.token;
-  if (!token) return res.status(401).end();
-  try {
-    jwt.verify(token, JWT_SECRET); // verifikasi (bisa tambah cek role admin)
-  } catch {
-    return res.status(401).end();
-  }
-
+  try { jwt.verify(req.query.token, JWT_SECRET); } catch { return res.status(401).end(); }
   res.setHeader('Content-Type',  'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection',    'keep-alive');
   res.flushHeaders();
-
-  // Kirim data awal
-  const initial = JSON.stringify({ type: 'sessions', data: getSessionsPayload() });
-  res.write(`data: ${initial}\n\n`);
-
-  // Daftarkan client
+  res.write(`data: ${JSON.stringify({ type:'sessions', data: getSessionsPayload() })}\n\n`);
   sseClients.add(res);
-
-  // Heartbeat agar koneksi tidak timeout
-  const heartbeat = setInterval(() => {
-    res.write(`: ping\n\n`);
-  }, 15000);
-
-  req.on('close', () => {
-    clearInterval(heartbeat);
-    sseClients.delete(res);
-  });
+  // Heartbeat setiap 20 detik agar SSE tidak di-cut Railway (max 5 menit idle)
+  const hb = setInterval(() => {
+    try { res.write(`: ping\n\n`); } catch {}
+  }, 20000);
+  req.on('close', () => { clearInterval(hb); sseClients.delete(res); });
 });
 
-// ===========================
-// CLEANUP SESSIONS YANG TIDAK AKTIF (> 30 detik tanpa ping)
-// ===========================
+// Cleanup sesi timeout (tidak ping > 30 detik)
 setInterval(() => {
-  const now = Date.now();
-  let changed = false;
-  for (const [token, session] of activeSessions) {
-    if (now - session.lastPing > 30000) {
-      console.log(`[${new Date().toLocaleString('id-ID')}] Sesi timeout: ${session.user.name}`);
-      activeSessions.delete(token);
-      changed = true;
-    }
+  const now = Date.now(); let changed = false;
+  for (const [token, s] of activeSessions) {
+    if (now - s.lastPing > 30000) { activeSessions.delete(token); changed = true; }
   }
   if (changed) broadcastSessions();
 }, 10000);
 
-// Fallback SPA
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 // ===========================
-// START SERVER
+// START
 // ===========================
-app.listen(PORT, () => {
-  console.log(`🎬 Layar Biru Backend berjalan di port ${PORT}`);
-  console.log(`\n📋 Daftar Akun:`);
+server.listen(PORT, () => {
+  console.log(`\n🎬 Layar Biru v2.1 berjalan di port ${PORT}`);
+  console.log(`📡 Socket.IO signaling aktif`);
+  console.log(`\n📋 Akun:`);
   ACCOUNTS.forEach(a => console.log(`  [${a.role.toUpperCase()}] ${a.email} / ${a.password}`));
   console.log('');
 });
