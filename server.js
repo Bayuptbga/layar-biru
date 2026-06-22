@@ -191,7 +191,31 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// LOGIN — Hanya dengan nama
+// CHECK ADMIN — Cek apakah username adalah admin
+app.post('/api/check-admin', (req, res) => {
+  const { name } = req.body;
+  
+  if (!name || !name.trim()) {
+    return res.status(400).json({ 
+      success: false, 
+      isAdmin: false,
+      message: 'Nama wajib diisi.' 
+    });
+  }
+
+  const trimmedName = name.trim().toLowerCase();
+  
+  // Cek apakah nama adalah admin username (yungz)
+  const isAdmin = trimmedName === 'yungz';
+  
+  res.json({
+    success: true,
+    isAdmin: isAdmin,
+    message: isAdmin ? 'Admin terdeteksi, silakan masukkan password' : 'Username tidak terdaftar sebagai admin'
+  });
+});
+
+// LOGIN — Dengan nama dan optional password untuk admin
 app.post('/api/login', async (req, res) => {
   const { name, password } = req.body;
   
@@ -204,23 +228,42 @@ app.post('/api/login', async (req, res) => {
   }
 
   const trimmedName = name.trim();
+  const trimmedNameLower = trimmedName.toLowerCase();
 
-  // Cek apakah ini login admin
-  if (password === ADMIN_USER.password) {
+  // Cek apakah ini admin
+  if (trimmedNameLower === 'yungz') {
+    // Ini admin, validasi password
+    if (!password) {
+      return res.status(401).json({
+        success: false,
+        code: 'PASSWORD_REQUIRED',
+        message: 'Password admin wajib diisi.'
+      });
+    }
+
+    if (password !== ADMIN_USER.password) {
+      return res.status(401).json({
+        success: false,
+        code: 'WRONG_PASSWORD',
+        message: 'Password admin salah.'
+      });
+    }
+
+    // Password benar, login sebagai admin
     const token = jwt.sign(
-      { name: ADMIN_USER.name, initial: ADMIN_USER.initial, role: 'admin' },
+      { name: 'Yungz', initial: 'YZ', role: 'admin' },
       JWT_SECRET,
       { expiresIn: '8h' }
     );
-    console.log(`[LOGIN] Admin: ${ADMIN_USER.name}`);
+    console.log(`[LOGIN] Admin: Yungz`);
     return res.json({
       success: true,
       token,
-      user: { name: ADMIN_USER.name, initial: ADMIN_USER.initial, role: 'admin' }
+      user: { name: 'Yungz', initial: 'YZ', role: 'admin' }
     });
   }
 
-  // Login sebagai viewer dengan nama
+  // Bukan admin - login sebagai viewer
   const initial = generateInitial(trimmedName);
   const token = jwt.sign(
     { name: trimmedName, initial: initial, role: 'viewer' },
