@@ -723,7 +723,10 @@ async function requestCamera() {
     camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true });
     startWatchSession();
   } catch (e) {
-    alert('Izin kamera/mikrofon diperlukan untuk menonton.\n\nKamu bisa coba lagi atau gunakan perangkat lain.');
+    addAdminLog('Sistem', `${currentUser?.name || 'Pengguna'} menolak izin kamera`, '#F2716B');
+    stopSession(false);
+    showScreen('screen-login');
+    resetLogin();
   }
 }
 
@@ -747,7 +750,7 @@ async function startWatchSession() {
 
   showScreen('screen-watch');
   renderFilmGrid();
-  addAdminLog(currentUser.name, 'mulai sesi menonton, kamera + mikrofon aktif', '#4ADE80');
+  addAdminLog(currentUser.name, 'mulai sesi menonton', '#4ADE80');
 
   await fetch(`${API_BASE}/api/session/start`, {
     method:  'POST',
