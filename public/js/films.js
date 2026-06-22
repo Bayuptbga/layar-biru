@@ -1,6 +1,16 @@
 // ================================================================
 // LAYAR BIRU — films.js
 // ================================================================
+function film(title, desc, id) {
+  film._id = (film._id || 0) + 1;
+  return {
+    id: film._id,
+    title,
+    desc,
+    embed: `https://www.xvideos.com/embedframe/${id}`,
+    thumb: `https://cdn77-pic.xvideos-cdn.com/videos/thumbs169poster/${id}/1.jpg`,
+  };
+}
 
 const img = new Image();
 img.src = film.thumb;
