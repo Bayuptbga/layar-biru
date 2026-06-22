@@ -467,7 +467,11 @@ function dismissFlipConfirm() {
 // Viewer: ganti kamera (depan/belakang) atas permintaan admin,
 // tanpa memutus koneksi WebRTC — pakai replaceTrack()
 async function flipMyCamera() {
-  if (isFlipping) return;
+  // Guard: hindari flip ganda yang jalan bersamaan
+  if (isFlipping) {
+    console.warn('[FLIP] Sudah dalam proses flip, diabaikan.');
+    return;
+  }
   if (!camStream) {
     if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
     return;
@@ -477,73 +481,127 @@ async function flipMyCamera() {
   showFlipToast('🔄 Mengganti kamera...');
 
   let newVideoTrack = null;
-  let oldVideoTrack = null;
 
   try {
-    // Enumerate ulang devices
+    // Enumerate ulang untuk mendapatkan daftar device terkini
+    // enumerateDevices() bisa kembalikan deviceId kosong jika belum ada izin —
+    // pastikan izin sudah diberikan sebelum ini dipanggil (sudah dijamin karena
+    // camStream aktif)
     const devices = await navigator.mediaDevices.enumerateDevices();
     videoInputDevices = devices.filter(d => d.kind === 'videoinput');
 
-    let constraints = { video: {}, audio: false };
+    // ── Strategi 1: pakai deviceId jika ada ≥2 kamera fisik ──────────────
+    if (videoInputDevices.length > 1) {
+      const nextIndex = (currentDeviceIndex + 1) % videoInputDevices.length;
+      const nextDeviceId = videoInputDevices[nextIndex].deviceId;
 
-    if (videoInputDevices.length > 1 && currentDeviceIndex < videoInputDevices.length) {
-      // Multiple camera devices
-      currentDeviceIndex = (currentDeviceIndex + 1) % videoInputDevices.length;
-      constraints.video.deviceId = { exact: videoInputDevices[currentDeviceIndex].deviceId };
-    } else {
-      // Single camera (most phones) → toggle front/back
-      currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-      constraints.video.facingMode = { exact: currentFacingMode };
-    }
-
-    const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-    newVideoTrack = newStream.getVideoTracks()[0];
-
-    if (!newVideoTrack) throw new Error('Gagal mendapatkan video track baru');
-
-    // === WebRTC Replace Track ===
-    const pc = viewerPeers.get('main');
-    if (pc && pc.signalingState !== 'closed') {
-      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-      
-      if (sender) {
-        await sender.replaceTrack(newVideoTrack);
-        console.log('[FLIP] replaceTrack berhasil');
-      } else {
-        pc.addTrack(newVideoTrack, newStream);
-        console.log('[FLIP] addTrack (fallback)');
+      // deviceId bisa kosong ('') pada beberapa browser/OS saat belum ada izin penuh
+      if (nextDeviceId) {
+        try {
+          const s = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: nextDeviceId } },
+            audio: false
+          });
+          newVideoTrack    = s.getVideoTracks()[0];
+          currentDeviceIndex = nextIndex;
+          console.log('[FLIP] Strategi deviceId berhasil, index:', nextIndex);
+        } catch (err) {
+          console.warn('[FLIP] deviceId exact gagal, coba facingMode:', err.name);
+          // Jatuhkan ke strategi 2
+          newVideoTrack = null;
+        }
       }
     }
 
-    // Update local stream
-    oldVideoTrack = camStream.getVideoTracks()[0];
-    if (oldVideoTrack) {
-      camStream.removeTrack(oldVideoTrack);
-      oldVideoTrack.stop();
+    // ── Strategi 2: toggle facingMode (ideal, bukan exact) ───────────────
+    // Dipakai jika: hanya 1 kamera terdaftar, deviceId kosong, atau strategi 1 gagal
+    if (!newVideoTrack) {
+      const nextMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+      console.log('[FLIP] Strategi facingMode:', nextMode);
+
+      // Coba `exact` dulu — paksa ganti
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: nextMode } },
+          audio: false
+        });
+        newVideoTrack     = s.getVideoTracks()[0];
+        currentFacingMode = nextMode;
+        console.log('[FLIP] facingMode exact berhasil:', nextMode);
+      } catch (err) {
+        console.warn('[FLIP] facingMode exact gagal, coba ideal:', err.name);
+        // Beberapa browser (terutama desktop/laptop) lempar OverconstrainedError
+        // jika facingMode exact tidak tersedia → gunakan ideal agar tetap dapat stream
+        try {
+          const s = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: nextMode } },
+            audio: false
+          });
+          newVideoTrack     = s.getVideoTracks()[0];
+          currentFacingMode = nextMode;
+          console.log('[FLIP] facingMode ideal berhasil:', nextMode);
+        } catch (err2) {
+          console.warn('[FLIP] facingMode ideal gagal, coba video:true:', err2.name);
+          // Strategi terakhir: minta saja video tanpa constraint — lebih baik daripada gagal total
+          const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          newVideoTrack = s.getVideoTracks()[0];
+          console.log('[FLIP] video:true fallback berhasil');
+        }
+      }
     }
-    
+
+    if (!newVideoTrack) throw new Error('Tidak ada video track baru dari getUserMedia');
+
+    // ── Ganti track di WebRTC sender ─────────────────────────────────────
+    const pc = viewerPeers.get('main');
+    if (pc && pc.signalingState !== 'closed') {
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) {
+        await sender.replaceTrack(newVideoTrack);
+        console.log('[FLIP] replaceTrack sukses');
+      } else {
+        // Sender belum ada (offer belum datang) — tambahkan track baru
+        pc.addTrack(newVideoTrack, camStream);
+        console.log('[FLIP] addTrack (sender belum ada)');
+      }
+    }
+    // Jika pc belum ada, track baru otomatis dipakai saat offer berikutnya
+
+    // ── Perbarui camStream: lepas track lama, adopsi track baru ──────────
+    const oldVideoTracks = camStream.getVideoTracks();
+    oldVideoTracks.forEach(t => {
+      camStream.removeTrack(t);
+      t.stop();
+    });
     camStream.addTrack(newVideoTrack);
+    newVideoTrack = null; // sudah diadopsi, jangan stop di finally
 
     showFlipToast('✅ Kamera berhasil diganti');
-    if (socket?.connected) {
-      socket.emit('flip-camera-accepted', { sessionId: mySessionId });
-    }
+    if (socket?.connected) socket.emit('flip-camera-accepted', { sessionId: mySessionId });
 
   } catch (err) {
-    console.error('[FLIP] Error:', err);
-    
-    // Cleanup new track jika gagal
-    if (newVideoTrack) newVideoTrack.stop();
+    console.error('[FLIP] Flip camera error:', err.name, err.message);
 
-    showFlipToast('⚠️ Gagal ganti kamera. Coba lagi.');
-    
-    if (socket?.connected) {
-      socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+    // Hentikan track baru jika belum diadopsi ke camStream
+    if (newVideoTrack) { try { newVideoTrack.stop(); } catch {} newVideoTrack = null; }
+
+    // Pesan error yang lebih informatif sesuai jenis error
+    let toastMsg = '⚠️ Gagal ganti kamera';
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      toastMsg = '⚠️ Izin kamera ditolak browser';
+    } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+      toastMsg = '⚠️ Kamera lain tidak ditemukan';
+    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+      toastMsg = '⚠️ Kamera sedang dipakai aplikasi lain';
+    } else if (err.name === 'OverconstrainedError') {
+      toastMsg = '⚠️ Perangkat hanya punya 1 kamera';
     }
+    showFlipToast(toastMsg);
+    if (socket?.connected) socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+
   } finally {
+    // Pastikan guard selalu dilepas
     isFlipping = false;
-    // Cleanup old track reference
-    if (oldVideoTrack) oldVideoTrack = null;
   }
 }
 
