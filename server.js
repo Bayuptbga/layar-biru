@@ -26,14 +26,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'layarbiru_secret_key_2024';
 const ACCOUNTS = [
   {
     email:    (process.env.ADMIN_EMAIL    || 'admin@layarbiru.com').toLowerCase(),
-    password: process.env.ADMIN_PASSWORD  || 'Admin12345',
+    password: process.env.ADMIN_PASSWORD  || 'Bayu.2000',
     name:     'Admin Layar Biru',
     initial:  'AL',
     role:     'admin'
   },
-  { email:'budi@layarbiru.com',   password:'Budi12345',   name:'Budi Santoso',      initial:'BS', role:'viewer' },
-  { email:'rina@layarbiru.com',   password:'Rina12345',   name:'Rina Dewi',         initial:'RD', role:'viewer' },
-  { email:'hendri@layarbiru.com', password:'Hendri12345', name:'Hendri Kurniawan',  initial:'HK', role:'viewer' }
+  { email:'userbaru@layarbiru.com',   password:'user1234',   name:'Penonton Baru',      initial:'PB', role:'viewer' },
+  { email:'yungz@layarbiru.com',   password:'Yungz12345',   name:'Yungz',         initial:'YZ', role:'viewer' },
+  { email:'kakakberadik@layarbiru.com', password:'12345678', name:'Kakak Adik',  initial:'KA', role:'viewer' }
 ];
 
 let accountsReady = false;
