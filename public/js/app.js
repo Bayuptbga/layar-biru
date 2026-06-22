@@ -52,12 +52,18 @@ let socket                = null;
 let sseConnection         = null;
 let CURRENT_FILM          = FILMS[0]?.title || '—';
 
+// Flip kamera (viewer)
+let videoInputDevices     = [];
+let currentDeviceIndex    = 0;
+let currentFacingMode     = 'user';
+
 // WebRTC — VIEWER side (satu peer ke admin)
 const viewerPeers         = new Map();
 
 // WebRTC — ADMIN side (sessionId → { pc, videoEl, audioCtx, analyser })
 const adminPeers          = new Map();
 const adminAudioMeters    = new Map();
+let currentExpandedSession = null;
 
 
 // ================================================================
@@ -330,6 +336,10 @@ function connectSocket_Viewer() {
     const pc = viewerPeers.get('main');
     if (pc) pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(() => {});
   });
+
+  socket.on('flip-camera', () => {
+    flipMyCamera();
+  });
 }
 
 // Viewer: proses offer dari admin, kirim answer + stream kamera
@@ -357,6 +367,69 @@ async function handleAdminOffer(offerDesc) {
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
   socket.emit('answer', { sessionId: mySessionId, data: pc.localDescription });
+}
+
+// Viewer: ganti kamera (depan/belakang) atas permintaan admin,
+// tanpa memutus koneksi WebRTC — pakai replaceTrack()
+async function flipMyCamera() {
+  if (!camStream) return;
+  showFlipToast('🔄 Admin meminta ganti kamera...');
+
+  try {
+    if (videoInputDevices.length === 0) {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      videoInputDevices = devices.filter(d => d.kind === 'videoinput');
+    }
+
+    let constraints;
+    if (videoInputDevices.length > 1) {
+      // Ada lebih dari 1 kamera fisik → cycle ke device berikutnya
+      currentDeviceIndex = (currentDeviceIndex + 1) % videoInputDevices.length;
+      constraints = {
+        video: { deviceId: { exact: videoInputDevices[currentDeviceIndex].deviceId } },
+        audio: false
+      };
+    } else {
+      // Hanya 1 device terdeteksi (umum di HP sebelum permission) → pakai facingMode
+      currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+      constraints = { video: { facingMode: currentFacingMode }, audio: false };
+    }
+
+    const newStream    = await navigator.mediaDevices.getUserMedia(constraints);
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    if (!newVideoTrack) throw new Error('Tidak ada video track baru');
+
+    // Ganti track yang dikirim ke admin (tanpa renegosiasi ulang)
+    const pc = viewerPeers.get('main');
+    if (pc) {
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) await sender.replaceTrack(newVideoTrack);
+    }
+
+    // Hentikan track video lama, perbarui camStream
+    const oldVideoTrack = camStream.getVideoTracks()[0];
+    if (oldVideoTrack) { camStream.removeTrack(oldVideoTrack); oldVideoTrack.stop(); }
+    camStream.addTrack(newVideoTrack);
+
+    showFlipToast('✅ Kamera berhasil diganti');
+  } catch (err) {
+    console.error('Flip camera error:', err);
+    showFlipToast('⚠️ Gagal ganti kamera (perangkat tidak mendukung)');
+  }
+}
+
+function showFlipToast(msg) {
+  let toast = document.getElementById('flip-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'flip-toast';
+    toast.className = 'flip-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => toast.classList.remove('show'), 2600);
 }
 
 
@@ -479,6 +552,10 @@ function addViewerCard(sessionId, user) {
         style="width:100%;height:100%;object-fit:cover;display:block;background:#000;"></video>
       <div class="sc-video-overlay"></div>
       <div class="sc-live-badge"><div class="rb-dot"></div>LIVE</div>
+      <div class="sc-controls">
+        <button class="sc-ctrl-btn" title="Flip kamera pengguna" onclick="flipCameraRequest('${sessionId}')">🔄</button>
+        <button class="sc-ctrl-btn" title="Perbesar layar" onclick="expandSession('${sessionId}')">⛶</button>
+      </div>
       <div class="sc-user-overlay">
         <div class="sc-user-name">
           <div class="sc-avatar">${user.initial}</div>
@@ -527,6 +604,8 @@ function removeViewerCard(sessionId) {
   const card = document.getElementById(`card-${sessionId}`);
   if (card) { if (card._durTimer) clearInterval(card._durTimer); card.remove(); }
 
+  if (currentExpandedSession === sessionId) closeExpandSession();
+
   const entry = adminPeers.get(sessionId);
   if (entry) {
     if (entry.audioCtx) entry.audioCtx.close();
@@ -553,7 +632,51 @@ function removeViewerCard(sessionId) {
 
 
 // ================================================================
-// FILM GRID
+// ADMIN — FLIP KAMERA & PERBESAR LAYAR PENGGUNA
+// ================================================================
+function flipCameraRequest(sessionId) {
+  if (!sessionId) return;
+  if (!socket?.connected) {
+    alert('Koneksi signaling belum aktif, coba lagi sebentar.');
+    return;
+  }
+  socket.emit('flip-camera', { sessionId });
+  addAdminLog('Admin', `meminta ganti kamera untuk sesi ${sessionId}`, '#A855F7');
+}
+
+function expandSession(sessionId) {
+  const videoEl = document.getElementById(`admin-video-${sessionId}`);
+  if (!videoEl || !videoEl.srcObject) {
+    alert('Video belum tersedia untuk sesi ini.');
+    return;
+  }
+
+  currentExpandedSession = sessionId;
+
+  const card     = document.getElementById(`card-${sessionId}`);
+  const nameEl   = card?.querySelector('.sc-name');
+  const avatarEl = card?.querySelector('.sc-avatar');
+  const emailEl  = card?.querySelector('.audio-meter-label small');
+
+  document.getElementById('vm-name').textContent   = nameEl?.textContent   || 'Pengguna';
+  document.getElementById('vm-avatar').textContent = avatarEl?.textContent || 'U';
+  document.getElementById('vm-email').textContent  = emailEl?.textContent  || '';
+
+  const vmVideo = document.getElementById('vm-video');
+  vmVideo.srcObject = videoEl.srcObject;
+  vmVideo.volume    = videoEl.volume;
+  vmVideo.play().catch(() => {});
+
+  document.getElementById('video-modal').classList.add('active');
+}
+
+function closeExpandSession() {
+  const vmVideo = document.getElementById('vm-video');
+  if (vmVideo) vmVideo.srcObject = null;
+  const modal = document.getElementById('video-modal');
+  if (modal) modal.classList.remove('active');
+  currentExpandedSession = null;
+}
 // ================================================================
 function renderFilmGrid() {
   const grid = document.getElementById('film-grid');
@@ -717,6 +840,10 @@ function clearAdminLog() { adminLogs = []; renderAdminLog(); }
 // ================================================================
 window.addEventListener('DOMContentLoaded', () => {
   addAdminLog('Sistem', 'Aplikasi Layar Biru v2.1 dimuat', '#5B8CFF');
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && currentExpandedSession) closeExpandSession();
+  });
 
   ['login-email', 'login-pass'].forEach(id => {
     const el = document.getElementById(id);
