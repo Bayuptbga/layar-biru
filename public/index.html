@@ -37,6 +37,17 @@
       <input id="login-name" type="text" placeholder="Masukkan nama Anda" autocomplete="name"/>
     </div>
 
+    <!-- Password field - hanya muncul untuk admin -->
+    <div id="password-section" class="form-group" style="display:none;">
+      <label>Password Admin</label>
+      <input id="login-pass" type="password" placeholder="Masukkan password" autocomplete="current-password"/>
+    </div>
+
+    <!-- Info admin detected -->
+    <div id="admin-detected" style="display:none;padding:10px;background:#fff3cd;border-radius:6px;margin-bottom:10px;font-size:0.9rem;color:#856404;">
+      <strong>✓ Admin Terdeteksi!</strong> Silakan masukkan password untuk melanjutkan.
+    </div>
+
     <div class="consent-box">
       <div class="consent-title">⚠️ Verifikasi Usia Pengguna</div>
       <p>Platform ini hanya diperuntukkan bagi pengguna yang telah berusia 18 tahun atau lebih. Sebelum melanjutkan, Anda diwajibkan menyatakan bahwa informasi yang diberikan adalah benar.</p>
@@ -47,8 +58,8 @@
       </label>
     </div>
 
-    <button class="btn-full" id="btn-login" disabled onclick="doLogin()">
-      Masuk &amp; Mulai Nonton
+    <button class="btn-full" id="btn-login" disabled onclick="checkAndLogin()">
+      <span id="btn-text">Masuk &amp; Mulai Nonton</span>
     </button>
     <p style="text-align:center;font-size:.72rem;color:var(--muted);margin-top:14px;">
       Film Biru v2.1 · Nonton Dewasa HD
