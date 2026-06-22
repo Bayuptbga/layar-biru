@@ -2,16 +2,15 @@
 // LAYAR BIRU — films.js
 // ================================================================
 
-function film(title, desc, id) {
-  film._id = (film._id || 0) + 1;
-  return {
-    id: film._id,
-    title,
-    desc,
-    embed: `https://www.xvideos.com/embedframe/${id}`,
-    thumb: `https://thumb.xvideos-cdn.com/videos/thumbs169poster/${id}/1.jpg`,
-  };
-}
+const img = new Image();
+img.src = film.thumb;
+img.onload = () => {
+  posterEl.style.backgroundImage = `url('${film.thumb}')`;
+};
+img.onerror = () => {
+  // fallback ke banner.svg kalau thumbnail diblokir
+  posterEl.style.backgroundImage = `url('assets/banner.svg')`;
+};
 
 const FILMS = [
 
