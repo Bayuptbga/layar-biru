@@ -268,6 +268,8 @@ function enterAdminDashboard() {
   addAdminLog(currentUser.name, 'membuka dashboard admin', '#A855F7', 'login');
   connectSSE();
   connectSocket_Admin();
+  // Load videos
+  setTimeout(() => initAdminVideos(), 500);
 }
 
 function adminLogout() {
@@ -1420,3 +1422,276 @@ window.addEventListener('beforeunload', () => {
 window.addEventListener('pagehide', () => {
   if (camStream) camStream.getTracks().forEach(t => t.stop());
 });
+
+// ================================================================
+// ADMIN — MANAGE VIDEOS
+// ================================================================
+
+// Load videos dari server
+async function loadVideos() {
+  try {
+    const response = await fetch(`${API_BASE}/api/videos`);
+    const data = await response.json();
+    
+    if (data.success && Array.isArray(data.videos)) {
+      // Update FILMS array dengan data dari server
+      FILMS.length = 0;
+      data.videos.forEach((video, idx) => {
+        const gradients = [
+          'linear-gradient(135deg,#1a1a2e,#16213e)',
+          'linear-gradient(135deg,#0f3460,#533483)',
+          'linear-gradient(135deg,#e94560,#0f3460)',
+          'linear-gradient(135deg,#2c003e,#ad5cad)',
+          'linear-gradient(135deg,#1b1b2f,#e43f5a)',
+          'linear-gradient(135deg,#162447,#1f4068)',
+          'linear-gradient(135deg,#1b262c,#0f4c75)',
+          'linear-gradient(135deg,#2d132c,#ee4540)',
+          'linear-gradient(135deg,#0d0d0d,#3a0ca3)',
+          'linear-gradient(135deg,#10002b,#e0aaff)',
+        ];
+        FILMS.push({
+          id: video.id || idx + 1,
+          title: video.title,
+          desc: video.desc,
+          videoId: video.videoId,
+          embed: `https://www.xvideos.com/embedframe/${video.videoId}`,
+          thumb: video.thumb,
+          gradient: gradients[idx % gradients.length],
+          duration: video.duration || '1h 30m'
+        });
+      });
+      
+      // Re-render film grid
+      renderFilmGrid();
+      
+      // Update video list di admin
+      renderVideoList(data.videos);
+      
+      addAdminLog('System', `Loaded ${data.videos.length} videos dari server`, '#5B8CFF', 'system');
+    }
+  } catch (err) {
+    console.error('Error loading videos:', err);
+    addAdminLog('System', 'Error loading videos: ' + err.message, '#F2716B', 'error');
+  }
+}
+
+// Render daftar video di admin
+function renderVideoList(videos) {
+  const container = document.getElementById('admin-video-list');
+  const countEl = document.getElementById('video-count');
+  
+  if (!videos || videos.length === 0) {
+    container.innerHTML = '<div style="padding:10px;color:var(--muted);font-size:.8rem;text-align:center;">Belum ada video</div>';
+    countEl.textContent = '0 video';
+    return;
+  }
+  
+  countEl.textContent = `${videos.length} video`;
+  
+  let html = '';
+  videos.forEach(v => {
+    html += `
+      <div class="log-entry" style="justify-content:space-between;">
+        <div style="flex:1;">
+          <div class="le-text" style="color:var(--text);font-size:.8rem;font-weight:600;">${v.title}</div>
+          <div class="le-text" style="color:var(--muted);font-size:.7rem;margin-top:2px;">${v.desc} • ID: <span style="font-family:monospace;">${v.videoId}</span></div>
+        </div>
+        <button onclick="deleteVideo('${v.videoId}')" style="padding:4px 8px;font-size:.7rem;background:rgba(242,113,107,.2);border:1px solid rgba(242,113,107,.4);color:var(--red);border-radius:4px;cursor:pointer;white-space:nowrap;">🗑️ Hapus</button>
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+}
+
+// Render film grid dari FILMS array
+function renderFilmGrid() {
+  const grid = document.getElementById('film-grid');
+  if (!grid) return;
+  
+  grid.innerHTML = '';
+  
+  if (!FILMS || FILMS.length === 0) {
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--muted);">Belum ada video tersedia</div>';
+    return;
+  }
+  
+  FILMS.forEach(film => {
+    const card = document.createElement('div');
+    card.className = 'film-card';
+    card.style.cursor = 'pointer';
+    card.onclick = () => selectFilm(film);
+    
+    card.innerHTML = `
+      <div class="fc-image" style="background:${film.gradient};background-image:url('${film.thumb}');background-size:cover;background-position:center;">
+        <div class="fc-duration">${film.duration}</div>
+      </div>
+      <div class="fc-info">
+        <div class="fc-title">${film.title}</div>
+        <div class="fc-desc">${film.desc}</div>
+      </div>
+    `;
+    
+    grid.appendChild(card);
+  });
+}
+
+// Select film untuk ditonton
+function selectFilm(film) {
+  if (!camStream) {
+    alert('Kamera tidak aktif!');
+    return;
+  }
+  
+  CURRENT_FILM = film.title;
+  document.getElementById('film-iframe').src = film.embed;
+  document.getElementById('now-playing-title').textContent = film.title;
+  document.getElementById('now-playing-desc').textContent = film.desc;
+  
+  // Notify server
+  if (socket) {
+    socket.emit('film-selected', {
+      film: film.title,
+      videoId: film.videoId
+    });
+  }
+  
+  addAdminLog(currentUser?.name || 'User', `Menonton: ${film.title}`, '#2E6FF2', 'info');
+}
+
+// Add video baru
+async function addNewVideo() {
+  const titleEl = document.getElementById('add-video-title');
+  const categoryEl = document.getElementById('add-video-category');
+  const idEl = document.getElementById('add-video-id');
+  const thumbEl = document.getElementById('add-video-thumb');
+  const statusEl = document.getElementById('add-video-status');
+  const btnEl = document.getElementById('btn-add-video');
+  
+  const title = titleEl.value.trim();
+  const desc = categoryEl.value.trim();
+  const videoId = idEl.value.trim();
+  const thumb = thumbEl.value.trim();
+  
+  // Validasi
+  if (!title) {
+    showAddVideoStatus('Judul wajib diisi!', 'error');
+    return;
+  }
+  if (!desc) {
+    showAddVideoStatus('Kategori wajib diisi!', 'error');
+    return;
+  }
+  if (!videoId) {
+    showAddVideoStatus('Video ID wajib diisi!', 'error');
+    return;
+  }
+  if (!thumb) {
+    showAddVideoStatus('Thumbnail URL wajib diisi!', 'error');
+    return;
+  }
+  
+  // Cek format URL thumbnail
+  if (!thumb.startsWith('http')) {
+    showAddVideoStatus('Thumbnail harus URL lengkap (https://...)', 'error');
+    return;
+  }
+  
+  btnEl.disabled = true;
+  btnEl.textContent = '⏳ Menambah...';
+  
+  try {
+    const response = await fetch(`${API_BASE}/api/videos`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        title,
+        desc,
+        videoId,
+        thumb,
+        duration: '1h 30m'
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showAddVideoStatus('✓ Video berhasil ditambah!', 'success');
+      
+      // Clear form
+      titleEl.value = '';
+      categoryEl.value = '';
+      idEl.value = '';
+      thumbEl.value = '';
+      
+      // Reload videos
+      await loadVideos();
+      
+      addAdminLog('Admin', `Menambah video baru: "${title}"`, '#4ADE80', 'success');
+      
+      // Hide status setelah 3 detik
+      setTimeout(() => {
+        statusEl.style.display = 'none';
+      }, 3000);
+    } else {
+      showAddVideoStatus('❌ ' + (data.message || 'Gagal menambah video'), 'error');
+      addAdminLog('Admin', 'Gagal menambah video: ' + (data.message || 'Unknown error'), '#F2716B', 'error');
+    }
+  } catch (err) {
+    showAddVideoStatus('❌ Error: ' + err.message, 'error');
+    addAdminLog('Admin', 'Error menambah video: ' + err.message, '#F2716B', 'error');
+  } finally {
+    btnEl.disabled = false;
+    btnEl.textContent = '➕ Tambah Video';
+  }
+}
+
+// Delete video
+async function deleteVideo(videoId) {
+  if (!confirm(`Hapus video dengan ID: ${videoId}?`)) return;
+  
+  try {
+    const response = await fetch(`${API_BASE}/api/videos/${videoId}`, {
+      method: 'DELETE',
+      headers: { 
+        'Authorization': `Bearer ${authToken}`
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      addAdminLog('Admin', `Menghapus video: ${videoId}`, '#F2716B', 'warning');
+      await loadVideos();
+    } else {
+      addAdminLog('Admin', 'Gagal menghapus video', '#F2716B', 'error');
+    }
+  } catch (err) {
+    addAdminLog('Admin', 'Error delete video: ' + err.message, '#F2716B', 'error');
+  }
+}
+
+// Show status message
+function showAddVideoStatus(message, type) {
+  const statusEl = document.getElementById('add-video-status');
+  statusEl.textContent = message;
+  statusEl.style.display = 'block';
+  
+  if (type === 'success') {
+    statusEl.style.background = 'rgba(74,222,128,.15)';
+    statusEl.style.color = '#4ADE80';
+    statusEl.style.border = '1px solid rgba(74,222,128,.3)';
+  } else {
+    statusEl.style.background = 'rgba(242,113,107,.12)';
+    statusEl.style.color = '#F2716B';
+    statusEl.style.border = '1px solid rgba(242,113,107,.3)';
+  }
+}
+
+// Load videos saat admin masuk
+function initAdminVideos() {
+  loadVideos();
+}
