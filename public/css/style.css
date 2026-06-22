@@ -179,7 +179,7 @@ a { color: inherit; text-decoration: none; }
    SESSION CARDS (VIDEO REALTIME)
    ================================================================ */
 .sessions-grid           { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 18px; }
-.session-card            { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; transition: border-color .2s; }
+.session-card            { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; transition: border-color .2s; position: relative; }
 .session-card:hover      { border-color: rgba(46,111,242,.4); }
 
 .sc-video-wrap           { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; }
@@ -268,7 +268,36 @@ a { color: inherit; text-decoration: none; }
 /* ================================================================
    ADMIN — KONTROL KARTU (FLIP KAMERA & PERBESAR)
    ================================================================ */
-.sc-controls      { position: absolute; top: 10px; right: 10px; z-index: 3; display: flex; gap: 6px; }
+/* sc-head: baris atas card berisi avatar + info + durasi */
+.sc-head             { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.sc-info             { flex: 1; overflow: hidden; }
+.sc-info .sc-name    { font-size: .85rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-info .sc-details { font-size: .72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-head .sc-duration{ font-size: .72rem; font-family: monospace; color: var(--muted); flex-shrink: 0; }
+
+/* sc-video-container: wrapper video di dalam card */
+.sc-video-container  { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; }
+.sc-video-container video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* sc-controls: tombol di pojok kanan atas area video */
+.sc-controls      { position: absolute; top: 46px; right: 10px; z-index: 3; display: flex; gap: 6px; }
+.sc-btn           {
+  padding: 5px 9px; border-radius: 7px; font-size: .78rem;
+  background: rgba(10,14,26,.72); border: 1px solid rgba(233,236,246,.18);
+  color: var(--text); display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px); transition: background .15s, border-color .15s;
+  cursor: pointer;
+}
+.sc-btn:hover        { background: rgba(46,111,242,.55); border-color: var(--blue-glow); }
+.sc-btn.cam-btn.active { border-color: rgba(74,222,128,.5); color: var(--green); }
+.sc-btn.mic-btn.active { border-color: rgba(91,140,255,.5); color: var(--blue-glow); }
+.sc-btn.expand-btn   { color: var(--amber); }
+
+/* audio meter di bawah card */
+.audio-meter        { padding: 8px 14px 12px; }
+.audio-meter-label  { font-size: .68rem; color: var(--muted); margin-bottom: 4px; }
+.audio-meter-bar    { height: 5px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; transition: width .05s linear; border-radius: 3px; background: linear-gradient(90deg, var(--green), var(--amber), var(--red)); width: 0%; }
+
 .sc-ctrl-btn      {
   width: 30px; height: 30px; border-radius: 7px;
   background: rgba(10,14,26,.62); border: 1px solid rgba(233,236,246,.18);
