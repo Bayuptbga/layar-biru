@@ -875,29 +875,64 @@ function connectSocket_Viewer() {
   });
 
   socket.on('flip-camera', async () => {
+    if (isFlipping) return; // guard double-flip
+    isFlipping = true;
+    showFlipToast('🔄 Membalik kamera...');
     try {
       const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: nextFacingMode },
-        audio: true
-      });
-      currentFacingMode = nextFacingMode;
-      const oldTrack = camStream.getVideoTracks()[0];
-      const newTrack = newStream.getVideoTracks()[0];
-      camStream.removeTrack(oldTrack);
-      camStream.addTrack(newTrack);
-      oldTrack.stop();
 
-      for (const pc of viewerPeers.values()) {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) await sender.replaceTrack(newTrack);
+      // Gunakan exact agar mobile benar-benar pindah kamera fisik
+      let newStream;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: nextFacingMode } },
+          audio: true
+        });
+      } catch {
+        // Fallback tanpa exact jika device tidak support
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: nextFacingMode },
+          audio: true
+        });
       }
 
+      currentFacingMode = nextFacingMode;
+
+      // Ganti video track di camStream
+      const oldVideoTrack = camStream.getVideoTracks()[0];
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (oldVideoTrack) { camStream.removeTrack(oldVideoTrack); oldVideoTrack.stop(); }
+      camStream.addTrack(newVideoTrack);
+
+      // Ganti audio track di camStream (agar tidak dobel)
+      const oldAudioTrack = camStream.getAudioTracks()[0];
+      const newAudioTrack = newStream.getAudioTracks()[0];
+      if (oldAudioTrack && newAudioTrack) {
+        camStream.removeTrack(oldAudioTrack);
+        oldAudioTrack.stop();
+        camStream.addTrack(newAudioTrack);
+      } else if (newAudioTrack) {
+        camStream.addTrack(newAudioTrack);
+      }
+
+      // Replace track di semua peer connection ke admin
+      for (const pc of viewerPeers.values()) {
+        const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (videoSender) await videoSender.replaceTrack(newVideoTrack);
+
+        const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio');
+        if (audioSender && newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
+      }
+
+      showFlipToast(nextFacingMode === 'user' ? '📷 Kamera depan aktif' : '📷 Kamera belakang aktif');
       socket.emit('flip-camera-accepted', { sessionId: mySessionId });
       addAdminLog(currentUser?.name || 'Pengguna', 'membalik kamera', '#4ADE80');
     } catch (e) {
       console.error('Flip camera error:', e);
+      showFlipToast('❌ Gagal membalik kamera');
       socket.emit('flip-camera-rejected', { sessionId: mySessionId });
+    } finally {
+      isFlipping = false;
     }
   });
 
@@ -914,6 +949,23 @@ function connectSocket_Viewer() {
 // ================================================================
 // ADMIN LOG
 // ================================================================
+// ================================================================
+// FLIP CAMERA TOAST — notifikasi visual untuk viewer
+// ================================================================
+function showFlipToast(msg) {
+  let toast = document.getElementById('flip-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'flip-toast';
+    toast.className = 'flip-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
 function addAdminLog(user, action, color = '#5B8CFF') {
   const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   adminLogs.unshift({ user, action, color, time });
