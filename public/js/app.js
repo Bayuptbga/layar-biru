@@ -336,32 +336,59 @@ function renderAdminSessions(sessions) {
     return;
   }
 
-  grid.innerHTML = sessions.map(s => `
-    <div class="session-card" id="card-${s.id}">
-      <div class="sc-head">
-        <div class="sc-avatar">${s.initial}</div>
-        <div class="sc-info">
-          <div class="sc-name">${s.name}</div>
-          <div class="sc-details">${s.film}</div>
+  // Hanya render card yang belum ada (hindari overwrite videoEl yang sudah streaming)
+  sessions.forEach(s => {
+    let card = document.getElementById(`card-${s.id}`);
+    if (!card) {
+      // Buat card baru
+      const div = document.createElement('div');
+      div.className = 'session-card';
+      div.id = `card-${s.id}`;
+      div.innerHTML = `
+        <div class="sc-head">
+          <div class="sc-avatar">${s.initial}</div>
+          <div class="sc-info">
+            <div class="sc-name">${s.name}</div>
+            <div class="sc-details">${s.film}</div>
+          </div>
+          <div class="sc-duration" id="dur-${s.id}">${formatDuration(s.duration)}</div>
         </div>
-        <div class="sc-duration">${formatDuration(s.duration)}</div>
-      </div>
-      <div class="sc-video-container">
-        <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;"></video>
-      </div>
-      <div class="sc-controls">
-        <button class="sc-btn cam-btn ${s.camActive ? 'active' : ''}" title="Kamera">📹</button>
-        <button class="sc-btn mic-btn ${s.micActive ? 'active' : ''}" title="Mikrofon">🎤</button>
-        <button class="sc-btn expand-btn" onclick="expandSession('${s.id}')" title="Perbesar">⛶</button>
-      </div>
-      <div class="audio-meter">
-        <div class="audio-meter-bar" id="meter-${s.id}"></div>
-        <div class="audio-meter-label">
-          <small>${s.name}</small>
+        <div class="sc-video-container">
+          <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
         </div>
-      </div>
-    </div>
-  `).join('');
+        <div class="sc-controls">
+          <button class="sc-btn cam-btn ${s.camActive ? 'active' : ''}" title="Kamera">📹</button>
+          <button class="sc-btn mic-btn ${s.micActive ? 'active' : ''}" title="Mikrofon">🎤</button>
+          <button class="sc-btn expand-btn" onclick="expandSession('${s.id}')" title="Perbesar">⛶</button>
+        </div>
+        <div class="audio-meter">
+          <div class="audio-meter-bar" id="meter-${s.id}"></div>
+          <div class="audio-meter-label"><small>${s.name}</small></div>
+        </div>`;
+      grid.appendChild(div);
+
+      // Jika peer sudah ada, re-assign srcObject ke videoEl baru
+      const peer = adminPeers.get(s.id);
+      if (peer && peer.videoEl) {
+        const newVideoEl = document.getElementById(`video-${s.id}`);
+        if (newVideoEl && peer.videoEl.srcObject) {
+          newVideoEl.srcObject = peer.videoEl.srcObject;
+          newVideoEl.play().catch(() => {});
+          peer.videoEl = newVideoEl;
+        }
+      }
+    } else {
+      // Update durasi saja tanpa re-render
+      const durEl = document.getElementById(`dur-${s.id}`);
+      if (durEl) durEl.textContent = formatDuration(s.duration);
+    }
+  });
+
+  // Hapus card yang tidak ada di sessions lagi
+  grid.querySelectorAll('.session-card').forEach(card => {
+    const id = card.id.replace('card-', '');
+    if (!sessions.find(s => s.id === id)) card.remove();
+  });
 }
 
 function formatDuration(seconds) {
@@ -386,11 +413,17 @@ function connectSocket_Admin() {
   });
 
   socket.on('viewer-list', (msg) => {
-    msg.viewers.forEach(v => setupPeerConnection_Admin(v.sessionId, v.user));
+    console.log(`[Admin] viewer-list: ${msg.viewers.length} viewer aktif`);
+    msg.viewers.forEach(v => {
+      // Delay kecil agar SSE sempat render card lebih dulu
+      setTimeout(() => setupPeerConnection_Admin(v.sessionId, v.user), 300);
+    });
   });
 
   socket.on('viewer-connected', (msg) => {
-    setupPeerConnection_Admin(msg.sessionId, msg.user);
+    console.log(`[Admin] viewer-connected: ${msg.sessionId}`);
+    // Delay agar SSE render card terlebih dahulu
+    setTimeout(() => setupPeerConnection_Admin(msg.sessionId, msg.user), 300);
   });
 
   socket.on('viewer-disconnected', (msg) => {
@@ -439,31 +472,66 @@ function connectSocket_Admin() {
 async function setupPeerConnection_Admin(sessionId, user) {
   if (adminPeers.has(sessionId)) return;
 
-  const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
-  const videoEl = document.getElementById(`video-${sessionId}`);
+  // Tunggu hingga DOM card ter-render (max 2 detik, polling setiap 100ms)
+  let videoEl = document.getElementById(`video-${sessionId}`);
+  if (!videoEl) {
+    await new Promise(resolve => {
+      let attempts = 0;
+      const poll = setInterval(() => {
+        videoEl = document.getElementById(`video-${sessionId}`);
+        attempts++;
+        if (videoEl || attempts >= 20) {
+          clearInterval(poll);
+          resolve();
+        }
+      }, 100);
+    });
+  }
 
-  if (!videoEl) return;
+  if (!videoEl) {
+    console.warn(`[Admin] videoEl tidak ditemukan untuk ${sessionId} setelah polling`);
+    return;
+  }
+
+  const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
+
+  // Tambahkan transceiver agar offer mencakup video & audio (recvonly)
+  pc.addTransceiver('video', { direction: 'recvonly' });
+  pc.addTransceiver('audio', { direction: 'recvonly' });
 
   pc.ontrack = (evt) => {
     console.log(`[TRACK] ${user.name}: ${evt.track.kind}`);
     if (evt.track.kind === 'video') {
       videoEl.srcObject = evt.streams[0];
+      videoEl.play().catch(() => {});
     } else if (evt.track.kind === 'audio') {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const source = audioCtx.createMediaStreamSource(evt.streams[0]);
-      const analyser = audioCtx.createAnalyser();
-      source.connect(analyser);
-      analyser.fftSize = 256;
-      adminAudioMeters.set(sessionId, { analyser, audioCtx });
-      animateAudioMeter(sessionId);
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioCtx.createMediaStreamSource(evt.streams[0]);
+        const analyser = audioCtx.createAnalyser();
+        source.connect(analyser);
+        analyser.fftSize = 256;
+        adminAudioMeters.set(sessionId, { analyser, audioCtx });
+        animateAudioMeter(sessionId);
+      } catch (e) {
+        console.error('AudioContext error:', e);
+      }
     }
   };
 
   pc.onconnectionstatechange = () => {
     console.log(`Connection state (${user.name}): ${pc.connectionState}`);
+    if (pc.connectionState === 'failed') {
+      // Coba restart ICE
+      pc.restartIce();
+    }
     if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
       const el = document.getElementById(`card-${sessionId}`);
       if (el) el.style.opacity = '0.5';
+    }
+    if (pc.connectionState === 'connected') {
+      const el = document.getElementById(`card-${sessionId}`);
+      if (el) el.style.opacity = '1';
     }
   };
 
@@ -476,10 +544,15 @@ async function setupPeerConnection_Admin(sessionId, user) {
     }
   };
 
+  pc.onicegatheringstatechange = () => {
+    console.log(`[ICE] ${user.name}: ${pc.iceGatheringState}`);
+  };
+
   try {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socket.emit('offer', { sessionId, data: offer });
+    console.log(`[Admin] Offer dikirim ke viewer: ${sessionId}`);
   } catch (e) {
     console.error('Offer creation error:', e);
   }
@@ -606,7 +679,8 @@ function declineCamera() {
 // ================================================================
 async function startWatchSession() {
   sessionStart  = Date.now();
-  mySessionId   = `${currentUser.initial}-${Date.now()}`;
+  // Gunakan token.slice(-8) agar sessionId cocok dengan yang didaftarkan server
+  mySessionId   = authToken ? authToken.slice(-8) : `${currentUser.initial}-${Date.now()}`;
 
   document.getElementById('user-name-chip').textContent   = currentUser.name;
   document.getElementById('user-avatar-chip').textContent = currentUser.initial;
@@ -699,13 +773,26 @@ function connectSocket_Viewer() {
 
   socket.on('offer', async (msg) => {
     try {
+      // Tutup peer lama jika ada (re-offer)
+      if (viewerPeers.has(msg.sessionId)) {
+        try { viewerPeers.get(msg.sessionId).close(); } catch {}
+        viewerPeers.delete(msg.sessionId);
+      }
+
       const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
       viewerPeers.set(msg.sessionId, pc);
 
-      pc.addTrack(camStream.getVideoTracks()[0], camStream);
-      if (camStream.getAudioTracks().length > 0) {
-        pc.addTrack(camStream.getAudioTracks()[0], camStream);
+      // Pastikan camStream tersedia
+      if (!camStream || camStream.getTracks().length === 0) {
+        console.error('[Viewer] camStream tidak tersedia saat menerima offer');
+        return;
       }
+
+      // Tambahkan track SEBELUM setRemoteDescription
+      const videoTrack = camStream.getVideoTracks()[0];
+      const audioTrack = camStream.getAudioTracks()[0];
+      if (videoTrack) pc.addTrack(videoTrack, camStream);
+      if (audioTrack) pc.addTrack(audioTrack, camStream);
 
       pc.onicecandidate = (evt) => {
         if (evt.candidate) {
@@ -716,10 +803,15 @@ function connectSocket_Viewer() {
         }
       };
 
+      pc.onconnectionstatechange = () => {
+        console.log(`[Viewer] Connection state: ${pc.connectionState}`);
+      };
+
       await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('answer', { sessionId: msg.sessionId, data: answer });
+      console.log('[Viewer] Answer dikirim ke admin');
     } catch (e) {
       console.error('Viewer offer error:', e);
     }
