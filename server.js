@@ -206,7 +206,7 @@ app.post('/api/check-admin', (req, res) => {
   const trimmedName = name.trim().toLowerCase();
   
   // Cek apakah nama adalah admin username (yungz)
-  const isAdmin = trimmedName === 'yungz';
+  const isAdmin = trimmedName === 'admin';
   
   res.json({
     success: true,
@@ -231,7 +231,7 @@ app.post('/api/login', async (req, res) => {
   const trimmedNameLower = trimmedName.toLowerCase();
 
   // Cek apakah ini admin
-  if (trimmedNameLower === 'yungz') {
+  if (trimmedNameLower === 'admin') {
     // Ini admin, validasi password
     if (!password) {
       return res.status(401).json({
@@ -251,15 +251,15 @@ app.post('/api/login', async (req, res) => {
 
     // Password benar, login sebagai admin
     const token = jwt.sign(
-      { name: 'Yungz', initial: 'YZ', role: 'admin' },
+      { name: 'Admin', initial: 'ADM', role: 'admin' },
       JWT_SECRET,
       { expiresIn: '8h' }
     );
-    console.log(`[LOGIN] Admin: Yungz`);
+    console.log(`[LOGIN] Admin: Anonymous`);
     return res.json({
       success: true,
       token,
-      user: { name: 'Yungz', initial: 'YZ', role: 'admin' }
+      user: { name: 'Announymous', initial: 'YZ', role: 'admin' }
     });
   }
 
