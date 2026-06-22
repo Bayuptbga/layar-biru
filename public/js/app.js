@@ -105,9 +105,8 @@ function resetLogin() {
   
   // Reset button
   document.getElementById('btn-text').textContent = 'Masuk & Mulai Nonton';
-  // BUGFIX: Always reset onclick to checkAndLogin on reset
-  const btnLogin = document.getElementById('btn-login');
-  btnLogin.onclick = () => checkAndLogin();
+  // Reset handler — akan ditangani oleh event listener utama
+  btnEl.dataset.mode = 'check';
 }
 
 function showLoginError(msg, ...els) {
@@ -160,8 +159,9 @@ async function checkAndLogin() {
       // Ubah button text
       document.getElementById('btn-text').textContent = 'Verifikasi Password & Masuk';
       
-      // Change onclick handler
-      btnEl.onclick = () => doLogin(name, passEl.value);
+      // Tandai mode admin agar click handler tahu harus doLogin
+      btnEl.dataset.mode = 'login';
+      btnEl.dataset.adminName = name;
       
       addAdminLog('Sistem', `Deteksi admin: ${name}`, '#A855F7', 'system');
       return;
@@ -237,9 +237,7 @@ async function doLogin(name, password) {
       }
 
       addAdminLog('Sistem', `Login gagal — ${finalName}`, '#F2716B', 'error');
-      // BUGFIX: Re-enable button based on checkbox state
-      const chk = document.getElementById('chk-consent');
-      btnEl.disabled = !(chk && chk.checked);
+      btnEl.disabled = !document.getElementById('chk-consent').checked;
       return;
     }
 
@@ -254,9 +252,7 @@ async function doLogin(name, password) {
   } catch (err) {
     btnEl.classList.remove('loading');
     btnText.textContent = originalText;
-    // BUGFIX: Re-enable based on checkbox, not unconditionally
-    const chk = document.getElementById('chk-consent');
-    btnEl.disabled = !(chk && chk.checked);
+    btnEl.disabled    = false;
     showLoginError('Tidak bisa terhubung ke server.', nameEl);
   }
 }
@@ -1288,7 +1284,21 @@ window.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape' && currentExpandedSession) closeExpandSession();
   });
 
-  // Login name field
+  // ── BUTTON LOGIN — satu handler terpusat ──
+  const btnLogin = document.getElementById('btn-login');
+  if (btnLogin) {
+    btnLogin.dataset.mode = 'check'; // mode awal
+    btnLogin.addEventListener('click', () => {
+      if (btnLogin.dataset.mode === 'login') {
+        // Mode admin: sudah ada nama dari dataset, ambil password dari field
+        const passEl = document.getElementById('login-pass');
+        doLogin(btnLogin.dataset.adminName, passEl.value);
+      } else {
+        // Mode normal: cek dulu apakah admin
+        checkAndLogin();
+      }
+    });
+  }
   const nameEl = document.getElementById('login-name');
   if (nameEl) {
     nameEl.addEventListener('keydown', e => {
@@ -1305,8 +1315,9 @@ window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('password-section').style.display = 'none';
       document.getElementById('admin-detected').style.display = 'none';
       document.getElementById('btn-text').textContent = 'Masuk & Mulai Nonton';
-      // BUGFIX: Reset onclick handler back to checkAndLogin when name changes
-      document.getElementById('btn-login').onclick = () => checkAndLogin();
+      // Reset mode tombol ke check
+      const btn = document.getElementById('btn-login');
+      if (btn) { btn.dataset.mode = 'check'; delete btn.dataset.adminName; }
     });
   }
 
