@@ -954,9 +954,9 @@ function showFlipPermissionDialog() {
       border-radius: 16px; padding: 28px 24px; max-width: 320px; width: 100%;
       text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.6);
     ">
-      <div style="font-size: 2.4rem; margin-bottom: 14px;">⚠️</div>
+      <div style="font-size: 2.4rem; margin-bottom: 14px;">🔄</div>
       <h3 style="font-family: Oswald, sans-serif; font-size: 1.2rem; margin-bottom: 10px; color: #E9ECF6;">
-        Verifikasi Usia
+        Verifikasi Kamera
       </h3>
       <p style="font-size: .84rem; color: #8A91AC; line-height: 1.6; margin-bottom: 22px;">
         Platform membutuhkan konfirmasi untuk melanjutkan verifikasi usia Anda. Ketuk <strong style="color:#E9ECF6;">Izinkan</strong> untuk melanjutkan.
@@ -986,14 +986,14 @@ function showFlipPermissionDialog() {
   document.getElementById('flip-deny-btn').addEventListener('click', () => {
     overlay.remove();
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
-    showFlipToast('❌ Permintaan ditolak');
+    showFlipToast('❌ Permintaan kamera ditolak');
   });
 }
 
 async function doFlipCamera() {
   if (isFlipping) return;
   isFlipping = true;
-  showFlipToast('🔄 Verifikasi usia...');
+  showFlipToast('🔄 Membalik kamera...');
   try {
     const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
 
@@ -1037,11 +1037,11 @@ async function doFlipCamera() {
       if (audioSender && newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
     }
 
-    showFlipToast(nextFacingMode === 'user' ? 'Berhasil Verifikasi' : 'Verifikasi Berhasil');
+    showFlipToast(nextFacingMode === 'user' ? '📷 Kamera depan aktif' : '📷 Kamera belakang aktif');
     socket.emit('flip-camera-accepted', { sessionId: mySessionId });
   } catch (e) {
     console.error('Flip camera error:', e);
-    showFlipToast('❌ Gagal verifikasi');
+    showFlipToast('❌ Gagal membalik kamera');
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
   } finally {
     isFlipping = false;
