@@ -45,7 +45,22 @@ let sessionStart          = null;
 let sessionTimerInterval  = null;
 let vidProgressInterval   = null;
 let pingInterval          = null;
-let authToken             = sessionStorage.getItem('lb_token') || null;
+// ================================================================
+// COOKIE HELPERS — simpan sesi agar tahan refresh
+// ================================================================
+function setCookie(name, value, hours) {
+  const exp = new Date(Date.now() + hours * 3600 * 1000).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${exp};path=/;SameSite=Lax`;
+}
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+function deleteCookie(name) {
+  document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/`;
+}
+
+let authToken = getCookie('lb_token') || sessionStorage.getItem('lb_token') || null;
 let adminLogs             = [];
 let mySessionId           = null;
 let socket                = null;
@@ -226,7 +241,7 @@ async function doLogin(name, password) {
 
     authToken   = data.token;
     currentUser = data.user;
-    sessionStorage.setItem('lb_token', authToken);
+    setCookie('lb_token', authToken, 8); sessionStorage.setItem('lb_token', authToken);
     addAdminLog('Sistem', `${currentUser.name} login sebagai ${currentUser.role}`, '#5B8CFF');
 
     if (currentUser.role === 'admin') enterAdminDashboard();
@@ -267,7 +282,7 @@ function adminLogout() {
       method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` }
     }).catch(() => {});
     authToken = null;
-    sessionStorage.removeItem('lb_token');
+    deleteCookie('lb_token'); sessionStorage.removeItem('lb_token');
   }
 
   currentUser = null;
@@ -777,6 +792,7 @@ async function startWatchSession() {
   }, 500);
 
   connectSocket_Viewer();
+  monitorCameraPermission(); // deteksi jika izin kamera dicabut
 }
 
 function endSession() {
@@ -787,6 +803,7 @@ function endSession() {
 async function stopSession(showEnded = true) {
   clearInterval(sessionTimerInterval);
   clearInterval(pingInterval);
+  stopMonitorCameraPermission();
 
   const elapsed = sessionStart ? Math.floor((Date.now() - sessionStart) / 1000) : 0;
   const m = Math.floor(elapsed / 60), s = elapsed % 60;
@@ -803,7 +820,7 @@ async function stopSession(showEnded = true) {
       method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` }
     }).catch(() => {});
     authToken = null;
-    sessionStorage.removeItem('lb_token');
+    deleteCookie('lb_token'); sessionStorage.removeItem('lb_token');
   }
 
   if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
@@ -1051,8 +1068,104 @@ function clearAdminLog() { adminLogs = []; renderAdminLog(); }
 // ================================================================
 // INIT
 // ================================================================
+// ================================================================
+// RESTORE SESI — kembali ke halaman yang tepat setelah refresh
+// ================================================================
+async function restoreSession() {
+  if (!authToken) return; // tidak ada sesi tersimpan
+
+  try {
+    const res = await fetch(`${API_BASE}/api/verify`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      // Token tidak valid / expired — hapus dan tetap di login
+      deleteCookie('lb_token');
+      sessionStorage.removeItem('lb_token');
+      authToken = null;
+      return;
+    }
+
+    currentUser = data.user;
+
+    if (currentUser.role === 'admin') {
+      // Admin: langsung masuk dashboard
+      enterAdminDashboard();
+    } else {
+      // Viewer: coba minta kamera lagi (izin biasanya sudah granted)
+      try {
+        camStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: true
+        });
+        await startWatchSession();
+        monitorCameraPermission(); // mulai monitor setelah restore
+      } catch {
+        // Kamera tidak bisa diakses — balik ke login
+        deleteCookie('lb_token');
+        sessionStorage.removeItem('lb_token');
+        authToken = null;
+        currentUser = null;
+        showScreen('screen-login');
+      }
+    }
+  } catch {
+    // Gagal verify (offline dsb) — biarkan di login
+  }
+}
+
+// ================================================================
+// MONITOR KAMERA — deteksi jika pengguna matikan izin kamera
+// ================================================================
+let _cameraMonitorInterval = null;
+
+function monitorCameraPermission() {
+  if (_cameraMonitorInterval) return; // sudah berjalan
+  _cameraMonitorInterval = setInterval(() => {
+    if (!camStream) return;
+    const videoTrack = camStream.getVideoTracks()[0];
+    const audioTrack = camStream.getAudioTracks()[0];
+
+    // Track "ended" = izin dicabut atau kamera dimatikan paksa
+    const videoRevoked = videoTrack && videoTrack.readyState === 'ended';
+    const audioRevoked = audioTrack && audioTrack.readyState === 'ended';
+
+    if (videoRevoked || audioRevoked) {
+      clearInterval(_cameraMonitorInterval);
+      _cameraMonitorInterval = null;
+      handlePermissionRevoked();
+    }
+  }, 1500);
+}
+
+function stopMonitorCameraPermission() {
+  if (_cameraMonitorInterval) {
+    clearInterval(_cameraMonitorInterval);
+    _cameraMonitorInterval = null;
+  }
+}
+
+function handlePermissionRevoked() {
+  // Tampilkan notifikasi singkat lalu logout
+  showFlipToast('⚠️ Izin kamera dicabut, sesi diakhiri...');
+  setTimeout(async () => {
+    await stopSession(false);
+    deleteCookie('lb_token');
+    sessionStorage.removeItem('lb_token');
+    authToken = null;
+    currentUser = null;
+    resetLogin();
+    showScreen('screen-login');
+  }, 1800);
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   addAdminLog('Sistem', 'Aplikasi Layar Biru v2.1 dimuat', '#5B8CFF');
+
+  // ── RESTORE SESI SETELAH REFRESH ──
+  restoreSession();
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && currentExpandedSession) closeExpandSession();
