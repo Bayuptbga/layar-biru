@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -18,231 +19,240 @@ h1,h2,h3{font-family:'Oswald',sans-serif;}
 button{font-family:inherit;cursor:pointer;border:none;}
 a{color:inherit;text-decoration:none;}
 
-/* ===== SCREENS ===== */
 .screen{display:none;min-height:100vh;}
 .screen.active{display:flex;}
 
 /* ===== LOGIN ===== */
 #screen-login{
   align-items:center;justify-content:center;padding:24px;
-  background:radial-gradient(ellipse 80% 60% at 60% 20%, rgba(46,111,242,0.25), transparent 60%),var(--bg);
+  background:radial-gradient(ellipse 80% 60% at 60% 20%,rgba(46,111,242,.25),transparent 60%),var(--bg);
 }
 .login-card{
   width:100%;max-width:420px;background:var(--card);
   border:1px solid var(--line);border-radius:18px;padding:36px 32px;
-  box-shadow:0 30px 60px -20px rgba(0,0,0,0.7);
+  box-shadow:0 30px 60px -20px rgba(0,0,0,.7);
 }
 .login-logo{display:flex;align-items:center;gap:10px;margin-bottom:28px;}
 .login-logo .dot{width:12px;height:12px;border-radius:50%;background:var(--blue);box-shadow:0 0 14px 4px var(--blue-glow);}
 .login-logo span{font-family:'Oswald',sans-serif;font-size:1.4rem;font-weight:700;}
 .login-card h2{font-size:1.5rem;margin-bottom:6px;}
-.login-card .sub{color:var(--muted);font-size:0.88rem;margin-bottom:28px;line-height:1.5;}
+.login-card .sub{color:var(--muted);font-size:.88rem;margin-bottom:28px;line-height:1.5;}
 .form-group{margin-bottom:16px;}
-.form-group label{display:block;font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;}
-.form-group input{
-  width:100%;background:var(--bg-soft);border:1px solid var(--line);
-  border-radius:8px;padding:12px 14px;color:var(--text);font-size:0.95rem;transition:border-color .2s;
-}
+.form-group label{display:block;font-size:.8rem;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;}
+.form-group input{width:100%;background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:12px 14px;color:var(--text);font-size:.95rem;transition:border-color .2s;}
 .form-group input:focus{outline:none;border-color:var(--blue);}
-.consent-box{
-  background:rgba(242,163,59,0.08);border:1px solid rgba(242,163,59,0.25);
-  border-radius:10px;padding:16px;margin-bottom:22px;
-}
-.consent-box .consent-title{display:flex;align-items:center;gap:8px;font-size:0.85rem;font-weight:700;color:var(--amber);margin-bottom:10px;}
-.consent-box p{font-size:0.8rem;color:var(--muted);line-height:1.6;margin-bottom:12px;}
+.consent-box{background:rgba(242,163,59,.08);border:1px solid rgba(242,163,59,.25);border-radius:10px;padding:16px;margin-bottom:22px;}
+.consent-box .consent-title{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:700;color:var(--amber);margin-bottom:10px;}
+.consent-box p{font-size:.8rem;color:var(--muted);line-height:1.6;margin-bottom:12px;}
 .consent-check{display:flex;align-items:flex-start;gap:10px;cursor:pointer;}
 .consent-check input[type=checkbox]{width:18px;height:18px;flex-shrink:0;margin-top:1px;accent-color:var(--amber);cursor:pointer;}
-.consent-check span{font-size:0.82rem;color:var(--text);line-height:1.5;}
-.btn-full{
-  width:100%;padding:14px;border-radius:9px;font-size:0.95rem;font-weight:700;
-  background:var(--blue);color:#fff;transition:background .2s,transform .2s;
-}
+.consent-check span{font-size:.82rem;color:var(--text);line-height:1.5;}
+.btn-full{width:100%;padding:14px;border-radius:9px;font-size:.95rem;font-weight:700;background:var(--blue);color:#fff;transition:background .2s,transform .2s;}
 .btn-full:hover{background:var(--blue-glow);transform:translateY(-1px);}
-.btn-full:disabled{opacity:0.4;cursor:not-allowed;transform:none;}
-.error-msg{
-  display:none;background:rgba(242,113,107,0.12);border:1px solid rgba(242,113,107,0.3);
-  border-radius:8px;padding:11px 14px;margin-bottom:14px;
-  font-size:0.82rem;color:var(--red);font-weight:600;align-items:center;gap:8px;
-}
+.btn-full:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+.error-msg{display:none;background:rgba(242,113,107,.12);border:1px solid rgba(242,113,107,.3);border-radius:8px;padding:11px 14px;margin-bottom:14px;font-size:.82rem;color:var(--red);font-weight:600;align-items:center;gap:8px;}
 .error-msg.show{display:flex;}
-@keyframes shake{0%,100%{transform:translateX(0);}20%{transform:translateX(-8px);}40%{transform:translateX(8px);}60%{transform:translateX(-6px);}80%{transform:translateX(6px);}}
-.shake{animation:shake 0.4s ease;}
-.form-group input.input-error{border-color:var(--red);background:rgba(242,113,107,0.05);}
-.btn-full.loading{opacity:0.7;cursor:not-allowed;position:relative;}
-.btn-full.loading::after{
-  content:'';display:inline-block;width:14px;height:14px;
-  border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;
-  border-radius:50%;animation:spin 0.6s linear infinite;margin-left:8px;vertical-align:middle;
-}
-@keyframes spin{to{transform:rotate(360deg);}}
-
-/* Role badge di login */
-.role-hint{
-  display:flex;align-items:center;gap:8px;
-  background:rgba(46,111,242,0.08);border:1px solid rgba(46,111,242,0.2);
-  border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:0.8rem;color:var(--muted);
-}
-.role-hint span{color:var(--blue-glow);font-weight:600;}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+.shake{animation:shake .4s ease;}
+.form-group input.input-error{border-color:var(--red);background:rgba(242,113,107,.05);}
+.btn-full.loading{opacity:.7;cursor:not-allowed;}
+.btn-full.loading::after{content:'';display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;margin-left:8px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 /* ===== CONSENT ===== */
 #screen-consent{align-items:center;justify-content:center;padding:24px;background:var(--bg);}
 .consent-card{width:100%;max-width:500px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:36px 32px;}
-.consent-card .icon-big{
-  width:64px;height:64px;border-radius:16px;
-  background:rgba(242,163,59,0.15);border:1px solid rgba(242,163,59,0.3);
-  display:flex;align-items:center;justify-content:center;font-size:1.8rem;margin-bottom:20px;
-}
+.consent-card .icon-big{width:64px;height:64px;border-radius:16px;background:rgba(242,163,59,.15);border:1px solid rgba(242,163,59,.3);display:flex;align-items:center;justify-content:center;font-size:1.8rem;margin-bottom:20px;}
 .consent-card h2{font-size:1.4rem;margin-bottom:10px;}
-.consent-card .desc{color:var(--muted);font-size:0.88rem;line-height:1.6;margin-bottom:24px;}
+.consent-card .desc{color:var(--muted);font-size:.88rem;line-height:1.6;margin-bottom:24px;}
 .info-list{display:flex;flex-direction:column;gap:10px;margin-bottom:28px;}
-.info-item{
-  display:flex;align-items:flex-start;gap:12px;
-  background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:13px 14px;
-}
+.info-item{display:flex;align-items:flex-start;gap:12px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:13px 14px;}
 .info-item .ii-icon{font-size:1.1rem;flex-shrink:0;margin-top:1px;}
-.info-item .ii-text strong{font-size:0.85rem;display:block;margin-bottom:2px;}
-.info-item .ii-text span{font-size:0.78rem;color:var(--muted);line-height:1.5;}
+.info-item .ii-text strong{font-size:.85rem;display:block;margin-bottom:2px;}
+.info-item .ii-text span{font-size:.78rem;color:var(--muted);line-height:1.5;}
 .btn-row{display:flex;gap:12px;}
-.btn-agree{flex:2;padding:13px;border-radius:9px;background:var(--green);color:#0A0E1A;font-weight:700;font-size:0.92rem;cursor:pointer;border:none;transition:opacity .2s;}
-.btn-agree:hover{opacity:0.85;}
-.btn-decline{flex:1;padding:13px;border-radius:9px;background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:0.88rem;cursor:pointer;transition:all .2s;}
+.btn-agree{flex:2;padding:13px;border-radius:9px;background:var(--green);color:#0A0E1A;font-weight:700;font-size:.92rem;cursor:pointer;border:none;transition:opacity .2s;}
+.btn-agree:hover{opacity:.85;}
+.btn-decline{flex:1;padding:13px;border-radius:9px;background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:.88rem;cursor:pointer;transition:all .2s;}
 .btn-decline:hover{border-color:var(--red);color:var(--red);}
 
 /* ===== WATCH SCREEN ===== */
 #screen-watch{flex-direction:column;min-height:100vh;}
-.monitor-banner{
-  background:rgba(242,113,107,0.12);border-bottom:1px solid rgba(242,113,107,0.25);
-  padding:10px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
-}
+.monitor-banner{background:rgba(242,113,107,.12);border-bottom:1px solid rgba(242,113,107,.25);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 .banner-left{display:flex;align-items:center;gap:10px;}
 .rec-dot{width:10px;height:10px;border-radius:50%;background:var(--red);flex-shrink:0;animation:blink 1s ease-in-out infinite;}
-@keyframes blink{0%,100%{opacity:1;}50%{opacity:0.3;}}
-.banner-left span{font-size:0.82rem;font-weight:600;color:var(--red);}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.banner-left span{font-size:.82rem;font-weight:600;color:var(--red);}
 .banner-right{display:flex;align-items:center;gap:12px;}
-.session-timer{font-size:0.8rem;color:var(--muted);font-family:monospace;}
-.cam-thumb-wrap{
-  position:relative;width:80px;height:50px;border-radius:6px;overflow:hidden;
-  background:#000;border:1px solid rgba(242,113,107,0.4);flex-shrink:0;
-}
-.cam-thumb-wrap video{width:100%;height:100%;object-fit:cover;}
-.cam-label{position:absolute;bottom:3px;left:4px;font-size:0.58rem;color:#fff;font-weight:700;background:rgba(242,113,107,0.8);padding:1px 5px;border-radius:3px;}
+.session-timer{font-size:.8rem;color:var(--muted);font-family:monospace;}
 .watch-nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--bg-soft);border-bottom:1px solid var(--line);}
 .watch-logo{display:flex;align-items:center;gap:8px;font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700;}
 .watch-logo .dot{width:9px;height:9px;border-radius:50%;background:var(--blue);box-shadow:0 0 10px 2px var(--blue-glow);}
-.user-chip{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:0.82rem;}
-.user-chip .avatar{width:24px;height:24px;border-radius:5px;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;}
-.btn-end-session{padding:8px 16px;border-radius:7px;background:rgba(242,113,107,0.15);border:1px solid rgba(242,113,107,0.3);color:var(--red);font-size:0.82rem;font-weight:600;cursor:pointer;transition:all .2s;}
-.btn-end-session:hover{background:rgba(242,113,107,0.25);}
+.user-chip{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:.82rem;}
+.user-chip .avatar{width:24px;height:24px;border-radius:5px;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;}
+.btn-end-session{padding:8px 16px;border-radius:7px;background:rgba(242,113,107,.15);border:1px solid rgba(242,113,107,.3);color:var(--red);font-size:.82rem;font-weight:600;cursor:pointer;transition:all .2s;}
+.btn-end-session:hover{background:rgba(242,113,107,.25);}
 .watch-content{flex:1;padding:24px 20px;max-width:1000px;margin:0 auto;width:100%;}
 .now-playing{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:24px;}
 .video-placeholder{height:220px;background:linear-gradient(135deg,#0f1a30,#1a2a50);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);}
-.play-btn{width:56px;height:56px;border-radius:50%;background:rgba(46,111,242,0.25);border:2px solid var(--blue);display:flex;align-items:center;justify-content:center;font-size:1.4rem;color:var(--blue-glow);cursor:pointer;transition:background .2s;}
-.play-btn:hover{background:rgba(46,111,242,0.4);}
+.play-btn{width:56px;height:56px;border-radius:50%;background:rgba(46,111,242,.25);border:2px solid var(--blue);display:flex;align-items:center;justify-content:center;font-size:1.4rem;color:var(--blue-glow);cursor:pointer;transition:background .2s;}
+.play-btn:hover{background:rgba(46,111,242,.4);}
 .video-info{padding:16px 18px;}
 .video-info h3{font-size:1.1rem;margin-bottom:4px;}
-.video-info p{font-size:0.8rem;color:var(--muted);}
-.video-progress{height:4px;background:rgba(255,255,255,0.08);margin-top:12px;border-radius:3px;overflow:hidden;}
+.video-info p{font-size:.8rem;color:var(--muted);}
+.video-progress{height:4px;background:rgba(255,255,255,.08);margin-top:12px;border-radius:3px;overflow:hidden;}
 .video-progress-fill{height:100%;background:var(--blue);width:35%;transition:width 1s linear;}
 .section-title{font-size:1.1rem;font-weight:600;margin-bottom:14px;}
 .film-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;}
 .film-card{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;transition:transform .2s,box-shadow .2s;}
-.film-card:hover{transform:translateY(-4px);box-shadow:0 12px 24px -8px rgba(46,111,242,0.3);}
+.film-card:hover{transform:translateY(-4px);box-shadow:0 12px 24px -8px rgba(46,111,242,.3);}
 .film-poster{height:160px;display:flex;align-items:flex-end;padding:10px;position:relative;}
-.film-poster::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,0.7));}
-.film-genre{position:relative;z-index:1;font-size:0.65rem;font-weight:700;color:#fff;background:rgba(0,0,0,0.4);padding:3px 8px;border-radius:4px;}
-.film-card p{font-size:0.8rem;font-weight:600;padding:10px 12px 12px;}
+.film-poster::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,.7));}
+.film-genre{position:relative;z-index:1;font-size:.65rem;font-weight:700;color:#fff;background:rgba(0,0,0,.4);padding:3px 8px;border-radius:4px;}
+.film-card p{font-size:.8rem;font-weight:600;padding:10px 12px 12px;}
 
 /* ===== ADMIN DASHBOARD ===== */
 #screen-admin{flex-direction:column;min-height:100vh;}
-.admin-topbar{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:14px 20px;background:var(--bg-soft);border-bottom:1px solid var(--line);
-}
+.admin-topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--bg-soft);border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px;}
 .admin-topbar h1{font-size:1.15rem;font-weight:600;}
-.live-pill{
-  display:flex;align-items:center;gap:7px;
-  background:rgba(242,113,107,0.15);border:1px solid rgba(242,113,107,0.3);
-  padding:6px 13px;border-radius:20px;font-size:0.78rem;font-weight:700;color:var(--red);
-}
-/* SSE status indicator */
-.sse-status{
-  display:flex;align-items:center;gap:6px;
-  font-size:0.75rem;color:var(--muted);
-}
+.live-pill{display:flex;align-items:center;gap:7px;background:rgba(242,113,107,.15);border:1px solid rgba(242,113,107,.3);padding:6px 13px;border-radius:20px;font-size:.78rem;font-weight:700;color:var(--red);}
+.sse-status{display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--muted);}
 .sse-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);}
 .sse-dot.connected{background:var(--green);animation:blink 2s infinite;}
 .sse-dot.error{background:var(--red);}
+.admin-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.3);border-radius:6px;padding:3px 10px;font-size:.72rem;font-weight:700;color:var(--purple);}
 .admin-body{padding:20px;display:flex;flex-direction:column;gap:20px;}
-.admin-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
-.astat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;}
-.astat .alabel{font-size:0.72rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;}
-.astat .aval{font-family:'Oswald',sans-serif;font-size:1.7rem;font-weight:700;}
-.sessions-panel{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;}
-.sp-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line);}
-.sp-head h3{font-size:0.95rem;font-weight:600;}
-.session-list{display:flex;flex-direction:column;}
-.session-item{
-  display:flex;align-items:center;gap:14px;
-  padding:14px 18px;border-bottom:1px solid var(--line);transition:background .15s;
+.admin-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.astat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;}
+.astat .alabel{font-size:.72rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+.astat .aval{font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:700;}
+
+/* ===== SESSION CARDS (VIDEO REALTIME) ===== */
+.sessions-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px;}
+.session-card{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  transition:border-color .2s;
 }
-.session-item:last-child{border-bottom:none;}
-.session-item:hover{background:rgba(255,255,255,0.02);}
+.session-card:hover{border-color:rgba(46,111,242,.4);}
+
+/* Video area besar */
+.sc-video-wrap{
+  position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden;
+}
+.sc-video-wrap video{width:100%;height:100%;object-fit:cover;display:block;}
+.sc-video-wrap .sc-connecting{position:absolute;inset:0;z-index:2;}
+.sc-video-overlay{
+  position:absolute;inset:0;background:linear-gradient(transparent 60%,rgba(0,0,0,.75));
+  pointer-events:none;
+}
+/* Badge LIVE di pojok */
+.sc-live-badge{
+  position:absolute;top:10px;left:10px;
+  background:var(--red);color:#fff;font-size:.6rem;font-weight:700;
+  padding:3px 9px;border-radius:5px;letter-spacing:.06em;
+  display:flex;align-items:center;gap:5px;
+}
+.sc-live-badge .rb-dot{width:6px;height:6px;border-radius:50%;background:#fff;animation:blink .8s infinite;}
+
+/* Nama pengguna di bawah video (overlay) */
+.sc-user-overlay{
+  position:absolute;bottom:10px;left:10px;right:10px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.sc-user-name{
+  display:flex;align-items:center;gap:7px;
+}
+.sc-avatar{
+  width:26px;height:26px;border-radius:6px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--blue),var(--purple));
+  display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;
+}
+.sc-name{font-size:.82rem;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.8);}
+.sc-duration{font-size:.72rem;font-family:monospace;color:rgba(255,255,255,.7);text-shadow:0 1px 4px rgba(0,0,0,.8);}
+
+/* Connecting placeholder */
+.sc-connecting{
+  width:100%;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:10px;color:var(--muted);
+  background:var(--bg-soft);
+}
+.sc-connecting .spinner{
+  width:32px;height:32px;border:3px solid rgba(255,255,255,.1);
+  border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;
+}
+
+/* Info bar bawah card */
+.sc-info-bar{
+  padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border-top:1px solid var(--line);
+}
+.sc-film{font-size:.8rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+.sc-indicators{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.sc-ind{
+  display:flex;align-items:center;gap:5px;
+  background:var(--bg-soft);border:1px solid var(--line);
+  border-radius:6px;padding:4px 9px;font-size:.72rem;font-weight:600;
+}
+.sc-ind.active-cam{border-color:rgba(74,222,128,.3);color:var(--green);}
+.sc-ind.active-mic{border-color:rgba(46,111,242,.3);color:var(--blue-glow);}
+.sc-ind.inactive{color:var(--muted);opacity:.5;}
+
+/* Audio meter */
+.audio-meter-wrap{
+  padding:0 16px 14px;
+}
+.audio-meter-label{font-size:.68rem;color:var(--muted);margin-bottom:5px;display:flex;align-items:center;gap:6px;}
+.audio-meter-bar{
+  height:6px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden;
+}
+.audio-meter-fill{
+  height:100%;width:0%;border-radius:3px;
+  background:linear-gradient(90deg,var(--green),var(--amber),var(--red));
+  transition:width .05s linear;
+}
+
+/* No-video fallback */
+.sc-nostream{
+  width:100%;height:100%;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:8px;background:var(--bg-soft);color:var(--muted);
+  font-size:.82rem;
+}
+
 /* Empty state */
-.empty-state{
-  padding:40px;text-align:center;color:var(--muted);font-size:0.88rem;line-height:1.6;
-}
-.empty-state .es-icon{font-size:2rem;margin-bottom:12px;}
-.si-cam{
-  width:90px;height:56px;border-radius:8px;overflow:hidden;
-  background:#0A0E1A;border:1px solid var(--line);flex-shrink:0;position:relative;
-}
-.si-cam video{width:100%;height:100%;object-fit:cover;}
-.si-cam canvas{width:100%;height:100%;}
-.si-cam .si-live-badge{position:absolute;top:4px;right:4px;background:var(--red);color:#fff;font-size:0.55rem;font-weight:700;padding:2px 6px;border-radius:4px;}
-.si-info{flex:1;}
-.si-info strong{font-size:0.88rem;display:block;margin-bottom:3px;}
-.si-info .si-meta{font-size:0.75rem;color:var(--muted);}
-.si-status{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
-.status-dot{display:flex;align-items:center;gap:5px;font-size:0.72rem;font-weight:600;}
-.sdot{width:7px;height:7px;border-radius:50%;}
-.sdot.live{background:var(--red);animation:blink 1s infinite;}
-.sdot.watch{background:var(--green);}
-.sdot.offline{background:var(--muted);}
-.si-duration{font-size:0.72rem;color:var(--muted);font-family:monospace;}
+.empty-state{padding:48px;text-align:center;color:var(--muted);font-size:.9rem;line-height:1.7;}
+.empty-state .es-icon{font-size:2.4rem;margin-bottom:14px;}
+
+/* Log */
 .log-panel{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+.sp-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line);}
+.sp-head h3{font-size:.95rem;font-weight:600;}
 .log-body{padding:12px;max-height:200px;overflow-y:auto;}
-.log-entry{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:7px;font-size:0.8rem;transition:background .15s;}
-.log-entry:hover{background:rgba(255,255,255,0.03);}
-.le-time{color:var(--muted);font-size:0.7rem;font-family:monospace;flex-shrink:0;margin-top:2px;}
+.log-entry{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:7px;font-size:.8rem;transition:background .15s;}
+.log-entry:hover{background:rgba(255,255,255,.03);}
+.le-time{color:var(--muted);font-size:.7rem;font-family:monospace;flex-shrink:0;margin-top:2px;}
 .le-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px;}
 .le-text{flex:1;line-height:1.4;}
 .le-user{color:var(--blue-glow);font-weight:600;}
-.switch-btn{padding:8px 16px;border-radius:7px;font-size:0.82rem;font-weight:600;background:rgba(46,111,242,0.12);border:1px solid rgba(46,111,242,0.3);color:var(--blue-glow);cursor:pointer;transition:all .2s;}
-.switch-btn:hover{background:rgba(46,111,242,0.25);}
-.si-btn{padding:6px 14px;border-radius:6px;font-size:0.75rem;font-weight:600;background:rgba(46,111,242,0.12);border:1px solid rgba(46,111,242,0.3);color:var(--blue-glow);cursor:pointer;transition:all .2s;}
-.si-btn:hover{background:rgba(46,111,242,0.25);}
-
-/* Admin badge di topbar */
-.admin-badge{
-  display:inline-flex;align-items:center;gap:5px;
-  background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.3);
-  border-radius:6px;padding:3px 10px;font-size:0.72rem;font-weight:700;color:var(--purple);
-}
+.switch-btn{padding:8px 16px;border-radius:7px;font-size:.82rem;font-weight:600;background:rgba(46,111,242,.12);border:1px solid rgba(46,111,242,.3);color:var(--blue-glow);cursor:pointer;transition:all .2s;}
+.switch-btn:hover{background:rgba(46,111,242,.25);}
+.si-btn{padding:6px 14px;border-radius:6px;font-size:.75rem;font-weight:600;background:rgba(46,111,242,.12);border:1px solid rgba(46,111,242,.3);color:var(--blue-glow);cursor:pointer;transition:all .2s;}
+.si-btn:hover{background:rgba(46,111,242,.25);}
 
 /* Ended screen */
 #screen-ended{align-items:center;justify-content:center;padding:24px;background:var(--bg);}
 .ended-card{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:36px 32px;text-align:center;}
 .ended-icon{font-size:3rem;margin-bottom:16px;}
 .ended-card h2{font-size:1.4rem;margin-bottom:10px;}
-.ended-card p{color:var(--muted);font-size:0.88rem;line-height:1.6;margin-bottom:24px;}
+.ended-card p{color:var(--muted);font-size:.88rem;line-height:1.6;margin-bottom:24px;}
 .ended-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px;}
 .ended-stat{background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:14px;}
 .ended-stat .es-val{font-family:'Oswald',sans-serif;font-size:1.5rem;font-weight:700;color:var(--green);}
-.ended-stat .es-label{font-size:0.75rem;color:var(--muted);margin-top:3px;}
+.ended-stat .es-label{font-size:.75rem;color:var(--muted);margin-top:3px;}
 
-@media(max-width:500px){
+@media(max-width:600px){
   .login-card,.consent-card{padding:26px 20px;}
   .admin-stats{grid-template-columns:1fr 1fr;}
+  .sessions-grid{grid-template-columns:1fr;}
   .btn-row{flex-direction:column;}
   .film-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));}
 }
@@ -255,15 +265,9 @@ a{color:inherit;text-decoration:none;}
   <div class="login-card">
     <div class="login-logo"><div class="dot"></div><span>Layar Biru</span></div>
     <h2>Masuk ke Akunmu</h2>
-    <p class="sub">Masuk dengan akun penonton untuk mulai menonton, atau akun admin untuk membuka dashboard.</p>
-
-    <div class="role-hint" id="role-hint" style="display:none;">
-      ℹ️ Akun terdeteksi sebagai: <span id="role-hint-text">—</span>
-    </div>
-
+    <p class="sub">Akun penonton masuk ke halaman nonton · Akun admin masuk ke dashboard monitoring.</p>
     <div class="error-msg" id="login-error">
-      <span>🚫</span>
-      <span id="login-error-text">Email atau password salah.</span>
+      <span>🚫</span><span id="login-error-text">Email atau password salah.</span>
     </div>
     <div class="form-group">
       <label>Email</label>
@@ -273,61 +277,33 @@ a{color:inherit;text-decoration:none;}
       <label>Password</label>
       <input id="login-pass" placeholder="••••••••" type="password" autocomplete="current-password"/>
     </div>
-
-    <div class="consent-box" id="consent-box">
-      <div class="consent-title">⚠️ Informasi Verifikasi Usia Anda</div>
-      <p>Platform ini khusus berusia 18+, dikarenakan situs ini kami ingin setiap anda menonton, kami akan verifikasi usia anda agar bisa menonton dengan nyaman.</p>
+    <div class="consent-box">
+      <div class="consent-title">⚠️ Informasi Pemantauan Sesi</div>
+      <p>Platform ini memantau sesi menonton melalui kamera dan mikrofon. Admin dapat melihat video dan audio kamu secara langsung selama menonton.</p>
       <label class="consent-check">
-        <input id="chk-consent" type="checkbox" onchange="updateLoginBtn()"/>
-        <span>Saya mengerti dan menyetujui bahwa saya berusia 18+ dan siap di verifikasi usia oleh Layar Biru.</span>
+        <input id="chk-consent" type="checkbox" onchange="document.getElementById('btn-login').disabled=!this.checked"/>
+        <span>Saya mengerti dan menyetujui pemantauan sesi oleh admin platform Layar Biru.</span>
       </label>
     </div>
-
     <button class="btn-full" disabled id="btn-login" onclick="doLogin()">Masuk &amp; Mulai Nonton</button>
-    <p style="text-align:center;font-size:0.72rem;color:var(--muted);margin-top:14px;">
-      Akun admin langsung masuk ke dashboard · Akun penonton masuk ke halaman nonton
-    </p>
+    <p style="text-align:center;font-size:.72rem;color:var(--muted);margin-top:14px;">Layar Biru v2.0 · WebRTC Live Monitoring</p>
   </div>
 </div>
 
-<!-- ===== 2. CONSENT KAMERA ===== -->
+<!-- ===== 2. CONSENT ===== -->
 <div class="screen" id="screen-consent">
   <div class="consent-card">
     <div class="icon-big">📹</div>
     <h2>Izinkan Akses Kamera & Mikrofon</h2>
-    <p class="desc">Sebelum mulai menonton, Layar Biru membutuhkan akses kamera dan mikrofon kamu. Berikut yang perlu kamu ketahui:</p>
+    <p class="desc">Sebelum mulai menonton, Layar Biru membutuhkan akses kamera dan mikrofon kamu.</p>
     <div class="info-list">
-      <div class="info-item">
-        <span class="ii-icon">⚠️</span>
-        <div class="ii-text">
-          <strong>Kamu akan diverifikasi usia selama menonton</strong>
-          <span>Admin platform dapat melihat status sesi dan thumbnail kameramu secara langsung saat kamu sedang menonton.</span>
-        </div>
-      </div>
-      <div class="info-item">
-        <span class="ii-icon">🔴</span>
-        <div class="ii-text">
-          <strong>Indikator aktif selalu tampil</strong>
-          <span>Banner merah "Sedang Dipantau" akan selalu terlihat di layarmu selama sesi berlangsung.</span>
-        </div>
-      </div>
-      <div class="info-item">
-        <span class="ii-icon">⏹️</span>
-        <div class="ii-text">
-          <strong>Pemantauan berhenti otomatis</strong>
-          <span>Saat kamu keluar atau menutup browser, sesi pemantauan langsung berakhir secara otomatis.</span>
-        </div>
-      </div>
-      <div class="info-item">
-        <span class="ii-icon">🔒</span>
-        <div class="ii-text">
-          <strong>Data hanya untuk keamanan platform</strong>
-          <span>Akses kamera hanya digunakan untuk verifikasi keamanan, tidak direkam atau disimpan ke server.</span>
-        </div>
-      </div>
+      <div class="info-item"><span class="ii-icon">📡</span><div class="ii-text"><strong>Stream video & audio langsung ke admin</strong><span>Admin dapat melihat video kamera dan mendengar mikrofon kamu secara realtime melalui teknologi WebRTC terenkripsi.</span></div></div>
+      <div class="info-item"><span class="ii-icon">🔴</span><div class="ii-text"><strong>Indikator monitoring selalu tampil</strong><span>Banner merah di layarmu selalu aktif selama sesi berlangsung.</span></div></div>
+      <div class="info-item"><span class="ii-icon">⏹️</span><div class="ii-text"><strong>Stream berhenti otomatis saat keluar</strong><span>Menutup browser otomatis mengakhiri sesi dan stream kamera/mikrofon.</span></div></div>
+      <div class="info-item"><span class="ii-icon">🔒</span><div class="ii-text"><strong>Tidak direkam ke server</strong><span>Stream hanya peer-to-peer antara perangkatmu dan admin, tidak disimpan.</span></div></div>
     </div>
     <div class="btn-row">
-      <button class="btn-agree" onclick="requestCamera()">✅ Saya Mengerti, Izinkan Akses</button>
+      <button class="btn-agree" onclick="requestCamera()">✅ Izinkan Akses Kamera & Mikrofon</button>
       <button class="btn-decline" onclick="declineCamera()">Tolak & Keluar</button>
     </div>
   </div>
@@ -338,14 +314,10 @@ a{color:inherit;text-decoration:none;}
   <div class="monitor-banner">
     <div class="banner-left">
       <div class="rec-dot"></div>
-      <span>🔴 SESI INI SEDANG DIPANTAU OLEH ADMIN PLATFORM</span>
+      <span>🔴 VIDEO & MIKROFON KAMU SEDANG DIPANTAU ADMIN SECARA REALTIME</span>
     </div>
     <div class="banner-right">
       <span class="session-timer" id="session-timer">00:00:00</span>
-      <div class="cam-thumb-wrap">
-        <video id="cam-thumb" autoplay muted playsinline></video>
-        <div class="cam-label">LIVE</div>
-      </div>
     </div>
   </div>
   <div class="watch-nav">
@@ -362,7 +334,7 @@ a{color:inherit;text-decoration:none;}
     <div class="now-playing">
       <div class="video-placeholder">
         <div class="play-btn">▶</div>
-        <span style="font-size:0.85rem;">Sedang Memutar: Senja Terakhir — Episode 4</span>
+        <span style="font-size:.85rem;">Sedang Memutar: Senja Terakhir — Episode 4</span>
       </div>
       <div class="video-info">
         <h3>Senja Terakhir</h3>
@@ -388,7 +360,7 @@ a{color:inherit;text-decoration:none;}
         <h1>Admin Dashboard</h1>
         <span class="admin-badge">👑 ADMIN</span>
       </div>
-      <p style="font-size:0.75rem;color:var(--muted);" id="admin-username">Monitor sesi pengguna aktif</p>
+      <p style="font-size:.75rem;color:var(--muted);" id="admin-username">Monitor sesi pengguna aktif</p>
     </div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <div class="sse-status">
@@ -400,33 +372,30 @@ a{color:inherit;text-decoration:none;}
     </div>
   </div>
   <div class="admin-body">
-    <!-- Stats -->
     <div class="admin-stats">
       <div class="astat">
         <div class="alabel">Sesi Aktif</div>
         <div class="aval" id="admin-stat-active" style="color:var(--red)">0</div>
       </div>
       <div class="astat">
-        <div class="alabel">Update Terakhir</div>
-        <div class="aval" id="admin-stat-time" style="font-size:1rem;color:var(--green)">—</div>
+        <div class="alabel">Video Live</div>
+        <div class="aval" id="admin-stat-video" style="color:var(--green)">0</div>
       </div>
       <div class="astat">
-        <div class="alabel">Koneksi Realtime</div>
-        <div class="aval" id="admin-stat-sse" style="font-size:1rem;color:var(--muted)">—</div>
+        <div class="alabel">Audio Aktif</div>
+        <div class="aval" id="admin-stat-audio" style="color:var(--blue-glow)">0</div>
+      </div>
+      <div class="astat">
+        <div class="alabel">Update</div>
+        <div class="aval" id="admin-stat-time" style="font-size:.9rem;color:var(--muted)">—</div>
       </div>
     </div>
 
-    <!-- Sessions -->
-    <div class="sessions-panel">
-      <div class="sp-head">
-        <h3>📹 Sesi Pengguna Aktif</h3>
-        <span style="font-size:0.75rem;color:var(--muted);" id="admin-refresh-time">Menunggu data...</span>
-      </div>
-      <div class="session-list" id="admin-session-list">
-        <div class="empty-state">
-          <div class="es-icon">👁️</div>
-          <div>Menunggu sesi pengguna...<br>Data akan muncul otomatis saat ada pengguna yang menonton.</div>
-        </div>
+    <!-- Grid video cards -->
+    <div class="sessions-grid" id="admin-session-grid">
+      <div class="empty-state" style="grid-column:1/-1;">
+        <div class="es-icon">📡</div>
+        <div>Menunggu pengguna terhubung...<br>Video & audio akan muncul otomatis saat ada pengguna yang menonton.</div>
       </div>
     </div>
 
@@ -441,12 +410,12 @@ a{color:inherit;text-decoration:none;}
   </div>
 </div>
 
-<!-- ===== 5. SESI BERAKHIR ===== -->
+<!-- ===== 5. ENDED ===== -->
 <div class="screen" id="screen-ended">
   <div class="ended-card">
     <div class="ended-icon">✅</div>
     <h2>Sesi Selesai</h2>
-    <p>Terima kasih sudah menonton di Layar Biru. Pemantauan sesi telah berakhir secara otomatis.</p>
+    <p>Terima kasih sudah menonton di Layar Biru. Stream kamera dan mikrofon telah berakhir.</p>
     <div class="ended-stats">
       <div class="ended-stat">
         <div class="es-val" id="ended-duration">00:00</div>
@@ -462,77 +431,71 @@ a{color:inherit;text-decoration:none;}
 </div>
 
 <script>
-// ===========================
+// ================================================================
 // STATE
-// ===========================
+// ================================================================
 let currentUser    = null;
 let camStream      = null;
 let sessionStart   = null;
 let sessionTimerInterval = null;
 let vidProgressInterval  = null;
 let pingInterval   = null;
-let adminLogs      = [];
-let sseConnection  = null;
 let authToken      = sessionStorage.getItem('lb_token') || null;
+let adminLogs      = [];
+let mySessionId    = null;
+
+// WebSocket (untuk semua peran)
+let ws             = null;
+
+// WebRTC — VIEWER side (satu peer per admin yang connect)
+const viewerPeers  = new Map(); // adminId? — sederhana: satu RTCPeerConnection per request
+
+// WebRTC — ADMIN side (satu RTCPeerConnection per sessionId viewer)
+const adminPeers   = new Map(); // sessionId → { pc, videoEl, audioCtx, analyser, animRaf }
+const adminAudioMeters = new Map(); // sessionId → animRaf id
+
+// SSE
+let sseConnection  = null;
 
 const CURRENT_FILM = 'Senja Terakhir Ep.4';
 
-// ===========================
-// API CONFIG
-// ===========================
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ? 'http://localhost:3000'
-  : '';
+  ? 'http://localhost:3000' : '';
+const WS_BASE  = API_BASE.replace('http://', 'ws://').replace('https://', 'wss://');
 
-// ===========================
-// SCREEN NAVIGATION
-// ===========================
+// ================================================================
+// NAVIGATION
+// ================================================================
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-}
-
-// ===========================
-// LOGIN FORM LOGIC
-// ===========================
-function updateLoginBtn(){
-  const email    = document.getElementById('login-email').value.trim();
-  const consent  = document.getElementById('chk-consent').checked;
-  const consentBox = document.getElementById('consent-box');
-  const btn      = document.getElementById('btn-login');
-
-  // Jika kelihatan seperti akun admin (mengandung 'admin'), sembunyikan consent box
-  // Tapi kita tidak bisa tahu role sebelum login, jadi tampilkan selalu consent
-  btn.disabled = !consent;
 }
 
 function resetLogin(){
   document.getElementById('login-email').value = '';
   document.getElementById('login-pass').value  = '';
   document.getElementById('chk-consent').checked = false;
-  document.getElementById('btn-login').disabled = true;
+  document.getElementById('btn-login').disabled  = true;
   document.getElementById('login-error').classList.remove('show');
-  document.getElementById('role-hint').style.display = 'none';
   ['login-email','login-pass'].forEach(id => document.getElementById(id).classList.remove('input-error'));
 }
 
-function showLoginError(msg, ...inputEls){
-  const errorEl   = document.getElementById('login-error');
-  const errorText = document.getElementById('login-error-text');
-  errorText.textContent = msg;
-  errorEl.classList.add('show');
-  inputEls.forEach(el => { if(el) el.classList.add('input-error'); });
-  errorEl.scrollIntoView({ behavior:'smooth', block:'nearest' });
+function showLoginError(msg, ...els){
+  const el = document.getElementById('login-error');
+  document.getElementById('login-error-text').textContent = msg;
+  el.classList.add('show');
+  els.forEach(e => e && e.classList.add('input-error'));
+  el.scrollIntoView({ behavior:'smooth', block:'nearest' });
 }
 
-// ===========================
-// LOGIN — ROLE-BASED ROUTING
-// ===========================
+// ================================================================
+// LOGIN
+// ================================================================
 async function doLogin(){
-  const emailEl    = document.getElementById('login-email');
-  const passEl     = document.getElementById('login-pass');
-  const btnEl      = document.getElementById('btn-login');
-  const loginCard  = document.querySelector('.login-card');
+  const emailEl   = document.getElementById('login-email');
+  const passEl    = document.getElementById('login-pass');
+  const btnEl     = document.getElementById('btn-login');
+  const loginCard = document.querySelector('.login-card');
 
   const email    = emailEl.value.trim();
   const password = passEl.value;
@@ -541,23 +504,17 @@ async function doLogin(){
   passEl.classList.remove('input-error');
   document.getElementById('login-error').classList.remove('show');
 
-  if(!email || !password){
-    showLoginError('Email dan password wajib diisi.', emailEl, passEl);
-    return;
-  }
+  if(!email || !password){ showLoginError('Email dan password wajib diisi.', emailEl, passEl); return; }
 
-  // Loading
   btnEl.disabled = true;
   btnEl.classList.add('loading');
   btnEl.textContent = 'Memverifikasi...';
 
   try {
     const response = await fetch(`${API_BASE}/api/login`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email, password })
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password })
     });
-
     const data = await response.json();
 
     btnEl.classList.remove('loading');
@@ -567,72 +524,50 @@ async function doLogin(){
       loginCard.classList.add('shake');
       setTimeout(() => loginCard.classList.remove('shake'), 450);
       passEl.value = '';
-
-      if(data.code === 'EMAIL_NOT_FOUND'){
-        emailEl.classList.add('input-error');
-        showLoginError(data.message, emailEl);
-      } else if(data.code === 'WRONG_PASSWORD'){
-        passEl.classList.add('input-error');
-        showLoginError(data.message, passEl);
-      } else {
-        showLoginError(data.message || 'Email atau password salah.', emailEl, passEl);
-      }
-
+      if(data.code === 'EMAIL_NOT_FOUND')  showLoginError(data.message, emailEl);
+      else if(data.code === 'WRONG_PASSWORD') showLoginError(data.message, passEl);
+      else showLoginError(data.message || 'Email atau password salah.', emailEl, passEl);
       addAdminLog('Sistem', `Login gagal — ${email}`, '#F2716B');
       btnEl.disabled = !document.getElementById('chk-consent').checked;
       return;
     }
 
-    // ✅ Login berhasil
     authToken   = data.token;
     currentUser = data.user;
     sessionStorage.setItem('lb_token', authToken);
+    addAdminLog('Sistem', `${currentUser.name} login sebagai ${currentUser.role}`, '#5B8CFF');
 
-    addAdminLog('Sistem', `${currentUser.name} berhasil login sebagai ${currentUser.role}`, '#5B8CFF');
-
-    // =============================
-    // ROUTING BERDASARKAN ROLE
-    // =============================
-    if(currentUser.role === 'admin'){
-      // → Admin masuk ke dashboard
-      enterAdminDashboard();
-    } else {
-      // → Viewer masuk ke consent kamera lalu halaman nonton
-      showScreen('screen-consent');
-    }
+    if(currentUser.role === 'admin') enterAdminDashboard();
+    else showScreen('screen-consent');
 
   } catch(err){
     btnEl.classList.remove('loading');
     btnEl.textContent = 'Masuk & Mulai Nonton';
     btnEl.disabled    = false;
-    showLoginError('Tidak bisa terhubung ke server. Coba lagi.', emailEl, passEl);
-    console.error('Login error:', err);
+    showLoginError('Tidak bisa terhubung ke server.', emailEl, passEl);
   }
 }
 
-// ===========================
-// ADMIN DASHBOARD ENTRY
-// ===========================
+// ================================================================
+// ADMIN DASHBOARD
+// ================================================================
 function enterAdminDashboard(){
   showScreen('screen-admin');
-  document.getElementById('admin-username').textContent =
-    `Masuk sebagai: ${currentUser.name} (${currentUser.email})`;
+  document.getElementById('admin-username').textContent = `Masuk sebagai: ${currentUser.name} (${currentUser.email})`;
   addAdminLog(currentUser.name, 'membuka dashboard admin', '#A855F7');
   connectSSE();
+  connectWS_Admin();
 }
 
 function adminLogout(){
-  if(!confirm('Yakin ingin logout dari dashboard admin?')) return;
-
-  // Putus SSE
+  if(!confirm('Yakin ingin logout?')) return;
+  // Tutup semua peer connections
+  adminPeers.forEach((p) => { try { p.pc.close(); } catch{} });
+  adminPeers.clear();
   if(sseConnection){ sseConnection.close(); sseConnection = null; }
-
-  // Hapus token
+  if(ws){ ws.close(); ws = null; }
   if(authToken){
-    fetch(`${API_BASE}/api/logout`, {
-      method:  'POST',
-      headers: { 'Authorization': `Bearer ${authToken}` }
-    }).catch(()=>{});
+    fetch(`${API_BASE}/api/logout`, { method:'POST', headers:{'Authorization':`Bearer ${authToken}`} }).catch(()=>{});
     authToken = null;
     sessionStorage.removeItem('lb_token');
   }
@@ -641,144 +576,400 @@ function adminLogout(){
   showScreen('screen-login');
 }
 
-// ===========================
-// SSE — REALTIME SESSION MONITORING
-// ===========================
+// ================================================================
+// SSE — update stats/counter
+// ================================================================
 function connectSSE(){
-  if(sseConnection){ sseConnection.close(); }
+  if(sseConnection) sseConnection.close();
+  const dot = document.getElementById('sse-dot');
+  const txt = document.getElementById('sse-status-text');
+  dot.className = 'sse-dot';
+  txt.textContent = 'Menghubungkan...';
 
-  const dot       = document.getElementById('sse-dot');
-  const statusTxt = document.getElementById('sse-status-text');
-  const sseStatEl = document.getElementById('admin-stat-sse');
-
-  dot.className        = 'sse-dot';
-  statusTxt.textContent = 'Menghubungkan...';
-  sseStatEl.textContent = '⟳';
-  sseStatEl.style.color = 'var(--amber)';
-
-  const url = `${API_BASE}/api/sessions/stream?token=${encodeURIComponent(authToken)}`;
-  sseConnection = new EventSource(url);
+  sseConnection = new EventSource(`${API_BASE}/api/sessions/stream?token=${encodeURIComponent(authToken)}`);
 
   sseConnection.onopen = () => {
-    dot.className         = 'sse-dot connected';
-    statusTxt.textContent = 'Terhubung realtime';
-    sseStatEl.textContent = 'SSE ✓';
-    sseStatEl.style.color = 'var(--green)';
-    addAdminLog('Sistem', 'Koneksi realtime SSE berhasil', '#4ADE80');
+    dot.className = 'sse-dot connected';
+    txt.textContent = 'Terhubung realtime';
   };
-
   sseConnection.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);
-      if(msg.type === 'sessions'){
-        renderRealtimeSessions(msg.data);
-      }
-    } catch(err){
-      console.error('SSE parse error:', err);
+      if(msg.type === 'sessions') updateAdminStats(msg.data);
+    } catch{}
+  };
+  sseConnection.onerror = () => {
+    dot.className = 'sse-dot error';
+    txt.textContent = 'Terputus, mencoba ulang...';
+  };
+}
+
+function updateAdminStats(sessions){
+  document.getElementById('admin-stat-active').textContent = sessions.length;
+  document.getElementById('admin-stat-video').textContent  = sessions.filter(s=>s.camActive).length;
+  document.getElementById('admin-stat-audio').textContent  = sessions.filter(s=>s.micActive).length;
+  document.getElementById('admin-stat-time').textContent   = new Date().toLocaleTimeString('id-ID');
+}
+
+// ================================================================
+// WEBSOCKET — ADMIN SIDE
+// ================================================================
+function connectWS_Admin(){
+  if(ws) ws.close();
+  ws = new WebSocket(`${WS_BASE}/ws?token=${encodeURIComponent(authToken)}`);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type:'register-admin' }));
+    addAdminLog('Sistem', 'WebSocket signaling terhubung', '#4ADE80');
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+
+    // Daftar viewer yang sudah online saat admin baru join
+    if(msg.type === 'viewer-list'){
+      msg.viewers.forEach(v => {
+        addViewerCard(v.sessionId, v.user);
+        initiateWebRTC(v.sessionId);
+      });
+    }
+
+    // Viewer baru connect
+    if(msg.type === 'viewer-connected'){
+      addAdminLog(msg.user.name, 'terhubung — memulai WebRTC stream', '#4ADE80');
+      addViewerCard(msg.sessionId, msg.user);
+      initiateWebRTC(msg.sessionId);
+    }
+
+    // Viewer disconnect
+    if(msg.type === 'viewer-disconnected'){
+      addAdminLog('Pengguna', 'mengakhiri sesi', '#F2A93B');
+      removeViewerCard(msg.sessionId);
+    }
+
+    // WebRTC: SDP answer dari viewer
+    if(msg.type === 'answer'){
+      const entry = adminPeers.get(msg.sessionId);
+      if(entry) entry.pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+    }
+
+    // WebRTC: ICE candidate dari viewer
+    if(msg.type === 'ice-candidate' && msg.from === 'viewer'){
+      const entry = adminPeers.get(msg.sessionId);
+      if(entry) entry.pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(()=>{});
     }
   };
 
-  sseConnection.onerror = () => {
-    dot.className         = 'sse-dot error';
-    statusTxt.textContent = 'Koneksi terputus, mencoba ulang...';
-    sseStatEl.textContent = 'SSE ✗';
-    sseStatEl.style.color = 'var(--red)';
-    // EventSource otomatis reconnect
+  ws.onclose = () => {
+    addAdminLog('Sistem', 'WebSocket terputus', '#F2716B');
+    setTimeout(() => { if(currentUser?.role==='admin') connectWS_Admin(); }, 3000);
   };
 }
 
-// ===========================
-// RENDER SESSIONS DARI SSE
-// ===========================
-function renderRealtimeSessions(sessions){
-  const list    = document.getElementById('admin-session-list');
-  const countEl = document.getElementById('admin-stat-active');
-  const timeEl  = document.getElementById('admin-refresh-time');
-
-  countEl.textContent = sessions.length;
-  timeEl.textContent  = 'Update: ' + new Date().toLocaleTimeString('id-ID');
-  document.getElementById('admin-stat-time').textContent = new Date().toLocaleTimeString('id-ID');
-
-  if(sessions.length === 0){
-    list.innerHTML = `
-      <div class="empty-state">
-        <div class="es-icon">👁️</div>
-        <div>Belum ada sesi aktif saat ini.<br>Data akan muncul otomatis saat pengguna mulai menonton.</div>
-      </div>`;
-    return;
+// ================================================================
+// WEBRTC — ADMIN INISIASI KONEKSI KE VIEWER
+// ================================================================
+async function initiateWebRTC(sessionId){
+  if(adminPeers.has(sessionId)){
+    try { adminPeers.get(sessionId).pc.close(); } catch{}
   }
 
-  list.innerHTML = sessions.map((s, i) => {
-    const dur = formatDuration(s.duration);
-    return `
-      <div class="session-item">
-        <div class="si-cam">
-          <canvas id="sse-sim-canvas-${i}" style="width:100%;height:100%;"></canvas>
-          <div class="si-live-badge">LIVE</div>
-        </div>
-        <div class="si-info">
-          <strong>
-            <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:5px;background:rgba(46,111,242,0.15);color:var(--blue-glow);font-size:0.7rem;font-weight:700;margin-right:6px;">${s.initial}</span>
-            ${s.name}
-          </strong>
-          <div class="si-meta">📧 ${s.email} &nbsp;·&nbsp; 🎬 ${s.film}</div>
-        </div>
-        <div class="si-status">
-          <div class="status-dot"><div class="sdot live"></div>LIVE Menonton</div>
-          <div class="si-duration">${dur}</div>
-        </div>
-      </div>`;
-  }).join('');
-
-  // Animasi canvas per sesi
-  sessions.forEach((s, i) => {
-    const c = document.getElementById(`sse-sim-canvas-${i}`);
-    if(c) animateSimCam(c, '#2E6FF2');
+  const pc = new RTCPeerConnection({
+    iceServers: [
+      { urls:'stun:stun.l.google.com:19302' },
+      { urls:'stun:stun1.l.google.com:19302' }
+    ]
   });
+
+  const entry = { pc, videoEl: null, audioCtx: null, analyser: null };
+  adminPeers.set(sessionId, entry);
+
+  // Saat menerima track dari viewer
+  pc.ontrack = (event) => {
+    const stream = event.streams[0];
+    if(!stream) return;
+
+    // Tampilkan video
+    const videoEl = document.getElementById(`admin-video-${sessionId}`);
+    if(videoEl && event.track.kind === 'video'){
+      videoEl.srcObject = stream;
+      videoEl.play().catch(()=>{});
+      entry.videoEl = videoEl;
+      // Sembunyikan connecting indicator
+      const conn = document.getElementById(`admin-conn-${sessionId}`);
+      if(conn) conn.style.display = 'none';
+      addAdminLog('Sistem', `Video stream aktif dari ${sessionId}`, '#4ADE80');
+    }
+
+    // Visualisasi audio
+    if(event.track.kind === 'audio'){
+      startAudioMeter(sessionId, stream);
+    }
+  };
+
+  pc.onicecandidate = (e) => {
+    if(e.candidate){
+      ws.send(JSON.stringify({
+        type: 'ice-candidate', from:'admin', sessionId, data: e.candidate
+      }));
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    const state = pc.connectionState;
+    const badge = document.getElementById(`admin-conn-state-${sessionId}`);
+    if(badge){
+      if(state==='connected') badge.textContent = '🟢 Terhubung';
+      else if(state==='connecting') badge.textContent = '🟡 Connecting...';
+      else if(state==='failed'||state==='disconnected') badge.textContent = '🔴 Terputus';
+    }
+    if(state === 'failed'){
+      addAdminLog('Sistem', `WebRTC gagal untuk sesi ${sessionId}`, '#F2716B');
+    }
+  };
+
+  // Buat offer
+  const offer = await pc.createOffer({
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: true
+  });
+  await pc.setLocalDescription(offer);
+
+  ws.send(JSON.stringify({
+    type: 'offer', sessionId, data: pc.localDescription
+  }));
 }
 
-function formatDuration(seconds){
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if(h > 0) return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-}
+// ================================================================
+// AUDIO METER — visualisasi volume mikrofon di admin
+// ================================================================
+function startAudioMeter(sessionId, stream){
+  try {
+    const entry = adminPeers.get(sessionId);
+    if(entry?.audioCtx) entry.audioCtx.close();
 
-// ===========================
-// ANIMATED SIM CAM
-// ===========================
-function animateSimCam(canvas, color){
-  if(canvas._animated) return;
-  canvas._animated = true;
-  const ctx  = canvas.getContext('2d');
-  const hue  = parseInt(color.replace('#',''), 16) % 360;
-  let t      = Math.random() * 100;
-  function draw(){
-    const w = canvas.width  = canvas.offsetWidth  || 90;
-    const h = canvas.height = canvas.offsetHeight || 56;
-    const g = ctx.createLinearGradient(0, 0, w, h);
-    g.addColorStop(0, `hsl(${hue},40%,8%)`);
-    g.addColorStop(1, `hsl(${hue+30},40%,14%)`);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = `hsla(${hue},80%,70%,0.08)`;
-    ctx.fillRect(0, (t*1.5) % h, w, 2);
-    ctx.fillStyle = `hsla(${hue},30%,30%,0.7)`;
-    ctx.beginPath(); ctx.arc(w/2, h*0.38, h*0.18, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(w/2, h*0.78, h*0.18, h*0.22, 0, 0, Math.PI*2); ctx.fill();
-    t++;
-    requestAnimationFrame(draw);
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source   = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+
+    if(entry){ entry.audioCtx = audioCtx; entry.analyser = analyser; }
+
+    const dataArr = new Uint8Array(analyser.frequencyBinCount);
+    const fillEl  = document.getElementById(`audio-fill-${sessionId}`);
+    const micInd  = document.getElementById(`mic-ind-${sessionId}`);
+    if(micInd){ micInd.classList.add('active-mic'); micInd.textContent = '🎙️ MIC AKTIF'; }
+
+    function tick(){
+      analyser.getByteFrequencyData(dataArr);
+      const avg = dataArr.reduce((a,b)=>a+b,0) / dataArr.length;
+      const pct = Math.min(100, avg * 2.5);
+      if(fillEl) fillEl.style.width = pct + '%';
+      adminAudioMeters.set(sessionId, requestAnimationFrame(tick));
+    }
+    tick();
+    addAdminLog('Sistem', `Audio stream aktif`, '#5B8CFF');
+  } catch(err){
+    console.error('Audio meter error:', err);
   }
-  draw();
 }
 
-// ===========================
-// CAMERA CONSENT (VIEWER)
-// ===========================
+// ================================================================
+// ADMIN UI — tambah / hapus card viewer
+// ================================================================
+function addViewerCard(sessionId, user){
+  const grid = document.getElementById('admin-session-grid');
+
+  // Hapus empty state kalau ada
+  const empty = grid.querySelector('.empty-state');
+  if(empty) empty.remove();
+
+  // Jangan duplikat
+  if(document.getElementById(`card-${sessionId}`)) return;
+
+  const card = document.createElement('div');
+  card.className = 'session-card';
+  card.id = `card-${sessionId}`;
+  card.innerHTML = `
+    <!-- Video area -->
+    <div class="sc-video-wrap" id="admin-vidbox-${sessionId}">
+      <!-- Connecting indicator -->
+      <div class="sc-connecting" id="admin-conn-${sessionId}" style="position:absolute;inset:0;z-index:2;">
+        <div class="spinner"></div>
+        <span>Menghubungkan WebRTC...</span>
+        <small style="font-size:.7rem;color:var(--muted);" id="admin-conn-state-${sessionId}">🟡 Menunggu...</small>
+      </div>
+      <!-- Video element -->
+      <video id="admin-video-${sessionId}" autoplay playsinline
+        style="width:100%;height:100%;object-fit:cover;display:block;background:#000;"></video>
+      <div class="sc-video-overlay"></div>
+      <div class="sc-live-badge"><div class="rb-dot"></div>LIVE</div>
+      <div class="sc-user-overlay">
+        <div class="sc-user-name">
+          <div class="sc-avatar">${user.initial}</div>
+          <span class="sc-name">${user.name}</span>
+        </div>
+        <span class="sc-duration" id="admin-dur-${sessionId}">00:00</span>
+      </div>
+    </div>
+
+    <!-- Info bar -->
+    <div class="sc-info-bar">
+      <span class="sc-film">🎬 ${CURRENT_FILM}</span>
+      <div class="sc-indicators">
+        <span class="sc-ind active-cam">📹 CAM LIVE</span>
+        <span class="sc-ind inactive" id="mic-ind-${sessionId}">🎙️ Menunggu...</span>
+      </div>
+    </div>
+
+    <!-- Volume & audio meter -->
+    <div class="audio-meter-wrap">
+      <div class="audio-meter-label" style="justify-content:space-between;">
+        <span>🔊 Level Mikrofon — <small style="color:var(--muted)">${user.email}</small></span>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.7rem;color:var(--muted);">
+          <span>Vol</span>
+          <input type="range" min="0" max="1" step="0.05" value="0.8"
+            style="width:70px;accent-color:var(--blue);"
+            oninput="const v=document.getElementById('admin-video-${sessionId}');if(v)v.volume=+this.value;">
+        </label>
+      </div>
+      <div class="audio-meter-bar">
+        <div class="audio-meter-fill" id="audio-fill-${sessionId}"></div>
+      </div>
+    </div>
+  `;
+  grid.appendChild(card);
+
+  // Mulai timer durasi untuk card ini
+  const startTime = Date.now();
+  const durEl     = document.getElementById(`admin-dur-${sessionId}`);
+  const timerRaf  = setInterval(() => {
+    const sec = Math.floor((Date.now() - startTime) / 1000);
+    const m   = Math.floor(sec / 60);
+    const s   = sec % 60;
+    if(durEl) durEl.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }, 1000);
+
+  // Simpan timer di card
+  card._durTimer = timerRaf;
+
+  // Update stats
+  document.getElementById('admin-stat-active').textContent =
+    document.querySelectorAll('.session-card').length;
+}
+
+function removeViewerCard(sessionId){
+  const card = document.getElementById(`card-${sessionId}`);
+  if(card){
+    if(card._durTimer) clearInterval(card._durTimer);
+    card.remove();
+  }
+
+  // Tutup peer connection
+  const entry = adminPeers.get(sessionId);
+  if(entry){
+    if(entry.audioCtx) entry.audioCtx.close();
+    entry.pc.close();
+    adminPeers.delete(sessionId);
+  }
+
+  // Stop audio meter
+  const raf = adminAudioMeters.get(sessionId);
+  if(raf) cancelAnimationFrame(raf);
+  adminAudioMeters.delete(sessionId);
+
+  // Tampilkan empty state kalau tidak ada card
+  const grid = document.getElementById('admin-session-grid');
+  if(!grid.querySelector('.session-card')){
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
+      <div class="es-icon">📡</div>
+      <div>Belum ada sesi aktif saat ini.<br>Video & audio muncul otomatis saat ada pengguna yang menonton.</div>
+    </div>`;
+  }
+
+  // Update stats
+  document.getElementById('admin-stat-active').textContent =
+    document.querySelectorAll('.session-card').length;
+}
+
+// ================================================================
+// WEBSOCKET — VIEWER SIDE
+// ================================================================
+function connectWS_Viewer(){
+  if(ws) ws.close();
+  ws = new WebSocket(`${WS_BASE}/ws?token=${encodeURIComponent(authToken)}`);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type:'register-viewer', sessionId: mySessionId }));
+  };
+
+  ws.onmessage = async (e) => {
+    const msg = JSON.parse(e.data);
+
+    // Terima offer dari admin
+    if(msg.type === 'offer'){
+      await handleAdminOffer(msg.data);
+    }
+
+    // Terima ICE candidate dari admin
+    if(msg.type === 'ice-candidate' && msg.from === 'admin'){
+      const pc = viewerPeers.get('main');
+      if(pc) pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(()=>{});
+    }
+  };
+
+  ws.onclose = () => {
+    // Reconnect otomatis
+    setTimeout(() => {
+      if(camStream && mySessionId) connectWS_Viewer();
+    }, 2000);
+  };
+}
+
+// VIEWER: proses offer dari admin, kirim answer + stream kamera
+async function handleAdminOffer(offerDesc){
+  let pc = viewerPeers.get('main');
+
+  // Buat peer baru jika belum ada / sudah closed
+  if(!pc || pc.signalingState === 'closed'){
+    pc = new RTCPeerConnection({
+      iceServers: [
+        { urls:'stun:stun.l.google.com:19302' },
+        { urls:'stun:stun1.l.google.com:19302' }
+      ]
+    });
+    viewerPeers.set('main', pc);
+
+    // Tambahkan track kamera & mikrofon ke peer
+    if(camStream){
+      camStream.getTracks().forEach(track => pc.addTrack(track, camStream));
+    }
+
+    pc.onicecandidate = (e) => {
+      if(e.candidate && ws.readyState === WebSocket.OPEN){
+        ws.send(JSON.stringify({
+          type:'ice-candidate', from:'viewer', sessionId: mySessionId, data: e.candidate
+        }));
+      }
+    };
+  }
+
+  await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+
+  ws.send(JSON.stringify({
+    type:'answer', sessionId: mySessionId, data: pc.localDescription
+  }));
+}
+
+// ================================================================
+// CAMERA CONSENT
+// ================================================================
 async function requestCamera(){
   try{
     camStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
-    document.getElementById('cam-thumb').srcObject = camStream;
     startWatchSession();
   } catch(e){
     alert('Izin kamera/mikrofon diperlukan untuk menonton.\n\nKamu bisa coba lagi atau gunakan perangkat lain.');
@@ -786,59 +977,60 @@ async function requestCamera(){
 }
 
 function declineCamera(){
-  addAdminLog('Sistem', `${currentUser?.name||'Pengguna'} menolak izin kamera, sesi dibatalkan`, '#F2716B');
-  // Lapor ke server bahwa user tidak jadi menonton
+  addAdminLog('Sistem', `${currentUser?.name||'Pengguna'} menolak izin kamera`, '#F2716B');
   stopSession(false);
   showScreen('screen-login');
   resetLogin();
 }
 
-// ===========================
+// ================================================================
 // WATCH SESSION
-// ===========================
+// ================================================================
 async function startWatchSession(){
-  sessionStart = Date.now();
+  sessionStart  = Date.now();
+  mySessionId   = `${currentUser.initial}-${Date.now()}`;
 
   document.getElementById('user-name-chip').textContent   = currentUser.name;
   document.getElementById('user-avatar-chip').textContent = currentUser.initial;
 
   showScreen('screen-watch');
-  addAdminLog(currentUser.name, 'mulai sesi menonton, kamera aktif', '#4ADE80');
+  addAdminLog(currentUser.name, 'mulai sesi menonton, kamera + mikrofon aktif', '#4ADE80');
 
-  // Lapor ke server: sesi dimulai
+  // Lapor ke REST API
   await fetch(`${API_BASE}/api/session/start`, {
-    method:  'POST',
-    headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${authToken}` },
-    body:    JSON.stringify({ film: CURRENT_FILM, camActive: true })
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${authToken}`},
+    body: JSON.stringify({ film: CURRENT_FILM, camActive:true, micActive:true })
   }).catch(()=>{});
 
-  // Heartbeat ke server setiap 5 detik
+  // Heartbeat
   pingInterval = setInterval(async () => {
     await fetch(`${API_BASE}/api/session/ping`, {
-      method:  'POST',
-      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${authToken}` },
-      body:    JSON.stringify({ film: CURRENT_FILM, camActive: true })
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${authToken}`},
+      body: JSON.stringify({ film: CURRENT_FILM, camActive:true, micActive:true })
     }).catch(()=>{});
   }, 5000);
 
-  // Timer di banner
+  // Timer banner
   sessionTimerInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
-    const h = Math.floor(elapsed / 3600);
-    const m = Math.floor((elapsed % 3600) / 60);
-    const s = elapsed % 60;
+    const e = Math.floor((Date.now()-sessionStart)/1000);
+    const h = Math.floor(e/3600), m = Math.floor((e%3600)/60), s = e%60;
     document.getElementById('session-timer').textContent =
       `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   }, 1000);
 
-  // Video progress simulasi
+  // Video progress
   let prog = 35;
   vidProgressInterval = setInterval(() => {
-    prog = Math.min(100, prog + 0.1);
+    prog = Math.min(100, prog+0.1);
     const el = document.getElementById('vid-progress');
-    if(el) el.style.width = prog + '%';
-    if(prog >= 100) clearInterval(vidProgressInterval);
+    if(el) el.style.width = prog+'%';
+    if(prog>=100) clearInterval(vidProgressInterval);
   }, 500);
+
+  // Hubungkan ke WebSocket signaling
+  connectWS_Viewer();
 }
 
 function endSession(){
@@ -846,25 +1038,27 @@ function endSession(){
   stopSession(true);
 }
 
-async function stopSession(showEnded = true){
+async function stopSession(showEnded=true){
   clearInterval(sessionTimerInterval);
   clearInterval(vidProgressInterval);
   clearInterval(pingInterval);
 
-  // Hitung durasi
-  const elapsed = sessionStart ? Math.floor((Date.now() - sessionStart) / 1000) : 0;
-  const m = Math.floor(elapsed / 60);
-  const s = elapsed % 60;
-  if(document.getElementById('ended-duration')){
-    document.getElementById('ended-duration').textContent =
-      `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  }
+  const elapsed = sessionStart ? Math.floor((Date.now()-sessionStart)/1000) : 0;
+  const m = Math.floor(elapsed/60), s = elapsed%60;
+  const endEl = document.getElementById('ended-duration');
+  if(endEl) endEl.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 
-  // Logout & hapus sesi dari server
+  // Tutup semua WebRTC peer
+  viewerPeers.forEach(pc => { try{ pc.close(); }catch{} });
+  viewerPeers.clear();
+
+  // Tutup WS
+  if(ws){ ws.close(); ws = null; }
+
+  // Logout API
   if(authToken){
     await fetch(`${API_BASE}/api/logout`, {
-      method:  'POST',
-      headers: { 'Authorization': `Bearer ${authToken}` }
+      method:'POST', headers:{'Authorization':`Bearer ${authToken}`}
     }).catch(()=>{});
     authToken = null;
     sessionStorage.removeItem('lb_token');
@@ -876,52 +1070,42 @@ async function stopSession(showEnded = true){
     camStream = null;
   }
 
-  addAdminLog(currentUser?.name || 'Pengguna', 'mengakhiri sesi, kamera dimatikan', '#F2A93B');
-
+  addAdminLog(currentUser?.name||'Pengguna', 'mengakhiri sesi, stream dimatikan', '#F2A93B');
   if(showEnded) showScreen('screen-ended');
 }
 
-// ===========================
+// ================================================================
 // ADMIN LOG
-// ===========================
+// ================================================================
 function addAdminLog(user, action, color='#5B8CFF'){
-  const time = new Date().toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  adminLogs.unshift({ user, action, color, time });
+  const time = new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  adminLogs.unshift({user,action,color,time});
+  if(adminLogs.length > 100) adminLogs.pop();
   renderAdminLog();
 }
-
 function renderAdminLog(){
   const el = document.getElementById('admin-log');
   if(!el) return;
-  el.innerHTML = adminLogs.map(l => `
+  el.innerHTML = adminLogs.map(l=>`
     <div class="log-entry">
       <span class="le-time">${l.time}</span>
       <div class="le-dot" style="background:${l.color}"></div>
       <span class="le-text"><span class="le-user">${l.user}</span> ${l.action}</span>
     </div>`).join('');
 }
+function clearAdminLog(){ adminLogs=[]; renderAdminLog(); }
 
-function clearAdminLog(){
-  adminLogs = [];
-  renderAdminLog();
-}
-
-// ===========================
+// ================================================================
 // INIT
-// ===========================
+// ================================================================
 window.addEventListener('DOMContentLoaded', () => {
-  addAdminLog('Sistem', 'Aplikasi dimuat', '#5B8CFF');
+  addAdminLog('Sistem', 'Aplikasi Layar Biru v2.0 dimuat', '#5B8CFF');
 
-  // Enter key di form login
   ['login-email','login-pass'].forEach(id => {
     const el = document.getElementById(id);
     if(!el) return;
     el.addEventListener('keydown', e => {
-      if(e.key === 'Enter'){
-        e.preventDefault();
-        const btn = document.getElementById('btn-login');
-        if(!btn.disabled) doLogin();
-      }
+      if(e.key==='Enter'){ e.preventDefault(); const btn=document.getElementById('btn-login'); if(!btn.disabled) doLogin(); }
     });
     el.addEventListener('input', () => {
       el.classList.remove('input-error');
@@ -932,12 +1116,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
 window.addEventListener('beforeunload', () => {
   if(camStream) camStream.getTracks().forEach(t => t.stop());
-  if(authToken && sessionStorage.getItem('lb_token')){
-    // Sync logout saat tutup browser (best-effort)
-    navigator.sendBeacon(`${API_BASE}/api/logout`,
-      JSON.stringify({ token: authToken })
-    );
-  }
+  viewerPeers.forEach(pc => { try{pc.close();}catch{} });
+  adminPeers.forEach(e => { try{e.pc.close();}catch{} });
+  if(authToken) navigator.sendBeacon(`${API_BASE}/api/logout`, '{}');
 });
 window.addEventListener('pagehide', () => {
   if(camStream) camStream.getTracks().forEach(t => t.stop());
