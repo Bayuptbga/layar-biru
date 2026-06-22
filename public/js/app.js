@@ -1089,15 +1089,15 @@ function renderAdminLog() {
       system:     { bg: 'rgba(138,145,172,.12)', border: 'rgba(138,145,172,.3)', text: '#8A91AC',  label: 'SISTEM'  },
     };
     const badge = badgeMap[l.type] || badgeMap.system;
-    return \`
+    return `
     <div class="log-entry">
       <div class="le-left">
-        <span class="le-time">\${l.time}</span>
-        <span class="le-date">\${l.date}</span>
+        <span class="le-time">${l.time}</span>
+        <span class="le-date">${l.date}</span>
       </div>
-      <span class="le-badge" style="background:\${badge.bg};border-color:\${badge.border};color:\${badge.text};">\${badge.label}</span>
-      <span class="le-text"><span class="le-user">\${l.user}</span> \${l.action}</span>
-    </div>\`;
+      <span class="le-badge" style="background:${badge.bg};border-color:${badge.border};color:${badge.text};">${badge.label}</span>
+      <span class="le-text"><span class="le-user">${l.user}</span> ${l.action}</span>
+    </div>`;
   }).join('');
 }
 
