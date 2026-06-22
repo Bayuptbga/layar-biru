@@ -18,35 +18,36 @@ const FILMS = (() => {
     'linear-gradient(135deg,#10002b,#e0aaff)',
   ];
 
-  function film(title, desc, id) {
+  function film(title, desc, videoId, thumbPath) {
     _id++;
     return {
       id:       _id,
       title,
       desc,
-      embed:    `https://www.xvideos.com/embedframe/${id}`,
-      // Thumbnail dari CDN — gambar poster pertama
-      thumb:    `https://cdn77-pic.xvideos-cdn.com/videos/thumbs169poster/${id}/1.jpg`,
+      // Video ID untuk embed - tetap original
+      videoId:  videoId,
+      embed:    `https://www.xvideos.com/embedframe/${videoId}`,
+      // Thumbnail path terpisah - bisa custom sepenuhnya
+      thumb:    `https://thumbs-gcore.xvideos-cdn.com${thumbPath}`,
       // Fallback gradient untuk loading state
       gradient: gradients[(_id - 1) % gradients.length],
-      // Optional: duration untuk ditampilkan di UI nanti
       duration: '1h 30m',
     };
   }
 
   return [
     // Japan
-    film('Japannese 1', 'Japan', 'okkbeedc45d'),
-    film('Japannese 2', 'Japan', 'uellueb651a'),
-    film('Japannese 3', 'Japan', 'udptlbbc307'),
-    film('Japannese 4', 'Japan', 'kvceumk9d12'),
-    film('Japannese 5', 'Japan', 'oiopumb63e9'),
+    film('Japannese 1', 'Japan', 'okkbeedc45d', '/5028e180-83a5-4770-ab9d-5917d4dd8e2a/0/xv_16_t.jpg'),
+    film('Japannese 2', 'Japan', 'uellueb651a', '/uuid-video-2/0/xv_2_t.jpg'),
+    film('Japannese 3', 'Japan', 'udptlbbc307', '/uuid-video-3/0/xv_2_t.jpg'),
+    film('Japannese 4', 'Japan', 'kvceumk9d12', '/uuid-video-4/0/xv_2_t.jpg'),
+    film('Japannese 5', 'Japan', 'oiopumb63e9', '/uuid-video-5/0/xv_2_t.jpg'),
 
     // USA Romance
-    film('Romance 1', 'USA Romance', 'oofpkhie377'),
-    film('Romance 2', 'USA Romance', 'oofpkhbcb6d'),
-    film('Romance 3', 'USA Romance', 'oovploe8868'),
-    film('Romance 4', 'USA Romance', 'oovivca4f73'),
-    film('Romance 5', 'USA Romance', 'oovidcvd0ba'),
+    film('Romance 1', 'USA Romance', 'oofpkhie377', '/uuid-romance-1/0/xv_2_p.jpg'),
+    film('Romance 2', 'USA Romance', 'oofpkhbcb6d', '/uuid-romance-2/0/xv_2_p.jpg'),
+    film('Romance 3', 'USA Romance', 'oovploe8868', '/uuid-romance-3/0/xv_2_p.jpg'),
+    film('Romance 4', 'USA Romance', 'oovivca4f73', '/uuid-romance-4/0/xv_2_p.jpg'),
+    film('Romance 5', 'USA Romance', 'oovidcvd0ba', '/uuid-romance-5/0/xv_2_p.jpg'),
   ];
 })();
