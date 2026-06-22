@@ -375,17 +375,17 @@ function renderAdminSessions(sessions) {
           <div class="sc-duration">${formatDuration(s.duration)}</div>
         </div>
         <div class="sc-video-container">
-          <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;"></video>
-        </div>
-        <div class="sc-controls">
-          <button class="sc-btn cam-btn ${s.camActive ? 'active' : ''}" title="Kamera">📹</button>
-          <button class="sc-btn mic-btn ${s.micActive ? 'active' : ''}" title="Mikrofon">🎤</button>
-          <button class="sc-btn expand-btn" onclick="expandSession('${s.id}')" title="Perbesar">⛶</button>
+          <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
+          <div class="sc-controls">
+            <button class="sc-btn cam-btn ${s.camActive ? 'active' : ''}" title="Kamera">📹</button>
+            <button class="sc-btn mic-btn ${s.micActive ? 'active' : ''}" title="Mikrofon">🎤</button>
+            <button class="sc-btn expand-btn" onclick="expandSession('${s.id}')" title="Perbesar">⛶</button>
+          </div>
         </div>
         <div class="audio-meter">
-          <div class="audio-meter-bar" id="meter-${s.id}"></div>
-          <div class="audio-meter-label">
-            <small>${s.name}</small>
+          <div class="audio-meter-label"><small>${s.name}</small></div>
+          <div class="audio-meter-track">
+            <div class="audio-meter-bar" id="meter-${s.id}"></div>
           </div>
         </div>
       `;
@@ -520,16 +520,18 @@ async function setupPeerConnection_Admin(sessionId, user) {
         <div class="sc-duration">0s</div>
       </div>
       <div class="sc-video-container">
-        <video id="video-${sessionId}" autoplay playsinline muted style="width:100%;height:100%;"></video>
-      </div>
-      <div class="sc-controls">
-        <button class="sc-btn cam-btn active" title="Kamera">📹</button>
-        <button class="sc-btn mic-btn active" title="Mikrofon">🎤</button>
-        <button class="sc-btn expand-btn" onclick="expandSession('${sessionId}')" title="Perbesar">⛶</button>
+        <video id="video-${sessionId}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
+        <div class="sc-controls">
+          <button class="sc-btn cam-btn active" title="Kamera">📹</button>
+          <button class="sc-btn mic-btn active" title="Mikrofon">🎤</button>
+          <button class="sc-btn expand-btn" onclick="expandSession('${sessionId}')" title="Perbesar">⛶</button>
+        </div>
       </div>
       <div class="audio-meter">
-        <div class="audio-meter-bar" id="meter-${sessionId}"></div>
         <div class="audio-meter-label"><small>${user.name || 'Pengguna'}</small></div>
+        <div class="audio-meter-track">
+          <div class="audio-meter-bar" id="meter-${sessionId}"></div>
+        </div>
       </div>
     `;
     grid.appendChild(card);
@@ -730,7 +732,6 @@ function declineCamera() {
 // ================================================================
 async function startWatchSession() {
   sessionStart  = Date.now();
-  mySessionId   = `${currentUser.initial}-${Date.now()}`;
 
   document.getElementById('user-name-chip').textContent   = currentUser.name;
   document.getElementById('user-avatar-chip').textContent = currentUser.initial;
@@ -739,11 +740,18 @@ async function startWatchSession() {
   renderFilmGrid();
   addAdminLog(currentUser.name, 'mulai sesi menonton, kamera + mikrofon aktif', '#4ADE80');
 
-  await fetch(`${API_BASE}/api/session/start`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-    body:    JSON.stringify({ film: CURRENT_FILM, camActive: true, micActive: true })
-  }).catch(() => {});
+  // Ambil sessionId dari server agar sama dengan id yang dikirim SSE ke admin (token.slice(-8))
+  try {
+    const res = await fetch(`${API_BASE}/api/session/start`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+      body:    JSON.stringify({ film: CURRENT_FILM, camActive: true, micActive: true })
+    });
+    const data = await res.json();
+    mySessionId = data.sessionId || `${currentUser.initial}-${Date.now()}`;
+  } catch {
+    mySessionId = `${currentUser.initial}-${Date.now()}`;
+  }
 
   pingInterval = setInterval(async () => {
     await fetch(`${API_BASE}/api/session/ping`, {
