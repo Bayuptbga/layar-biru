@@ -90,11 +90,33 @@ const io = new Server(server, {
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token || socket.handshake.query?.token;
   if (!token) return next(new Error('Unauthorized'));
+
   try {
+    // login normal pakai JWT
     socket._user = jwt.verify(token, JWT_SECRET);
     socket._role = socket._user.role;
+    socket._guest = false;
     next();
   } catch {
+    // fallback guest
+    if (token.startsWith('guest-session-')) {
+      const guestId = token.split('-').pop();
+
+      socket._user = {
+        name: `Guest_${guestId}`,
+        email: `guest${guestId}@guest.local`,
+        initial: 'G',
+        role: 'viewer',
+        guest: true
+      };
+
+      socket._role = 'viewer';
+      socket._guest = true;
+
+      console.log(`[GUEST] ${socket._user.name} connected`);
+      return next();
+    }
+
     next(new Error('Unauthorized'));
   }
 });
@@ -225,7 +247,24 @@ app.post('/api/session/start', (req, res) => {
   const token = (req.headers['authorization']||'').split(' ')[1];
   if (!token) return res.status(401).json({ success:false });
   try {
-    const user = jwt.verify(token, JWT_SECRET);
+    let user;
+
+try {
+  user = jwt.verify(token, JWT_SECRET);
+} catch {
+  if (token.startsWith('guest-session-')) {
+    const guestId = token.split('-').pop();
+    user = {
+      name: `Guest_${guestId}`,
+      email: `guest${guestId}@guest.local`,
+      initial: 'G',
+      role: 'viewer',
+      guest: true
+    };
+  } else {
+    return res.status(401).json({ success:false });
+  }
+}
     activeSessions.set(token, {
       id:        token.slice(-8),
       user, startTime: Date.now(),
@@ -256,7 +295,13 @@ app.post('/api/logout', (req, res) => {
   const token = (req.headers['authorization']||'').split(' ')[1];
   if (token) {
     try {
-      const d = jwt.verify(token, JWT_SECRET);
+      let d;
+
+try {
+  d = jwt.verify(token, JWT_SECRET);
+} catch {
+  d = { email: 'guest' };
+}
       activeSessions.delete(token);
       broadcastSessions();
       console.log(`[LOGOUT] ${d.email}`);
