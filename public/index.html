@@ -1,1 +1,505 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Layar Biru — Nonton Film</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#0A0E1A;--bg-soft:#111729;--card:#161D34;
+  --blue:#2E6FF2;--blue-glow:#5B8CFF;--amber:#F2A93B;
+  --green:#4ADE80;--red:#F2716B;--purple:#A855F7;
+  --text:#E9ECF6;--muted:#8A91AC;--line:rgba(233,236,246,0.08);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
+h1,h2,h3{font-family:'Oswald',sans-serif;}
+button{font-family:inherit;cursor:pointer;border:none;}
+a{color:inherit;text-decoration:none;}
 
+/* ===== SCREENS ===== */
+.screen{display:none;min-height:100vh;}
+.screen.active{display:flex;}
+
+/* ===== LOGIN SCREEN ===== */
+#screen-login{
+  align-items:center;justify-content:center;padding:24px;
+  background:radial-gradient(ellipse 80% 60% at 60% 20%, rgba(46,111,242,0.25), transparent 60%),var(--bg);
+}
+.login-card{
+  width:100%;max-width:420px;
+  background:var(--card);border:1px solid var(--line);
+  border-radius:18px;padding:36px 32px;
+  box-shadow:0 30px 60px -20px rgba(0,0,0,0.7);
+}
+.login-logo{
+  display:flex;align-items:center;gap:10px;margin-bottom:28px;
+}
+.login-logo .dot{
+  width:12px;height:12px;border-radius:50%;
+  background:var(--blue);box-shadow:0 0 14px 4px var(--blue-glow);
+}
+.login-logo span{font-family:'Oswald',sans-serif;font-size:1.4rem;font-weight:700;}
+.login-card h2{font-size:1.5rem;margin-bottom:6px;}
+.login-card .sub{color:var(--muted);font-size:0.88rem;margin-bottom:28px;line-height:1.5;}
+.form-group{margin-bottom:16px;}
+.form-group label{display:block;font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;}
+.form-group input{
+  width:100%;background:var(--bg-soft);border:1px solid var(--line);
+  border-radius:8px;padding:12px 14px;color:var(--text);font-size:0.95rem;
+  transition:border-color .2s;
+}
+.form-group input:focus{outline:none;border-color:var(--blue);}
+
+/* Consent box */
+.consent-box{
+  background:rgba(242,163,59,0.08);border:1px solid rgba(242,163,59,0.25);
+  border-radius:10px;padding:16px;margin-bottom:22px;
+}
+.consent-box .consent-title{
+  display:flex;align-items:center;gap:8px;
+  font-size:0.85rem;font-weight:700;color:var(--amber);margin-bottom:10px;
+}
+.consent-box p{font-size:0.8rem;color:var(--muted);line-height:1.6;margin-bottom:12px;}
+.consent-check{
+  display:flex;align-items:flex-start;gap:10px;cursor:pointer;
+}
+.consent-check input[type=checkbox]{
+  width:18px;height:18px;flex-shrink:0;margin-top:1px;accent-color:var(--amber);cursor:pointer;
+}
+.consent-check span{font-size:0.82rem;color:var(--text);line-height:1.5;}
+
+.btn-full{
+  width:100%;padding:14px;border-radius:9px;
+  font-size:0.95rem;font-weight:700;
+  background:var(--blue);color:#fff;
+  transition:background .2s,transform .2s;
+}
+.btn-full:hover{background:var(--blue-glow);transform:translateY(-1px);}
+.btn-full:disabled{opacity:0.4;cursor:not-allowed;transform:none;}
+
+/* Error message */
+.error-msg{
+  display:none;
+  background:rgba(242,113,107,0.12);border:1px solid rgba(242,113,107,0.3);
+  border-radius:8px;padding:11px 14px;margin-bottom:14px;
+  font-size:0.82rem;color:var(--red);font-weight:600;
+  align-items:center;gap:8px;
+}
+.error-msg.show{display:flex;}
+.error-msg .em-icon{font-size:1rem;flex-shrink:0;}
+
+/* Shake animation for wrong login */
+@keyframes shake{
+  0%,100%{transform:translateX(0);}
+  20%{transform:translateX(-8px);}
+  40%{transform:translateX(8px);}
+  60%{transform:translateX(-6px);}
+  80%{transform:translateX(6px);}
+}
+.shake{animation:shake 0.4s ease;}
+
+/* Input error state */
+.form-group input.input-error{
+  border-color:var(--red);
+  background:rgba(242,113,107,0.05);
+}
+
+/* Loading state on button */
+.btn-full.loading{
+  opacity:0.7;cursor:not-allowed;
+  position:relative;
+}
+.btn-full.loading::after{
+  content:'';
+  display:inline-block;width:14px;height:14px;
+  border:2px solid rgba(255,255,255,0.3);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:spin 0.6s linear infinite;
+  margin-left:8px;vertical-align:middle;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ===== CONSENT SCREEN ===== */
+#screen-consent{
+  align-items:center;justify-content:center;padding:24px;
+  background:var(--bg);
+}
+.consent-card{
+  width:100%;max-width:500px;
+  background:var(--card);border:1px solid var(--line);
+  border-radius:18px;padding:36px 32px;
+}
+.consent-card .icon-big{
+  width:64px;height:64px;border-radius:16px;
+  background:rgba(242,163,59,0.15);border:1px solid rgba(242,163,59,0.3);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.8rem;margin-bottom:20px;
+}
+.consent-card h2{font-size:1.4rem;margin-bottom:10px;}
+.consent-card .desc{color:var(--muted);font-size:0.88rem;line-height:1.6;margin-bottom:24px;}
+.info-list{display:flex;flex-direction:column;gap:10px;margin-bottom:28px;}
+.info-item{
+  display:flex;align-items:flex-start;gap:12px;
+  background:var(--bg-soft);border:1px solid var(--line);
+  border-radius:10px;padding:13px 14px;
+}
+.info-item .ii-icon{font-size:1.1rem;flex-shrink:0;margin-top:1px;}
+.info-item .ii-text strong{font-size:0.85rem;display:block;margin-bottom:2px;}
+.info-item .ii-text span{font-size:0.78rem;color:var(--muted);line-height:1.5;}
+.btn-row{display:flex;gap:12px;}
+.btn-agree{
+  flex:2;padding:13px;border-radius:9px;
+  background:var(--green);color:#0A0E1A;
+  font-weight:700;font-size:0.92rem;cursor:pointer;border:none;
+  transition:opacity .2s;
+}
+.btn-agree:hover{opacity:0.85;}
+.btn-decline{
+  flex:1;padding:13px;border-radius:9px;
+  background:transparent;border:1px solid var(--line);
+  color:var(--muted);font-weight:600;font-size:0.88rem;cursor:pointer;
+  transition:all .2s;
+}
+.btn-decline:hover{border-color:var(--red);color:var(--red);}
+
+/* ===== WATCH SCREEN ===== */
+#screen-watch{
+  flex-direction:column;min-height:100vh;
+}
+
+/* Monitoring banner */
+.monitor-banner{
+  background:rgba(242,113,107,0.12);border-bottom:1px solid rgba(242,113,107,0.25);
+  padding:10px 20px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:8px;
+}
+.banner-left{display:flex;align-items:center;gap:10px;}
+.rec-dot{
+  width:10px;height:10px;border-radius:50%;background:var(--red);flex-shrink:0;
+  animation:blink 1s ease-in-out infinite;
+}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0.3;}}
+.banner-left span{font-size:0.82rem;font-weight:600;color:var(--red);}
+.banner-right{display:flex;align-items:center;gap:12px;}
+.session-timer{font-size:0.8rem;color:var(--muted);font-family:monospace;}
+.cam-thumb-wrap{
+  position:relative;width:80px;height:50px;
+  border-radius:6px;overflow:hidden;background:#000;
+  border:1px solid rgba(242,113,107,0.4);
+  flex-shrink:0;
+}
+.cam-thumb-wrap video{width:100%;height:100%;object-fit:cover;}
+.cam-label{
+  position:absolute;bottom:3px;left:4px;
+  font-size:0.58rem;color:#fff;font-weight:700;
+  background:rgba(242,113,107,0.8);padding:1px 5px;border-radius:3px;
+}
+
+/* Navbar */
+.watch-nav{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;background:var(--bg-soft);border-bottom:1px solid var(--line);
+}
+.watch-logo{display:flex;align-items:center;gap:8px;font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700;}
+.watch-logo .dot{width:9px;height:9px;border-radius:50%;background:var(--blue);box-shadow:0 0 10px 2px var(--blue-glow);}
+.user-chip{
+  display:flex;align-items:center;gap:8px;
+  background:var(--card);border:1px solid var(--line);
+  border-radius:8px;padding:7px 12px;font-size:0.82rem;
+}
+.user-chip .avatar{
+  width:24px;height:24px;border-radius:5px;
+  background:linear-gradient(135deg,var(--blue),var(--purple));
+  display:flex;align-items:center;justify-content:center;
+  font-size:0.7rem;font-weight:700;
+}
+.btn-end-session{
+  padding:8px 16px;border-radius:7px;
+  background:rgba(242,113,107,0.15);border:1px solid rgba(242,113,107,0.3);
+  color:var(--red);font-size:0.82rem;font-weight:600;cursor:pointer;
+  transition:all .2s;
+}
+.btn-end-session:hover{background:rgba(242,113,107,0.25);}
+
+/* Content */
+.watch-content{flex:1;padding:24px 20px;max-width:1000px;margin:0 auto;width:100%;}
+.now-playing{
+  background:var(--card);border:1px solid var(--line);
+  border-radius:14px;overflow:hidden;margin-bottom:24px;
+}
+.video-placeholder{
+  height:220px;background:linear-gradient(135deg,#0f1a30,#1a2a50);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;color:var(--muted);
+}
+.play-btn{
+  width:56px;height:56px;border-radius:50%;
+  background:rgba(46,111,242,0.25);border:2px solid var(--blue);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.4rem;color:var(--blue-glow);cursor:pointer;
+  transition:background .2s;
+}
+.play-btn:hover{background:rgba(46,111,242,0.4);}
+.video-info{padding:16px 18px;}
+.video-info h3{font-size:1.1rem;margin-bottom:4px;}
+.video-info p{font-size:0.8rem;color:var(--muted);}
+.video-progress{height:4px;background:rgba(255,255,255,0.08);margin-top:12px;border-radius:3px;overflow:hidden;}
+.video-progress-fill{height:100%;background:var(--blue);width:35%;transition:width 1s linear;}
+
+/* Film grid */
+.section-title{font-size:1.1rem;font-weight:600;margin-bottom:14px;}
+.film-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;}
+.film-card{
+  background:var(--card);border:1px solid var(--line);
+  border-radius:10px;overflow:hidden;cursor:pointer;
+  transition:transform .2s,box-shadow .2s;
+}
+.film-card:hover{transform:translateY(-4px);box-shadow:0 12px 24px -8px rgba(46,111,242,0.3);}
+.film-poster{
+  height:160px;display:flex;align-items:flex-end;padding:10px;position:relative;
+}
+.film-poster::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,0.7));}
+.film-genre{position:relative;z-index:1;font-size:0.65rem;font-weight:700;color:#fff;background:rgba(0,0,0,0.4);padding:3px 8px;border-radius:4px;}
+.film-card p{font-size:0.8rem;font-weight:600;padding:10px 12px 12px;}
+
+/* ===== ADMIN SCREEN ===== */
+#screen-admin{
+  flex-direction:column;min-height:100vh;
+}
+.admin-topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;background:var(--bg-soft);border-bottom:1px solid var(--line);
+}
+.admin-topbar h1{font-size:1.15rem;font-weight:600;}
+.live-pill{
+  display:flex;align-items:center;gap:7px;
+  background:rgba(242,113,107,0.15);border:1px solid rgba(242,113,107,0.3);
+  padding:6px 13px;border-radius:20px;font-size:0.78rem;font-weight:700;color:var(--red);
+}
+.admin-body{padding:20px;display:flex;flex-direction:column;gap:20px;}
+
+/* Stats */
+.admin-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.astat{
+  background:var(--card);border:1px solid var(--line);
+  border-radius:12px;padding:18px;
+}
+.astat .alabel{font-size:0.72rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;}
+.astat .aval{font-family:'Oswald',sans-serif;font-size:1.7rem;font-weight:700;}
+
+/* Sessions */
+.sessions-panel{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+.sp-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 18px;border-bottom:1px solid var(--line);
+}
+.sp-head h3{font-size:0.95rem;font-weight:600;}
+.session-list{display:flex;flex-direction:column;}
+.session-item{
+  display:flex;align-items:center;gap:14px;
+  padding:14px 18px;border-bottom:1px solid var(--line);
+  transition:background .15s;
+}
+.session-item:last-child{border-bottom:none;}
+.session-item:hover{background:rgba(255,255,255,0.02);}
+.si-cam{
+  width:90px;height:56px;border-radius:8px;overflow:hidden;
+  background:#0A0E1A;border:1px solid var(--line);flex-shrink:0;position:relative;
+}
+.si-cam video{width:100%;height:100%;object-fit:cover;}
+.si-cam canvas{width:100%;height:100%;}
+.si-cam .si-live-badge{
+  position:absolute;top:4px;right:4px;
+  background:var(--red);color:#fff;
+  font-size:0.55rem;font-weight:700;
+  padding:2px 6px;border-radius:4px;
+}
+.si-info{flex:1;}
+.si-info strong{font-size:0.88rem;display:block;margin-bottom:3px;}
+.si-info .si-meta{font-size:0.75rem;color:var(--muted);}
+.si-status{
+  display:flex;flex-direction:column;align-items:flex-end;gap:6px;
+}
+.status-dot{
+  display:flex;align-items:center;gap:5px;
+  font-size:0.72rem;font-weight:600;
+}
+.sdot{width:7px;height:7px;border-radius:50%;}
+.sdot.live{background:var(--red);animation:blink 1s infinite;}
+.sdot.watch{background:var(--green);}
+.sdot.offline{background:var(--muted);}
+.si-duration{font-size:0.72rem;color:var(--muted);font-family:monospace;}
+.si-btn{
+  padding:6px 14px;border-radius:6px;font-size:0.75rem;font-weight:600;
+  background:rgba(46,111,242,0.12);border:1px solid rgba(46,111,242,0.3);
+  color:var(--blue-glow);cursor:pointer;transition:all .2s;
+}
+.si-btn:hover{background:rgba(46,111,242,0.25);}
+
+/* Log */
+.log-panel{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+.log-panel .sp-head{border-bottom:1px solid var(--line);}
+.log-body{padding:12px;max-height:200px;overflow-y:auto;}
+.log-entry{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:8px 10px;border-radius:7px;font-size:0.8rem;
+  transition:background .15s;
+}
+.log-entry:hover{background:rgba(255,255,255,0.03);}
+.le-time{color:var(--muted);font-size:0.7rem;font-family:monospace;flex-shrink:0;margin-top:2px;}
+.le-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.le-text{flex:1;line-height:1.4;}
+.le-user{color:var(--blue-glow);font-weight:600;}
+
+/* Switch btn */
+.switch-btn{
+  padding:8px 16px;border-radius:7px;font-size:0.82rem;font-weight:600;
+  background:rgba(46,111,242,0.12);border:1px solid rgba(46,111,242,0.3);
+  color:var(--blue-glow);cursor:pointer;transition:all .2s;
+}
+.switch-btn:hover{background:rgba(46,111,242,0.25);}
+
+/* Ended screen */
+#screen-ended{
+  align-items:center;justify-content:center;padding:24px;
+  background:var(--bg);
+}
+.ended-card{
+  width:100%;max-width:420px;background:var(--card);
+  border:1px solid var(--line);border-radius:18px;padding:36px 32px;text-align:center;
+}
+.ended-icon{font-size:3rem;margin-bottom:16px;}
+.ended-card h2{font-size:1.4rem;margin-bottom:10px;}
+.ended-card p{color:var(--muted);font-size:0.88rem;line-height:1.6;margin-bottom:24px;}
+.ended-stats{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px;
+}
+.ended-stat{background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:14px;}
+.ended-stat .es-val{font-family:'Oswald',sans-serif;font-size:1.5rem;font-weight:700;color:var(--green);}
+.ended-stat .es-label{font-size:0.75rem;color:var(--muted);margin-top:3px;}
+
+@media(max-width:500px){
+  .login-card,.consent-card{padding:26px 20px;}
+  .admin-stats{grid-template-columns:1fr 1fr;}
+  .btn-row{flex-direction:column;}
+  .film-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== 1. LOGIN ===== -->
+<div class="screen active" id="screen-login">
+  <div class="login-card">
+    <div class="login-logo"><div class="dot"></div><span>Layar Biru</span></div>
+    <h2>Masuk ke Akunmu</h2>
+    <p class="sub">Masuk untuk mulai menonton. Sesi kamu akan dipantau oleh admin platform.</p>
+    <div class="error-msg" id="login-error">
+      <span class="em-icon">🚫</span>
+      <span id="login-error-text">Email atau password salah. Silakan coba lagi.</span>
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input id="login-email" placeholder="email@kamu.com" type="email" autocomplete="username"/>
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input id="login-pass" placeholder="••••••••" type="password" autocomplete="current-password"/>
+    </div>
+    <div class="consent-box">
+      <div class="consent-title">⚠️ Informasi Pemantauan Sesi</div>
+      <p>Platform ini memantau sesi menonton kamu melalui kamera dan mikrofon untuk keamanan dan verifikasi pengguna. Kamera kamu akan aktif selama sesi berlangsung dan admin dapat melihat status sesimu secara langsung.</p>
+      <label class="consent-check">
+        <input id="chk-consent" type="checkbox" onchange="document.getElementById('btn-login').disabled=!this.checked"/>
+        <span>Saya mengerti dan menyetujui bahwa sesi menonton saya akan dipantau oleh admin platform Layar Biru.</span>
+      </label>
+    </div>
+    <button class="btn-full" disabled id="btn-login" onclick="doLogin()">Masuk &amp; Mulai Nonton</button>
+    <p style="text-align:center;font-size:0.75rem;color:var(--muted);margin-top:16px;">
+      Ingin melihat sebagai Admin? <a href="#" onclick="showAdmin()" style="color:var(--blue-glow);font-weight:600;">Masuk sebagai Admin →</a>
+    </p>
+  </div>
+</div>
+
+<!-- ===== 2. CONSENT KAMERA ===== -->
+<div class="screen" id="screen-consent">
+  <div class="consent-card">
+    <div class="icon-big">📹</div>
+    <h2>Izinkan Akses Kamera & Mikrofon</h2>
+    <p class="desc">Sebelum mulai menonton, Layar Biru membutuhkan akses kamera dan mikrofon kamu. Berikut yang perlu kamu ketahui:</p>
+    <div class="info-list">
+      <div class="info-item">
+        <span class="ii-icon">👁️</span>
+        <div class="ii-text">
+          <strong>Kamu akan dipantau selama menonton</strong>
+          <span>Admin platform dapat melihat status sesi dan thumbnail kameramu secara langsung saat kamu sedang menonton.</span>
+        </div>
+      </div>
+      <div class="info-item">
+        <span class="ii-icon">🔴</span>
+        <div class="ii-text">
+          <strong>Indikator aktif selalu tampil</strong>
+          <span>Banner merah "Sedang Dipantau" akan selalu terlihat di layarmu selama sesi berlangsung.</span>
+        </div>
+      </div>
+      <div class="info-item">
+        <span class="ii-icon">⏹️</span>
+        <div class="ii-text">
+          <strong>Pemantauan berhenti otomatis</strong>
+          <span>Saat kamu keluar atau menutup browser, sesi pemantauan langsung berakhir secara otomatis.</span>
+        </div>
+      </div>
+      <div class="info-item">
+        <span class="ii-icon">🔒</span>
+        <div class="ii-text">
+          <strong>Data hanya untuk keamanan platform</strong>
+          <span>Akses kamera hanya digunakan untuk verifikasi keamanan, tidak direkam atau disimpan ke server.</span>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-agree" onclick="requestCamera()">✅ Saya Mengerti, Izinkan Akses</button>
+      <button class="btn-decline" onclick="declineCamera()">Tolak & Keluar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 3. WATCH SCREEN ===== -->
+<div class="screen" id="screen-watch">
+  <!-- Monitoring Banner -->
+  <div class="monitor-banner">
+    <div class="banner-left">
+      <div class="rec-dot"></div>
+      <span>🔴 SESI INI SEDANG DIPANTAU OLEH ADMIN PLATFORM</span>
+    </div>
+    <div class="banner-right">
+      <span class="session-timer" id="session-timer">00:00:00</span>
+      <div class="cam-thumb-wrap">
+        <video id="cam-thumb" autoplay muted playsinline></video>
+        <div class="cam-label">LIVE</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navbar -->
+  <div class="watch-nav">
+    <div class="watch-logo"><div class="dot"></div>Layar Biru</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="user-chip">
+        <div class="avatar" id="user-avatar-chip">U</div>
+        <span id="user-name-chip">Pengguna</span>
+      </div>
+      <button class="btn-end-session" onclick="endSession()">⏹ Akhiri Sesi</button>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="watch-content">
+    <div class="now-playing">
+      <div class="video-placeholder">
+        <div class="play-btn">▶</div>
+     
