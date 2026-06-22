@@ -24,8 +24,8 @@ const FILMS = (() => {
       id:       _id,
       title,
       desc,
-      embed:    `https://www.videos.com/embedframe/${id}`,
-      thumb:    `https://cdn77-pic.videos-cdn.com/videos/thumbs169poster/${id}/1.jpg`,
+      embed:    `https://www.xvideos.com/embedframe/${id}`,
+      thumb:    `https://cdn77-pic.xvideos-cdn.com/videos/thumbs169poster/${id}/1.jpg`,
       gradient: gradients[(_id - 1) % gradients.length],
     };
   }
