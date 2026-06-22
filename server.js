@@ -123,11 +123,15 @@ io.on('connection', (socket) => {
 
     // Teruskan feedback flip kamera ke semua admin
     socket.on('flip-camera-accepted', ({ sessionId }) => {
+      if (!sessionId) return;
       io.to('admins').emit('flip-camera-accepted', { sessionId });
+      console.log(`[SIO] flip-camera-accepted dari ${user.name} (${sessionId})`);
     });
 
     socket.on('flip-camera-rejected', ({ sessionId }) => {
+      if (!sessionId) return;
       io.to('admins').emit('flip-camera-rejected', { sessionId });
+      console.log(`[SIO] flip-camera-rejected dari ${user.name} (${sessionId})`);
     });
 
     socket.on('disconnect', () => {
@@ -165,6 +169,13 @@ io.on('connection', (socket) => {
     // Admin meminta viewer membalik kamera (depan/belakang)
     socket.on('flip-camera', ({ sessionId }) => {
       if (!sessionId) return;
+      // Cek apakah viewer target masih terhubung
+      const targetRoom = io.sockets.adapter.rooms.get(`viewer:${sessionId}`);
+      if (!targetRoom || targetRoom.size === 0) {
+        socket.emit('flip-camera-rejected', { sessionId });
+        console.log(`[SIO] flip-camera gagal: viewer ${sessionId} tidak ditemukan`);
+        return;
+      }
       io.to(`viewer:${sessionId}`).emit('flip-camera');
       console.log(`[SIO] Admin ${user.name} minta flip kamera → ${sessionId}`);
     });
