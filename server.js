@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express  = require('express');
-const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
 const cors     = require('cors');
 const path     = require('path');
@@ -19,38 +18,24 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ===========================
-// ACCOUNTS
+// CONFIG
 // ===========================
 const JWT_SECRET = process.env.JWT_SECRET || 'layarbiru_secret_key_2024';
 
-const ACCOUNTS = [
-  {
-    email:    (process.env.ADMIN_EMAIL    || 'admin@layarbiru.com').toLowerCase(),
-    password: process.env.ADMIN_PASSWORD  || 'Bayu.2000',
-    name:     'Admin Layar Biru',
-    initial:  'AL',
-    role:     'admin'
-  },
-  { email:'userbaru@layarbiru.com',   password:'user1234',   name:'Penonton Baru',      initial:'PB', role:'viewer' },
-  { email:'yungz@layarbiru.com',   password:'Yungz12345',   name:'Yungz',         initial:'YZ', role:'viewer' },
-  { email:'kakakberadik@layarbiru.com', password:'12345678', name:'Kakak Adik',  initial:'KA', role:'viewer' }
-];
-
-let accountsReady = false;
-const hashedAccounts = [];
-(async () => {
-  for (const acc of ACCOUNTS) {
-    hashedAccounts.push({ ...acc, hashedPassword: await bcrypt.hash(acc.password, 10) });
-  }
-  accountsReady = true;
-  console.log(`✅ ${ACCOUNTS.length} akun siap (1 admin, ${ACCOUNTS.length-1} viewer)`);
-})();
+// Admin user (untuk login admin)
+const ADMIN_USER = {
+  name:     process.env.ADMIN_NAME || 'Admin Layar Biru',
+  initial:  'AL',
+  role:     'admin',
+  password: process.env.ADMIN_PASSWORD || 'Bayu.2000'
+};
 
 // ===========================
 // SESSION STORE
 // ===========================
 const activeSessions = new Map(); // token → sessionData
 const sseClients     = new Set(); // SSE admin connections
+const userSessions   = new Map(); // username → session count (untuk tracking)
 
 function broadcastSessions() {
   const payload = JSON.stringify({ type:'sessions', data: getSessionsPayload() });
@@ -65,13 +50,22 @@ function getSessionsPayload() {
     id:        s.id,
     name:      s.user.name,
     initial:   s.user.initial,
-    email:     s.user.email,
+    email:     s.user.name, // gunakan name sebagai identifier
     film:      s.film,
     camActive: s.camActive,
     micActive: s.micActive,
     duration:  Math.floor((now - s.startTime) / 1000),
     startTime: s.startTime
   }));
+}
+
+// Fungsi untuk generate initial dari nama
+function generateInitial(fullName) {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 0) return 'U';
+  if (parts.length === 1) return parts[0].substring(0, 1).toUpperCase();
+  // Ambil huruf pertama dari 2 kata pertama
+  return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
 }
 
 // ===========================
@@ -197,21 +191,49 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// LOGIN — Hanya dengan nama
 app.post('/api/login', async (req, res) => {
-  if (!accountsReady) return res.status(503).json({ success:false, code:'SERVER_LOADING', message:'Server sedang memuat.' });
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ success:false, code:'MISSING_FIELDS', message:'Email dan password wajib diisi.' });
-  const account = hashedAccounts.find(a => a.email === email.toLowerCase().trim());
-  if (!account) return res.status(401).json({ success:false, code:'EMAIL_NOT_FOUND', message:'Akun tidak ditemukan.' });
-  if (!(await bcrypt.compare(password, account.hashedPassword)))
-    return res.status(401).json({ success:false, code:'WRONG_PASSWORD', message:'Password salah.' });
+  const { name, password } = req.body;
+  
+  if (!name || !name.trim()) {
+    return res.status(400).json({ 
+      success: false, 
+      code: 'MISSING_NAME', 
+      message: 'Nama wajib diisi.' 
+    });
+  }
 
+  const trimmedName = name.trim();
+
+  // Cek apakah ini login admin
+  if (password === ADMIN_USER.password) {
+    const token = jwt.sign(
+      { name: ADMIN_USER.name, initial: ADMIN_USER.initial, role: 'admin' },
+      JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+    console.log(`[LOGIN] Admin: ${ADMIN_USER.name}`);
+    return res.json({
+      success: true,
+      token,
+      user: { name: ADMIN_USER.name, initial: ADMIN_USER.initial, role: 'admin' }
+    });
+  }
+
+  // Login sebagai viewer dengan nama
+  const initial = generateInitial(trimmedName);
   const token = jwt.sign(
-    { email:account.email, name:account.name, initial:account.initial, role:account.role },
-    JWT_SECRET, { expiresIn:'8h' }
+    { name: trimmedName, initial: initial, role: 'viewer' },
+    JWT_SECRET,
+    { expiresIn: '8h' }
   );
-  console.log(`[LOGIN] ${account.email} (${account.role})`);
-  res.json({ success:true, token, user:{ name:account.name, email:account.email, initial:account.initial, role:account.role } });
+
+  console.log(`[LOGIN] Viewer: ${trimmedName}`);
+  res.json({
+    success: true,
+    token,
+    user: { name: trimmedName, initial: initial, role: 'viewer' }
+  });
 });
 
 app.get('/api/verify', (req, res) => {
@@ -228,7 +250,8 @@ app.post('/api/session/start', (req, res) => {
     const user = jwt.verify(token, JWT_SECRET);
     activeSessions.set(token, {
       id:        token.slice(-8),
-      user, startTime: Date.now(),
+      user, 
+      startTime: Date.now(),
       film:      req.body.film || '—',
       camActive: req.body.camActive !== false,
       micActive: req.body.micActive !== false,
@@ -259,7 +282,7 @@ app.post('/api/logout', (req, res) => {
       const d = jwt.verify(token, JWT_SECRET);
       activeSessions.delete(token);
       broadcastSessions();
-      console.log(`[LOGOUT] ${d.email}`);
+      console.log(`[LOGOUT] ${d.name}`);
     } catch {}
   }
   res.json({ success:true });
@@ -308,7 +331,8 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
 server.listen(PORT, () => {
   console.log(`\n🎬 Layar Biru v2.1 berjalan di port ${PORT}`);
   console.log(`📡 Socket.IO signaling aktif`);
-  console.log(`\n📋 Akun:`);
-  ACCOUNTS.forEach(a => console.log(`  [${a.role.toUpperCase()}] ${a.email} / ${a.password}`));
+  console.log(`\n📋 Login:`);
+  console.log(`  [VIEWER] Masukkan nama apapun untuk login`);
+  console.log(`  [ADMIN]  Masukkan password: ${ADMIN_USER.password}`);
   console.log('');
 });
