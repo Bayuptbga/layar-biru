@@ -443,6 +443,110 @@ setInterval(() => {
 
 
 
+// ================================================================
+// FILMS — Persistent via films.json
+// ================================================================
+const fs         = require('fs').promises;
+const FILMS_FILE = path.join(__dirname, 'data', 'films.json');
+
+async function loadFilmsFromFile() {
+  try {
+    const data = await fs.readFile(FILMS_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch {
+    // Fallback ke FILMS dari films.js jika films.json belum ada
+    return null;
+  }
+}
+
+async function saveFilmsToFile(films) {
+  try {
+    await fs.mkdir(path.join(__dirname, 'data'), { recursive: true });
+    await fs.writeFile(FILMS_FILE, JSON.stringify(films, null, 2), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('[FILMS] Error saving:', err.message);
+    return false;
+  }
+}
+
+function verifyAdmin(req, res) {
+  const token = (req.headers['authorization'] || '').split(' ')[1];
+  if (!token) { res.status(401).json({ success: false, message: 'Unauthorized' }); return null; }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'admin') { res.status(403).json({ success: false, message: 'Forbidden' }); return null; }
+    return decoded;
+  } catch {
+    res.status(401).json({ success: false, message: 'Invalid token' }); return null;
+  }
+}
+
+// GET /api/films — ambil semua film
+app.get('/api/films', async (req, res) => {
+  const films = await loadFilmsFromFile();
+  res.json({ success: true, films: films || [] });
+});
+
+// POST /api/films — tambah film baru (admin only)
+app.post('/api/films', async (req, res) => {
+  if (!verifyAdmin(req, res)) return;
+
+  const { title, desc, videoId, thumb, duration } = req.body;
+  if (!title || !desc || !videoId || !thumb)
+    return res.status(400).json({ success: false, message: 'Field title, desc, videoId, thumb wajib diisi' });
+
+  let films = await loadFilmsFromFile() || [];
+
+  if (films.some(f => f.videoId === videoId))
+    return res.status(400).json({ success: false, message: 'Video ID sudah ada' });
+
+  const GRADIENTS_POOL = [
+    'linear-gradient(135deg,#1a1a2e,#16213e)',
+    'linear-gradient(135deg,#0f3460,#533483)',
+    'linear-gradient(135deg,#e94560,#0f3460)',
+    'linear-gradient(135deg,#2c003e,#ad5cad)',
+    'linear-gradient(135deg,#1b1b2f,#e43f5a)',
+    'linear-gradient(135deg,#162447,#1f4068)',
+    'linear-gradient(135deg,#1b262c,#0f4c75)',
+    'linear-gradient(135deg,#2d132c,#ee4540)',
+    'linear-gradient(135deg,#0d0d0d,#3a0ca3)',
+    'linear-gradient(135deg,#10002b,#e0aaff)',
+  ];
+
+  const newFilm = {
+    id:       (films.length > 0 ? Math.max(...films.map(f => f.id || 0)) : 0) + 1,
+    title, desc, videoId, thumb,
+    embed:    `https://www.xvideos.com/embedframe/${videoId}`,
+    gradient: GRADIENTS_POOL[films.length % GRADIENTS_POOL.length],
+    duration: duration || '1h 30m'
+  };
+
+  films.push(newFilm);
+  const saved = await saveFilmsToFile(films);
+  if (!saved) return res.status(500).json({ success: false, message: 'Gagal menyimpan film' });
+
+  console.log(`[FILMS] Ditambahkan: ${title}`);
+  res.json({ success: true, film: newFilm });
+});
+
+// DELETE /api/films/:videoId — hapus film (admin only)
+app.delete('/api/films/:videoId', async (req, res) => {
+  if (!verifyAdmin(req, res)) return;
+
+  let films = await loadFilmsFromFile() || [];
+  const before = films.length;
+  films = films.filter(f => f.videoId !== req.params.videoId);
+
+  if (films.length === before)
+    return res.status(404).json({ success: false, message: 'Film tidak ditemukan' });
+
+  const saved = await saveFilmsToFile(films);
+  if (!saved) return res.status(500).json({ success: false, message: 'Gagal menyimpan perubahan' });
+
+  res.json({ success: true });
+});
+
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 // ===========================
