@@ -817,6 +817,7 @@ async function startWatchSession() {
   document.getElementById('user-avatar-chip').textContent = currentUser.initial;
 
   showScreen('screen-watch');
+  await loadFilmsFromAPI();
   renderFilmGrid();
   addAdminLog(currentUser.name, 'mulai sesi menonton, kamera + mikrofon aktif', '#4ADE80', 'connect');
 
@@ -1468,10 +1469,114 @@ function selectFilm(film) {
   addAdminLog(currentUser?.name || 'User', `Menonton: ${film.title}`, '#2E6FF2', 'info');
 }
 
-// Add video baru
+// ================================================================
+// ADD FILM — Modal
+// ================================================================
 
-// Delete video
+const GRADIENTS_POOL = [
+  'linear-gradient(135deg,#1a1a2e,#16213e)',
+  'linear-gradient(135deg,#0f3460,#533483)',
+  'linear-gradient(135deg,#e94560,#0f3460)',
+  'linear-gradient(135deg,#2c003e,#ad5cad)',
+  'linear-gradient(135deg,#1b1b2f,#e43f5a)',
+  'linear-gradient(135deg,#162447,#1f4068)',
+  'linear-gradient(135deg,#1b262c,#0f4c75)',
+  'linear-gradient(135deg,#2d132c,#ee4540)',
+  'linear-gradient(135deg,#0d0d0d,#3a0ca3)',
+  'linear-gradient(135deg,#10002b,#e0aaff)',
+];
 
-// Show status message
+// Load films dari server, fallback ke FILMS dari films.js
+async function loadFilmsFromAPI() {
+  try {
+    const res  = await fetch(`${API_BASE}/api/films`);
+    const data = await res.json();
+    if (data.success && Array.isArray(data.films) && data.films.length > 0) {
+      FILMS.length = 0;
+      data.films.forEach(f => FILMS.push(f));
+    }
+    // Kalau films.json kosong → tetap pakai FILMS dari films.js
+  } catch (err) {
+    console.warn('[FILMS] Gagal load dari server, pakai films.js:', err.message);
+  }
+}
+
+function openAddFilmModal() {
+  document.getElementById('af-title').value   = '';
+  document.getElementById('af-desc').value    = '';
+  document.getElementById('af-videoid').value = '';
+  document.getElementById('af-thumb').value   = '';
+  document.getElementById('af-error').style.display  = 'none';
+  document.getElementById('af-thumb-preview').style.display = 'none';
+  document.getElementById('modal-add-film').classList.add('active');
+
+  document.getElementById('af-thumb').oninput = function () {
+    const url     = this.value.trim();
+    const preview = document.getElementById('af-thumb-preview');
+    const img     = document.getElementById('af-thumb-img');
+    if (url.startsWith('http')) {
+      img.src = url;
+      preview.style.display = 'block';
+      img.onerror = () => { preview.style.display = 'none'; };
+    } else {
+      preview.style.display = 'none';
+    }
+  };
+}
+
+function closeAddFilmModal() {
+  document.getElementById('modal-add-film').classList.remove('active');
+}
+
+async function submitAddFilm() {
+  const title   = document.getElementById('af-title').value.trim();
+  const desc    = document.getElementById('af-desc').value.trim();
+  const videoId = document.getElementById('af-videoid').value.trim();
+  const thumb   = document.getElementById('af-thumb').value.trim();
+  const errEl   = document.getElementById('af-error');
+  const btn     = document.getElementById('af-submit-btn');
+
+  errEl.style.display = 'none';
+
+  if (!title || !desc || !videoId || !thumb) {
+    errEl.textContent = 'Semua field wajib diisi.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Menyimpan...';
+
+  try {
+    const res  = await fetch(`${API_BASE}/api/films`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+      body:    JSON.stringify({ title, desc, videoId, thumb })
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      errEl.textContent = data.message || 'Gagal menyimpan film.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    FILMS.push(data.film);
+    renderFilmGrid();
+    closeAddFilmModal();
+    addAdminLog('Admin', `Film ditambahkan: ${title}`, '#5B8CFF', 'info');
+
+  } catch (err) {
+    errEl.textContent = 'Tidak bisa terhubung ke server.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Tambah Film';
+  }
+}
+
+document.getElementById('modal-add-film')?.addEventListener('click', function (e) {
+  if (e.target === this) closeAddFilmModal();
+});
 
 
