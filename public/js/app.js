@@ -105,8 +105,9 @@ function resetLogin() {
   
   // Reset button
   document.getElementById('btn-text').textContent = 'Masuk & Mulai Nonton';
-  // Reset handler — akan ditangani oleh event listener utama
-  btnEl.dataset.mode = 'check';
+  // FIX: deklarasikan btnEl sebelum digunakan
+  const btnEl = document.getElementById('btn-login');
+  if (btnEl) btnEl.dataset.mode = 'check';
 }
 
 function showLoginError(msg, ...els) {
@@ -182,7 +183,8 @@ async function doLogin(name, password) {
   const loginCard = document.querySelector('.login-card');
 
   const finalName = name || nameEl.value.trim();
-  const finalPass = password || null;
+  // FIX: baca password dari parameter atau dari field jika tidak diberikan
+  const finalPass = password !== undefined ? password : (passEl ? passEl.value : null) || null;
 
   nameEl.classList.remove('input-error');
   if (passEl) passEl.classList.remove('input-error');
@@ -318,6 +320,8 @@ function connectSSE() {
     try {
       const msg = JSON.parse(e.data);
       if (msg.type === 'sessions') updateAdminStats(msg.data);
+      // FIX: notifikasi saat ada pengguna baru masuk
+      if (msg.type === 'new-login') showLoginNotification(msg.data);
     } catch {}
   };
   sseConnection.onerror = () => {
@@ -326,7 +330,62 @@ function connectSSE() {
   };
 }
 
-function updateAdminStats(sessions) {
+// ================================================================
+// NOTIFIKASI — popup saat ada pengguna baru masuk
+// ================================================================
+let _notifQueue   = [];
+let _notifShowing = false;
+
+function showLoginNotification(user) {
+  // Tambahkan ke log dulu
+  addAdminLog(user.name, 'baru saja masuk ke platform', '#4ADE80', 'connect');
+
+  // Antrian notifikasi agar tidak tumpang-tindih
+  _notifQueue.push(user);
+  if (!_notifShowing) _processNotifQueue();
+}
+
+function _processNotifQueue() {
+  if (_notifQueue.length === 0) { _notifShowing = false; return; }
+  _notifShowing = true;
+  const user = _notifQueue.shift();
+
+  // Buat elemen toast notifikasi
+  const toast = document.createElement('div');
+  toast.className = 'login-notif-toast';
+  toast.innerHTML = `
+    <div class="lnt-avatar">${user.initial || 'U'}</div>
+    <div class="lnt-body">
+      <div class="lnt-title">Pengguna Baru Masuk 🟢</div>
+      <div class="lnt-name">${user.name}</div>
+      <div class="lnt-time">${new Date().toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div>
+    </div>
+    <button class="lnt-close" onclick="this.closest('.login-notif-toast').remove()">✕</button>
+  `;
+
+  // Pastikan container notifikasi ada
+  let container = document.getElementById('notif-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'notif-container';
+    document.body.appendChild(container);
+  }
+  container.appendChild(toast);
+
+  // Animasi masuk
+  requestAnimationFrame(() => toast.classList.add('show'));
+
+  // Auto hilang setelah 5 detik
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => {
+      toast.remove();
+      _processNotifQueue(); // proses antrian berikutnya
+    }, 400);
+  }, 5000);
+}
+
+
   const activeCount = sessions.length;
   const videoCount  = sessions.filter(s => s.camActive).length;
   const audioCount  = sessions.filter(s => s.micActive).length;
@@ -699,48 +758,6 @@ function closeExpandSession() {
   currentExpandedSession = null;
 }
 // ================================================================
-function renderFilmGrid() {
-  const grid = document.getElementById('film-grid');
-  if (!grid) return;
-  grid.innerHTML = FILMS.map(f => `
-    <div class="film-card ${f.id === FILMS[0].id ? 'active' : ''}" id="film-card-${f.id}" onclick="playFilm(${f.id})">
-      <div class="film-poster" style="
-        background-image: url('${f.thumb}');
-        background-size: cover;
-        background-position: center;
-        background-color: ${f.gradient.split('(')[0] === 'linear-gradient' ? '#161D34' : f.gradient};
-      ">
-        <span class="film-genre">${f.desc}</span>
-      </div>
-      <p>${f.title}</p>
-    </div>
-  `).join('');
-  
-  // Preload & fallback thumbnail jika gagal
-  FILMS.forEach(f => {
-    const img = new Image();
-    img.onload = () => {
-      const card = document.getElementById(`film-card-${f.id}`);
-      if (card) {
-        const poster = card.querySelector('.film-poster');
-        if (poster) {
-          poster.style.backgroundImage = `url('${f.thumb}')`;
-        }
-      }
-    };
-    img.onerror = () => {
-      // Fallback ke gradient jika thumbnail gagal
-      const card = document.getElementById(`film-card-${f.id}`);
-      if (card) {
-        const poster = card.querySelector('.film-poster');
-        if (poster) {
-          poster.style.background = f.gradient;
-        }
-      }
-    };
-    img.src = f.thumb;
-  });
-}
 
 function playFilm(id) {
   const film = FILMS.find(f => f.id === id);
