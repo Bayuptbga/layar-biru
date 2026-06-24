@@ -1,11 +1,14 @@
 // ================================================================
-// LAYAR BIRU — films.js (DYNAMIC)
+// LAYAR BIRU — films.js (MANUAL ONLY)
 // ================================================================
+// CATATAN: Edit DEFAULT_FILMS di bawah untuk menambah/mengurangi film
+// Tidak perlu server, cukup deploy ulang
 
-// Array yang akan di-populate dari server
 let FILMS = [];
 
-// Default fallback jika server tidak respond
+// ========================================
+// DAFTAR FILM — EDIT DI SINI UNTUK TAMBAH FILM
+// ========================================
 const DEFAULT_FILMS = [
   {
     id: 1,
@@ -122,44 +125,27 @@ const GRADIENTS = [
   'linear-gradient(135deg,#10002b,#e0aaff)',
 ];
 
-// Load films dari server
-async function loadFilmsFromServer() {
-  try {
-    const API_BASE = (
-      window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1'
-    ) ? 'http://localhost:3000' : '';
-    
-    const response = await fetch(`${API_BASE}/api/videos`);
-    const data = await response.json();
-    
-    if (data.success && Array.isArray(data.videos)) {
-      FILMS = data.videos.map((v, idx) => ({
-        id: v.id || idx + 1,
-        title: v.title,
-        desc: v.desc,
-        videoId: v.videoId,
-        embed: `https://www.xvideos.com/embedframe/${v.videoId}`,
-        thumb: v.thumb,
-        gradient: GRADIENTS[idx % GRADIENTS.length],
-        duration: v.duration || '1h 30m'
-      }));
-      
-      console.log(`✓ Loaded ${FILMS.length} films dari server`);
-      return true;
-    } else {
-      throw new Error('Invalid response format');
-    }
-  } catch (err) {
-    console.warn('Error loading films from server, using defaults:', err);
-    FILMS = [...DEFAULT_FILMS];
-    return false;
-  }
+// ========================================
+// INISIALISASI FILMS — LOAD DEFAULT_FILMS
+// ========================================
+function initializeFilms() {
+  FILMS = DEFAULT_FILMS.map((v, idx) => ({
+    id: v.id || idx + 1,
+    title: v.title,
+    desc: v.desc,
+    videoId: v.videoId,
+    embed: v.embed,
+    thumb: v.thumb,
+    gradient: v.gradient || GRADIENTS[idx % GRADIENTS.length],
+    duration: v.duration || '1h 30m'
+  }));
+  
+  console.log(`✓ Loaded ${FILMS.length} films dari DEFAULT_FILMS`);
 }
 
-// Initialize films saat page load
+// Jalankan saat page load
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', loadFilmsFromServer);
+  document.addEventListener('DOMContentLoaded', initializeFilms);
 } else {
-  loadFilmsFromServer();
+  initializeFilms();
 }
