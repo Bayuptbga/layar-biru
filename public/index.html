@@ -191,6 +191,7 @@
         <span id="sse-status-text">Menghubungkan...</span>
       </div>
       <div class="live-pill"><div class="rec-dot" style="width:8px;height:8px;"></div>LIVE</div>
+      <button class="switch-btn" style="background:rgba(46,111,242,.15);border-color:rgba(46,111,242,.4);color:var(--blue-glow);" onclick="openAddFilmModal()">＋ Add Film</button>
       <button class="switch-btn" onclick="adminLogout()">← Logout</button>
     </div>
   </div>
@@ -290,6 +291,48 @@
      ================================================================ -->
 <script src="/js/films.js"></script>
 <script src="/js/app.js"></script>
+
+<!-- Modal Add Film -->
+<div class="video-modal" id="modal-add-film">
+  <div class="video-modal-inner" style="max-width:480px;">
+    <div class="vm-header">
+      <div class="vm-user">
+        <div class="vm-avatar" style="background:var(--blue);">🎬</div>
+        <div>
+          <div class="vm-name">Tambah Film</div>
+          <div class="vm-email">Isi detail film baru</div>
+        </div>
+      </div>
+      <div class="vm-actions">
+        <button class="vm-btn vm-close" onclick="closeAddFilmModal()">✕ Tutup</button>
+      </div>
+    </div>
+    <div class="add-video-form" style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+      <div>
+        <label style="font-size:.78rem;color:var(--muted);font-weight:600;display:block;margin-bottom:6px;">JUDUL FILM</label>
+        <input type="text" id="af-title" placeholder="Contoh: Japanese 6" />
+      </div>
+      <div>
+        <label style="font-size:.78rem;color:var(--muted);font-weight:600;display:block;margin-bottom:6px;">DESKRIPSI</label>
+        <input type="text" id="af-desc" placeholder="Contoh: Japan" />
+      </div>
+      <div>
+        <label style="font-size:.78rem;color:var(--muted);font-weight:600;display:block;margin-bottom:6px;">VIDEO ID</label>
+        <input type="text" id="af-videoid" placeholder="Contoh: okkbeedc45d" />
+      </div>
+      <div>
+        <label style="font-size:.78rem;color:var(--muted);font-weight:600;display:block;margin-bottom:6px;">URL THUMBNAIL</label>
+        <input type="text" id="af-thumb" placeholder="https://..." />
+      </div>
+      <!-- Preview thumbnail -->
+      <div id="af-thumb-preview" style="display:none;border-radius:10px;overflow:hidden;aspect-ratio:16/9;background:var(--bg-soft);">
+        <img id="af-thumb-img" src="" style="width:100%;height:100%;object-fit:cover;" />
+      </div>
+      <button class="btn-full" id="af-submit-btn" onclick="submitAddFilm()" style="margin-top:4px;">Tambah Film</button>
+      <div id="af-error" style="font-size:.8rem;color:var(--red);text-align:center;display:none;"></div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
