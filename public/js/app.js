@@ -61,6 +61,7 @@ function deleteCookie(name) {
 }
 
 let authToken = getCookie('lb_token') || sessionStorage.getItem('lb_token') || null;
+let isLoggingIn = false; // guard agar login tidak double
 let adminLogs             = [];
 let mySessionId           = null;
 let socket                = null;
@@ -91,6 +92,7 @@ function showScreen(id) {
 }
 
 function resetLogin() {
+  isLoggingIn = false;
   document.getElementById('login-name').value             = '';
   document.getElementById('login-pass').value             = '';
   document.getElementById('chk-consent').checked          = false;
@@ -177,6 +179,9 @@ async function checkAndLogin() {
 
 // TAHAP 2: Lakukan login
 async function doLogin(name, password) {
+  if (isLoggingIn) return; // guard double call
+  isLoggingIn = true;
+
   const nameEl    = document.getElementById('login-name');
   const passEl    = document.getElementById('login-pass');
   const btnEl     = document.getElementById('btn-login');
@@ -240,6 +245,7 @@ async function doLogin(name, password) {
 
       addAdminLog('Sistem', `Login gagal — ${finalName}`, '#F2716B', 'error');
       btnEl.disabled = !document.getElementById('chk-consent').checked;
+      isLoggingIn = false;
       return;
     }
 
@@ -247,6 +253,7 @@ async function doLogin(name, password) {
     currentUser = data.user;
     setCookie('lb_token', authToken, 8); sessionStorage.setItem('lb_token', authToken);
     addAdminLog('Sistem', `${currentUser.name} login sebagai ${currentUser.role}`, '#5B8CFF', 'login');
+    isLoggingIn = false;
 
     if (currentUser.role === 'admin') enterAdminDashboard();
     else showScreen('screen-consent');
@@ -255,6 +262,7 @@ async function doLogin(name, password) {
     btnEl.classList.remove('loading');
     btnText.textContent = originalText;
     btnEl.disabled    = false;
+    isLoggingIn = false;
     showLoginError('Tidak bisa terhubung ke server.', nameEl);
   }
 }
