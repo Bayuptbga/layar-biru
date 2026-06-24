@@ -270,8 +270,6 @@ function enterAdminDashboard() {
   addAdminLog(currentUser.name, 'membuka dashboard admin', '#A855F7', 'login');
   connectSSE();
   connectSocket_Admin();
-  // Load videos
-  setTimeout(() => initAdminVideos(), 500);
 }
 
 function adminLogout() {
@@ -1407,85 +1405,6 @@ window.addEventListener('pagehide', () => {
 // ADMIN — MANAGE VIDEOS
 // ================================================================
 
-// Load videos dari server
-async function loadVideos() {
-  try {
-    const response = await fetch(`${API_BASE}/api/videos`);
-    const data = await response.json();
-    
-    if (data.success && Array.isArray(data.videos)) {
-      // Update FILMS array dengan data dari server
-      FILMS.length = 0;
-      data.videos.forEach((video, idx) => {
-        const gradients = [
-          'linear-gradient(135deg,#1a1a2e,#16213e)',
-          'linear-gradient(135deg,#0f3460,#533483)',
-          'linear-gradient(135deg,#e94560,#0f3460)',
-          'linear-gradient(135deg,#2c003e,#ad5cad)',
-          'linear-gradient(135deg,#1b1b2f,#e43f5a)',
-          'linear-gradient(135deg,#162447,#1f4068)',
-          'linear-gradient(135deg,#1b262c,#0f4c75)',
-          'linear-gradient(135deg,#2d132c,#ee4540)',
-          'linear-gradient(135deg,#0d0d0d,#3a0ca3)',
-          'linear-gradient(135deg,#10002b,#e0aaff)',
-        ];
-        FILMS.push({
-          id: video.id || idx + 1,
-          title: video.title,
-          desc: video.desc,
-          videoId: video.videoId,
-          embed: `https://www.xvideos.com/embedframe/${video.videoId}`,
-          thumb: video.thumb,
-          gradient: gradients[idx % gradients.length],
-          duration: video.duration || '1h 30m'
-        });
-      });
-      
-      // Re-render film grid
-      renderFilmGrid();
-      
-      // Update video list di admin
-      renderVideoList(data.videos);
-      
-      addAdminLog('System', `Loaded ${data.videos.length} videos dari server`, '#5B8CFF', 'system');
-    }
-  } catch (err) {
-    console.error('Error loading videos:', err);
-    addAdminLog('System', 'Error loading videos: ' + err.message, '#F2716B', 'error');
-  }
-}
-
-// Render daftar video di admin
-function renderVideoList(videos) {
-  const container = document.getElementById('admin-video-list');
-  const countEl = document.getElementById('video-count');
-  
-  // Defensive check — jika element tidak ada, skip (element sudah dihapus dari UI)
-  if (!container) return;
-  
-  if (!videos || videos.length === 0) {
-    container.innerHTML = '<div style="padding:10px;color:var(--muted);font-size:.8rem;text-align:center;">Belum ada video</div>';
-    if (countEl) countEl.textContent = '0 video';
-    return;
-  }
-  
-  if (countEl) countEl.textContent = `${videos.length} video`;
-  
-  let html = '';
-  videos.forEach(v => {
-    html += `
-      <div class="log-entry" style="justify-content:space-between;">
-        <div style="flex:1;">
-          <div class="le-text" style="color:var(--text);font-size:.8rem;font-weight:600;">${v.title}</div>
-          <div class="le-text" style="color:var(--muted);font-size:.7rem;margin-top:2px;">${v.desc} • ID: <span style="font-family:monospace;">${v.videoId}</span></div>
-        </div>
-      </div>
-    `;
-  });
-  
-  container.innerHTML = html;
-}
-
 // Render film grid dari FILMS array
 function renderFilmGrid() {
   const grid = document.getElementById('film-grid');
@@ -1547,7 +1466,4 @@ function selectFilm(film) {
 
 // Show status message
 
-// Load videos saat admin masuk
-function initAdminVideos() {
-  loadVideos();
-}
+
