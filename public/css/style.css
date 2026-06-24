@@ -593,3 +593,99 @@ a { color: inherit; text-decoration: none; }
     margin: 6px;
   }
 }
+
+/* ================================================================
+   NOTIFIKASI LOGIN PENGGUNA — toast popup untuk admin dashboard
+   ================================================================ */
+#notif-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.login-notif-toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #161D34;
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  border-left: 4px solid #4ADE80;
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-width: 260px;
+  max-width: 320px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.55);
+  pointer-events: all;
+  transform: translateX(120%);
+  opacity: 0;
+  transition: transform .35s cubic-bezier(.22,1,.36,1), opacity .35s ease;
+}
+
+.login-notif-toast.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.lnt-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2E6FF2, #4ADE80);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .9rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.lnt-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.lnt-title {
+  font-size: .72rem;
+  color: #4ADE80;
+  font-weight: 600;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.lnt-name {
+  font-size: .88rem;
+  font-weight: 700;
+  color: #E9ECF6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lnt-time {
+  font-size: .7rem;
+  color: #8A91AC;
+  margin-top: 2px;
+}
+
+.lnt-close {
+  background: transparent;
+  border: none;
+  color: #8A91AC;
+  font-size: .85rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color .15s;
+}
+
+.lnt-close:hover {
+  color: #E9ECF6;
+}
