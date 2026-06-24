@@ -44,6 +44,22 @@ function broadcastSessions() {
   }
 }
 
+// Broadcast notifikasi pengguna baru login ke semua admin SSE
+function broadcastNewLogin(user) {
+  const payload = JSON.stringify({
+    type: 'new-login',
+    data: {
+      name:    user.name,
+      initial: user.initial,
+      role:    user.role,
+      time:    Date.now()
+    }
+  });
+  for (const res of sseClients) {
+    try { res.write(`data: ${payload}\n\n`); } catch {}
+  }
+}
+
 function getSessionsPayload() {
   const now = Date.now();
   return Array.from(activeSessions.values()).map(s => ({
@@ -272,6 +288,8 @@ app.post('/api/login', async (req, res) => {
   );
 
   console.log(`[LOGIN] Viewer: ${trimmedName}`);
+  // Notifikasi ke semua admin SSE bahwa ada pengguna baru masuk
+  broadcastNewLogin({ name: trimmedName, initial: initial, role: 'viewer' });
   res.json({
     success: true,
     token,
