@@ -306,6 +306,15 @@ app.post('/api/login', async (req, res) => {
 
   // Bukan admin - login sebagai viewer
   const initial = generateInitial(trimmedName);
+
+  // Cleanup sesi lama dengan nama yang sama agar tidak double card di admin
+  for (const [oldToken, s] of activeSessions) {
+    if (s.name && s.name.toLowerCase() === trimmedNameLower) {
+      activeSessions.delete(oldToken);
+      console.log(`[LOGIN] Sesi lama ${trimmedName} dihapus sebelum login ulang`);
+    }
+  }
+
   const token = jwt.sign(
     { name: trimmedName, initial: initial, role: 'viewer' },
     JWT_SECRET,
@@ -318,13 +327,13 @@ app.post('/api/login', async (req, res) => {
 
   // Kirim notifikasi Telegram ke admin
   const waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' });
-  const totalSesi = activeSessions.size;
+  const totalSesi = activeSessions.size + 1; // +1 karena sesi baru belum masuk activeSessions
   sendTelegramNotif(
 `🟢 <b>Pengguna Baru Masuk</b>
 
 👤 <b>Nama</b>    : ${trimmedName}
 🕐 <b>Waktu</b>   : ${waktu} WIB
-📊 <b>Sesi aktif</b>: ${totalSesi + 1} pengguna
+📊 <b>Sesi aktif</b>: ${totalSesi} pengguna
 
 — <i>Layar Biru Dashboard</i>`
   );
