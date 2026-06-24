@@ -270,8 +270,6 @@ function enterAdminDashboard() {
   addAdminLog(currentUser.name, 'membuka dashboard admin', '#A855F7', 'login');
   connectSSE();
   connectSocket_Admin();
-  // Minta izin notifikasi browser
-  requestBrowserNotifPermission();
   // Load videos
   setTimeout(() => initAdminVideos(), 500);
 }
@@ -352,7 +350,6 @@ function _processNotifQueue() {
   _notifShowing = true;
   const user = _notifQueue.shift();
 
-  // Buat elemen toast notifikasi (in-app)
   const toast = document.createElement('div');
   toast.className = 'login-notif-toast';
   toast.innerHTML = `
@@ -365,7 +362,6 @@ function _processNotifQueue() {
     <button class="lnt-close" onclick="this.closest('.login-notif-toast').remove()">✕</button>
   `;
 
-  // Pastikan container notifikasi ada
   let container = document.getElementById('notif-container');
   if (!container) {
     container = document.createElement('div');
@@ -374,10 +370,8 @@ function _processNotifQueue() {
   }
   container.appendChild(toast);
 
-  // Animasi masuk
   requestAnimationFrame(() => toast.classList.add('show'));
 
-  // Auto hilang setelah 5 detik
   setTimeout(() => {
     toast.classList.remove('show');
     setTimeout(() => {
@@ -385,51 +379,6 @@ function _processNotifQueue() {
       _processNotifQueue();
     }, 400);
   }, 5000);
-
-  // Kirim juga Browser Push Notification (muncul walau tab tidak aktif)
-  sendBrowserNotification(user);
-}
-
-// ================================================================
-// BROWSER NOTIFICATION API — notifikasi sistem Chrome
-// ================================================================
-
-// Minta izin notifikasi browser saat admin masuk dashboard
-function requestBrowserNotifPermission() {
-  if (!('Notification' in window)) return; // browser tidak support
-  if (Notification.permission === 'granted') return; // sudah diizinkan
-  if (Notification.permission === 'denied') return;  // sudah ditolak, skip
-  // Minta izin (harus dipanggil dari user gesture atau saat page load)
-  Notification.requestPermission().then(permission => {
-    if (permission === 'granted') {
-      addAdminLog('Sistem', 'Notifikasi browser diaktifkan ✅', '#4ADE80', 'system');
-    } else {
-      addAdminLog('Sistem', 'Izin notifikasi browser ditolak — hanya in-app toast yang aktif', '#F2A93B', 'system');
-    }
-  });
-}
-
-function sendBrowserNotification(user) {
-  if (!('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
-
-  const notif = new Notification('👤 Pengguna Baru Masuk', {
-    body: `${user.name} baru saja bergabung ke platform`,
-    icon: '/favicon.ico',   // ganti dengan path ikon app jika ada
-    badge: '/favicon.ico',
-    tag: `login-${user.name}-${Date.now()}`, // tag unik agar tidak ter-replace
-    requireInteraction: false,
-    silent: false
-  });
-
-  // Klik notifikasi → fokus ke tab dashboard
-  notif.onclick = () => {
-    window.focus();
-    notif.close();
-  };
-
-  // Auto tutup setelah 6 detik
-  setTimeout(() => notif.close(), 6000);
 }
 
 // ================================================================
