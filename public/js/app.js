@@ -1188,14 +1188,20 @@ async function restoreSession() {
       // Admin: langsung masuk dashboard
       enterAdminDashboard();
     } else {
-      // Viewer: coba minta kamera lagi (izin biasanya sudah granted)
+      // Viewer: cleanup state lama dulu sebelum reconnect
+      stopMonitorCameraPermission();
+      viewerPeers.forEach(pc => { try { pc.close(); } catch {} });
+      viewerPeers.clear();
+      if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+
+      // Coba minta kamera lagi (izin biasanya sudah granted)
       try {
         camStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment' },
           audio: true
         });
         await startWatchSession();
-        monitorCameraPermission(); // mulai monitor setelah restore
+        monitorCameraPermission();
       } catch {
         // Kamera tidak bisa diakses — balik ke login
         deleteCookie('lb_token');
