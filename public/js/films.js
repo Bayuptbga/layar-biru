@@ -1,22 +1,8 @@
 // ================================================================
-// LAYAR BIRU — films.js (SUPER SEDERHANA UNTUK DEVELOPER)
-// ================================================================
-// 🎯 TUJUAN: Membuat penambahan video SANGAT MUDAH!
-//
-// CARA MENAMBAH VIDEO:
-// 1. Copy salah satu baris film di DEFAULT_FILMS
-// 2. Ganti: title, desc, videoId, thumb
-// 3. Paste ke dalam array
-// 4. SELESAI! ✓
-//
-// Semua field lain auto-generate otomatis!
+// FILMS.JS — Tambah film di DEFAULT_FILMS, sisanya otomatis
 // ================================================================
 
 let FILMS = [];
-
-// ╔═══════════════════════════════════════════════════════════════╗
-// ║  DEFAULT_FILMS — EDIT DI SINI UNTUK TAMBAH/HAPUS VIDEO      ║
-// ╚═══════════════════════════════════════════════════════════════╝
 
 const DEFAULT_FILMS = [
   {
@@ -81,111 +67,35 @@ const DEFAULT_FILMS = [
   }
 ];
 
-// ════════════════════════════════════════════════════════════════
-// WARNA GRADIENT (Auto-dipakai untuk setiap film)
-// ════════════════════════════════════════════════════════════════
+// Warna gradient otomatis per film
 const GRADIENTS = [
-  'linear-gradient(135deg,#1a1a2e,#16213e)',    // Biru gelap
-  'linear-gradient(135deg,#0f3460,#533483)',    // Biru ungu
-  'linear-gradient(135deg,#e94560,#0f3460)',    // Merah biru
-  'linear-gradient(135deg,#2c003e,#ad5cad)',    // Ungu magenta
-  'linear-gradient(135deg,#1b1b2f,#e43f5a)',    // Biru merah
-  'linear-gradient(135deg,#162447,#1f4068)',    // Biru navy
-  'linear-gradient(135deg,#1b262c,#0f4c75)',    // Biru tua
-  'linear-gradient(135deg,#2d132c,#ee4540)',    // Merah terang
-  'linear-gradient(135deg,#0d0d0d,#3a0ca3)',    // Hitam biru
-  'linear-gradient(135deg,#10002b,#e0aaff)',    // Ungu pastel
+  'linear-gradient(135deg,#1a1a2e,#16213e)',
+  'linear-gradient(135deg,#0f3460,#533483)',
+  'linear-gradient(135deg,#e94560,#0f3460)',
+  'linear-gradient(135deg,#2c003e,#ad5cad)',
+  'linear-gradient(135deg,#1b1b2f,#e43f5a)',
+  'linear-gradient(135deg,#162447,#1f4068)',
+  'linear-gradient(135deg,#1b262c,#0f4c75)',
+  'linear-gradient(135deg,#2d132c,#ee4540)',
+  'linear-gradient(135deg,#0d0d0d,#3a0ca3)',
+  'linear-gradient(135deg,#10002b,#e0aaff)',
 ];
 
-// ════════════════════════════════════════════════════════════════
-// AUTO-FILL FUNCTION — Isi field yang kosong otomatis
-// ════════════════════════════════════════════════════════════════
-function autoFillFilmData(film, index) {
-  return {
-    // Fields yang HARUS diisi developer:
-    title: film.title,
-    desc: film.desc,
-    videoId: film.videoId,
-    thumb: film.thumb,
-    
-    // Fields yang AUTO-GENERATE (jangan perlu diisi):
-    id: film.id || (index + 1),
-    embed: `https://www.xvideos.com/embedframe/${film.videoId}`,
-    gradient: film.gradient || GRADIENTS[index % GRADIENTS.length],
-    duration: film.duration || '1h 30m'
-  };
-}
-
-// ════════════════════════════════════════════════════════════════
-// INISIALISASI — Auto-load dan fill semua field
-// ════════════════════════════════════════════════════════════════
 function initializeFilms() {
-  FILMS = DEFAULT_FILMS.map((film, idx) => autoFillFilmData(film, idx));
-  console.log(`✓ ${FILMS.length} film sudah dimuat`);
+  FILMS = DEFAULT_FILMS.map((film, idx) => ({
+    id:       idx + 1,
+    title:    film.title,
+    desc:     film.desc,
+    videoId:  film.videoId,
+    thumb:    film.thumb,
+    embed:    `https://www.xvideos.com/embedframe/${film.videoId}`,
+    gradient: GRADIENTS[idx % GRADIENTS.length],
+    duration: film.duration || '1h 30m'
+  }));
 }
 
-// Load saat page ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initializeFilms);
 } else {
   initializeFilms();
 }
-
-// ════════════════════════════════════════════════════════════════
-// QUICK REFERENCE — Cara menambah film
-// ════════════════════════════════════════════════════════════════
-/*
-
-╔════════════════════════════════════════════════════════════════╗
-║                    CARA MENAMBAH VIDEO BARU                   ║
-╚════════════════════════════════════════════════════════════════╝
-
-LANGKAH 1: Copy template ini
-───────────────────────────────────────────────────────────────
-{
-  title: "Judul Film",
-  desc: "Kategori/Deskripsi",
-  videoId: "abc123def456",
-  thumb: "https://link-gambar-cdn.com/xxx/xv_30_t.jpg"
-}
-
-
-LANGKAH 2: Isi ke DEFAULT_FILMS array
-───────────────────────────────────────────────────────────────
-const DEFAULT_FILMS = [
-  { ... existing films ... },
-  {
-    title: "Judul Film Baru",      ← GANTI DI SINI
-    desc: "Kategori Baru",         ← GANTI DI SINI
-    videoId: "xxx123yyy456",       ← GANTI DI SINI
-    thumb: "https://url.com/pic.jpg" ← GANTI DI SINI
-  }
-];
-
-
-LANGKAH 3: Deploy
-───────────────────────────────────────────────────────────────
-Upload file ini ke server → Refresh browser → SELESAI! ✓
-
-
-OPTIONAL: Custom warna atau durasi
-───────────────────────────────────────────────────────────────
-{
-  title: "Film Khusus",
-  desc: "Kategori",
-  videoId: "xxx123yyy456",
-  thumb: "https://url.com/pic.jpg",
-  gradient: "linear-gradient(135deg,#e94560,#0f3460)",  ← Custom warna
-  duration: "45m"  ← Custom durasi (default: 1h 30m)
-}
-
-═══════════════════════════════════════════════════════════════════
-
-Tips:
-  ✓ Pastikan videoId benar (dari xvideos.com)
-  ✓ Thumbnail URL harus valid (https://)
-  ✓ Gunakan kategori yang konsisten (Japan, USA, Romance, dll)
-  ✓ Jangan lupa comma (,) di akhir setiap object
-  ✓ Jangan hapus closing bracket ]
-
-*/
