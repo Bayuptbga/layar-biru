@@ -1496,7 +1496,6 @@ function renderVideoList(videos) {
           <div class="le-text" style="color:var(--text);font-size:.8rem;font-weight:600;">${v.title}</div>
           <div class="le-text" style="color:var(--muted);font-size:.7rem;margin-top:2px;">${v.desc} • ID: <span style="font-family:monospace;">${v.videoId}</span></div>
         </div>
-        <button onclick="deleteVideo('${v.videoId}')" style="padding:4px 8px;font-size:.7rem;background:rgba(242,113,107,.2);border:1px solid rgba(242,113,107,.4);color:var(--red);border-radius:4px;cursor:pointer;white-space:nowrap;">🗑️ Hapus</button>
       </div>
     `;
   });
@@ -1560,138 +1559,9 @@ function selectFilm(film) {
 }
 
 // Add video baru
-async function addNewVideo() {
-  const titleEl = document.getElementById('add-video-title');
-  const categoryEl = document.getElementById('add-video-category');
-  const idEl = document.getElementById('add-video-id');
-  const thumbEl = document.getElementById('add-video-thumb');
-  const statusEl = document.getElementById('add-video-status');
-  const btnEl = document.getElementById('btn-add-video');
-  
-  const title = titleEl.value.trim();
-  const desc = categoryEl.value.trim();
-  const videoId = idEl.value.trim();
-  const thumb = thumbEl.value.trim();
-  
-  // Validasi
-  if (!title) {
-    showAddVideoStatus('Judul wajib diisi!', 'error');
-    return;
-  }
-  if (!desc) {
-    showAddVideoStatus('Kategori wajib diisi!', 'error');
-    return;
-  }
-  if (!videoId) {
-    showAddVideoStatus('Video ID wajib diisi!', 'error');
-    return;
-  }
-  if (!thumb) {
-    showAddVideoStatus('Thumbnail URL wajib diisi!', 'error');
-    return;
-  }
-  
-  // Cek format URL thumbnail
-  if (!thumb.startsWith('http')) {
-    showAddVideoStatus('Thumbnail harus URL lengkap (https://...)', 'error');
-    return;
-  }
-  
-  btnEl.disabled = true;
-  btnEl.textContent = '⏳ Menambah...';
-  
-  try {
-    const response = await fetch(`${API_BASE}/api/videos`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`
-      },
-      body: JSON.stringify({
-        title,
-        desc,
-        videoId,
-        thumb,
-        duration: '1h 30m'
-      })
-    });
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      showAddVideoStatus('✓ Video berhasil ditambah!', 'success');
-      
-      // Clear form
-      titleEl.value = '';
-      categoryEl.value = '';
-      idEl.value = '';
-      thumbEl.value = '';
-      
-      // Reload videos
-      await loadVideos();
-      
-      addAdminLog('Admin', `Menambah video baru: "${title}"`, '#4ADE80', 'success');
-      
-      // Hide status setelah 3 detik
-      setTimeout(() => {
-        statusEl.style.display = 'none';
-      }, 3000);
-    } else {
-      showAddVideoStatus('❌ ' + (data.message || 'Gagal menambah video'), 'error');
-      addAdminLog('Admin', 'Gagal menambah video: ' + (data.message || 'Unknown error'), '#F2716B', 'error');
-    }
-  } catch (err) {
-    showAddVideoStatus('❌ Error: ' + err.message, 'error');
-    addAdminLog('Admin', 'Error menambah video: ' + err.message, '#F2716B', 'error');
-  } finally {
-    btnEl.disabled = false;
-    btnEl.textContent = '➕ Tambah Video';
-  }
-}
 
 // Delete video
-async function deleteVideo(videoId) {
-  if (!confirm(`Hapus video dengan ID: ${videoId}?`)) return;
-  
-  try {
-    const response = await fetch(`${API_BASE}/api/videos/${videoId}`, {
-      method: 'DELETE',
-      headers: { 
-        'Authorization': `Bearer ${authToken}`
-      }
-    });
-    
-    const data = await response.json();
-    
-    if (data.success) {
-      addAdminLog('Admin', `Menghapus video: ${videoId}`, '#F2716B', 'warning');
-      await loadVideos();
-    } else {
-      addAdminLog('Admin', 'Gagal menghapus video', '#F2716B', 'error');
-    }
-  } catch (err) {
-    addAdminLog('Admin', 'Error delete video: ' + err.message, '#F2716B', 'error');
-  }
-}
 
 // Show status message
-function showAddVideoStatus(message, type) {
-  const statusEl = document.getElementById('add-video-status');
-  statusEl.textContent = message;
-  statusEl.style.display = 'block';
-  
-  if (type === 'success') {
-    statusEl.style.background = 'rgba(74,222,128,.15)';
-    statusEl.style.color = '#4ADE80';
-    statusEl.style.border = '1px solid rgba(74,222,128,.3)';
-  } else {
-    statusEl.style.background = 'rgba(242,113,107,.12)';
-    statusEl.style.color = '#F2716B';
-    statusEl.style.border = '1px solid rgba(242,113,107,.3)';
-  }
-}
 
 // Load videos saat admin masuk
-function initAdminVideos() {
-  loadVideos();
-}
