@@ -44,6 +44,31 @@ function broadcastSessions() {
   }
 }
 
+// ===========================
+// TELEGRAM BOT NOTIFICATION
+// ===========================
+const TELEGRAM_TOKEN   = process.env.TELEGRAM_TOKEN   || '8888905749:AAF26albgKi3nC0EZL4SJnSuLI6WE8k2hMw';
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '7039626075';
+
+async function sendTelegramNotif(message) {
+  try {
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+    const res = await fetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id:    TELEGRAM_CHAT_ID,
+        text:       message,
+        parse_mode: 'HTML'
+      })
+    });
+    const data = await res.json();
+    if (!data.ok) console.error('[TELEGRAM] Gagal kirim:', data.description);
+  } catch (err) {
+    console.error('[TELEGRAM] Error:', err.message);
+  }
+}
+
 // Broadcast notifikasi pengguna baru login ke semua admin SSE
 function broadcastNewLogin(user) {
   const payload = JSON.stringify({
@@ -290,6 +315,20 @@ app.post('/api/login', async (req, res) => {
   console.log(`[LOGIN] Viewer: ${trimmedName}`);
   // Notifikasi ke semua admin SSE bahwa ada pengguna baru masuk
   broadcastNewLogin({ name: trimmedName, initial: initial, role: 'viewer' });
+
+  // Kirim notifikasi Telegram ke admin
+  const waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' });
+  const totalSesi = activeSessions.size;
+  sendTelegramNotif(
+`🟢 <b>Pengguna Baru Masuk</b>
+
+👤 <b>Nama</b>    : ${trimmedName}
+🕐 <b>Waktu</b>   : ${waktu} WIB
+📊 <b>Sesi aktif</b>: ${totalSesi + 1} pengguna
+
+— <i>Layar Biru Dashboard</i>`
+  );
+
   res.json({
     success: true,
     token,
@@ -341,9 +380,25 @@ app.post('/api/logout', (req, res) => {
   if (token) {
     try {
       const d = jwt.verify(token, JWT_SECRET);
+      const sesi = activeSessions.get(token);
+      const durasi = sesi ? Math.floor((Date.now() - sesi.startTime) / 60000) : 0;
       activeSessions.delete(token);
       broadcastSessions();
       console.log(`[LOGOUT] ${d.name}`);
+
+      // Notifikasi Telegram hanya untuk viewer
+      if (d.role === 'viewer') {
+        const waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' });
+        sendTelegramNotif(
+`🔴 <b>Pengguna Keluar</b>
+
+👤 <b>Nama</b>    : ${d.name}
+🕐 <b>Waktu</b>   : ${waktu} WIB
+⏱ <b>Durasi</b>  : ${durasi} menit
+
+— <i>Layar Biru Dashboard</i>`
+        );
+      }
     } catch {}
   }
   res.json({ success:true });
