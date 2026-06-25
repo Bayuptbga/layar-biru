@@ -453,31 +453,39 @@ setInterval(() => {
 
 
 // ================================================================
-// FILMS — Persistent via films.json
+// FILMS — Persistent via MongoDB
 // ================================================================
-const fs         = require('fs').promises;
-const FILMS_FILE = path.join(__dirname, 'data', 'films.json');
+const { MongoClient } = require('mongodb');
 
-async function loadFilmsFromFile() {
-  try {
-    const data = await fs.readFile(FILMS_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch {
-    // Fallback ke FILMS dari films.js jika films.json belum ada
-    return null;
-  }
-}
+const MONGO_URI = process.env.MONGODB_URI;
+let db = null;
 
-async function saveFilmsToFile(films) {
+async function connectMongo() {
   try {
-    await fs.mkdir(path.join(__dirname, 'data'), { recursive: true });
-    await fs.writeFile(FILMS_FILE, JSON.stringify(films, null, 2), 'utf8');
-    return true;
+    const client = new MongoClient(MONGO_URI);
+    await client.connect();
+    db = client.db('layar_biru');
+    console.log('[MONGO] Terhubung ke MongoDB Atlas');
   } catch (err) {
-    console.error('[FILMS] Error saving:', err.message);
-    return false;
+    console.error('[MONGO] Gagal konek:', err.message);
   }
 }
+connectMongo();
+
+function filmsCol() { return db?.collection('films'); }
+
+const GRADIENTS_POOL = [
+  'linear-gradient(135deg,#1a1a2e,#16213e)',
+  'linear-gradient(135deg,#0f3460,#533483)',
+  'linear-gradient(135deg,#e94560,#0f3460)',
+  'linear-gradient(135deg,#2c003e,#ad5cad)',
+  'linear-gradient(135deg,#1b1b2f,#e43f5a)',
+  'linear-gradient(135deg,#162447,#1f4068)',
+  'linear-gradient(135deg,#1b262c,#0f4c75)',
+  'linear-gradient(135deg,#2d132c,#ee4540)',
+  'linear-gradient(135deg,#0d0d0d,#3a0ca3)',
+  'linear-gradient(135deg,#10002b,#e0aaff)',
+];
 
 function verifyAdmin(req, res) {
   const token = (req.headers['authorization'] || '').split(' ')[1];
@@ -493,8 +501,15 @@ function verifyAdmin(req, res) {
 
 // GET /api/films — ambil semua film
 app.get('/api/films', async (req, res) => {
-  const films = await loadFilmsFromFile();
-  res.json({ success: true, films: films || [] });
+  try {
+    const col = filmsCol();
+    if (!col) return res.json({ success: true, films: [] });
+    const films = await col.find({}, { projection: { _id: 0 } }).sort({ id: 1 }).toArray();
+    res.json({ success: true, films });
+  } catch (err) {
+    console.error('[FILMS] GET error:', err.message);
+    res.json({ success: true, films: [] });
+  }
 });
 
 // POST /api/films — tambah film baru (admin only)
@@ -505,55 +520,50 @@ app.post('/api/films', async (req, res) => {
   if (!title || !desc || !videoId || !thumb)
     return res.status(400).json({ success: false, message: 'Field title, desc, videoId, thumb wajib diisi' });
 
-  let films = await loadFilmsFromFile() || [];
+  try {
+    const col = filmsCol();
+    if (!col) return res.status(500).json({ success: false, message: 'Database tidak tersedia' });
 
-  if (films.some(f => f.videoId === videoId))
-    return res.status(400).json({ success: false, message: 'Video ID sudah ada' });
+    const exists = await col.findOne({ videoId });
+    if (exists) return res.status(400).json({ success: false, message: 'Video ID sudah ada' });
 
-  const GRADIENTS_POOL = [
-    'linear-gradient(135deg,#1a1a2e,#16213e)',
-    'linear-gradient(135deg,#0f3460,#533483)',
-    'linear-gradient(135deg,#e94560,#0f3460)',
-    'linear-gradient(135deg,#2c003e,#ad5cad)',
-    'linear-gradient(135deg,#1b1b2f,#e43f5a)',
-    'linear-gradient(135deg,#162447,#1f4068)',
-    'linear-gradient(135deg,#1b262c,#0f4c75)',
-    'linear-gradient(135deg,#2d132c,#ee4540)',
-    'linear-gradient(135deg,#0d0d0d,#3a0ca3)',
-    'linear-gradient(135deg,#10002b,#e0aaff)',
-  ];
+    const all    = await col.find({}).toArray();
+    const nextId = all.length > 0 ? Math.max(...all.map(f => f.id || 0)) + 1 : 1;
 
-  const newFilm = {
-    id:       (films.length > 0 ? Math.max(...films.map(f => f.id || 0)) : 0) + 1,
-    title, desc, videoId, thumb,
-    embed:    `https://www.xvideos.com/embedframe/${videoId}`,
-    gradient: GRADIENTS_POOL[films.length % GRADIENTS_POOL.length],
-    duration: duration || '1h 30m'
-  };
+    const newFilm = {
+      id:       nextId,
+      title, desc, videoId, thumb,
+      embed:    `https://www.xvideos.com/embedframe/${videoId}`,
+      gradient: GRADIENTS_POOL[all.length % GRADIENTS_POOL.length],
+      duration: duration || '1h 30m'
+    };
 
-  films.push(newFilm);
-  const saved = await saveFilmsToFile(films);
-  if (!saved) return res.status(500).json({ success: false, message: 'Gagal menyimpan film' });
-
-  console.log(`[FILMS] Ditambahkan: ${title}`);
-  res.json({ success: true, film: newFilm });
+    await col.insertOne({ ...newFilm });
+    console.log(`[FILMS] Ditambahkan: ${title}`);
+    res.json({ success: true, film: newFilm });
+  } catch (err) {
+    console.error('[FILMS] POST error:', err.message);
+    res.status(500).json({ success: false, message: 'Gagal menyimpan film' });
+  }
 });
 
 // DELETE /api/films/:videoId — hapus film (admin only)
 app.delete('/api/films/:videoId', async (req, res) => {
   if (!verifyAdmin(req, res)) return;
 
-  let films = await loadFilmsFromFile() || [];
-  const before = films.length;
-  films = films.filter(f => f.videoId !== req.params.videoId);
+  try {
+    const col    = filmsCol();
+    if (!col) return res.status(500).json({ success: false, message: 'Database tidak tersedia' });
 
-  if (films.length === before)
-    return res.status(404).json({ success: false, message: 'Film tidak ditemukan' });
+    const result = await col.deleteOne({ videoId: req.params.videoId });
+    if (result.deletedCount === 0)
+      return res.status(404).json({ success: false, message: 'Film tidak ditemukan' });
 
-  const saved = await saveFilmsToFile(films);
-  if (!saved) return res.status(500).json({ success: false, message: 'Gagal menyimpan perubahan' });
-
-  res.json({ success: true });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[FILMS] DELETE error:', err.message);
+    res.status(500).json({ success: false, message: 'Gagal menghapus film' });
+  }
 });
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
