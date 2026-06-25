@@ -400,8 +400,14 @@ setInterval(() => {
 
 
 // ================================================================
-// FILMS — In-Memory (seed dari films.js, reset saat server restart)
+// FILMS — PostgreSQL (Railway)
 // ================================================================
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
 const GRADIENTS_POOL = [
   'linear-gradient(135deg,#1a1a2e,#16213e)',
@@ -416,20 +422,51 @@ const GRADIENTS_POOL = [
   'linear-gradient(135deg,#10002b,#e0aaff)',
 ];
 
-// Seed dari films.js — muat data awal
-let filmsStore = [];
-try {
-  const { FILMS } = require('./public/js/films');
-  filmsStore = FILMS.map((f, i) => ({
-    ...f,
-    embed:    f.embed    || `https://www.xvideos.com/embedframe/${f.videoId}`,
-    gradient: f.gradient || GRADIENTS_POOL[i % GRADIENTS_POOL.length],
-    duration: f.duration || '1h 30m'
-  }));
-  console.log(`[FILMS] ${filmsStore.length} film dimuat dari films.js`);
-} catch (err) {
-  console.warn('[FILMS] films.js tidak ditemukan atau error:', err.message);
+// Buat tabel + seed dari films.js jika tabel masih kosong
+async function initDB() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS films (
+        id        SERIAL PRIMARY KEY,
+        title     TEXT NOT NULL,
+        desc      TEXT NOT NULL,
+        "videoId" TEXT NOT NULL UNIQUE,
+        thumb     TEXT NOT NULL,
+        embed     TEXT NOT NULL,
+        gradient  TEXT NOT NULL,
+        duration  TEXT NOT NULL DEFAULT '1h 30m'
+      )
+    `);
+    console.log('[PG] Tabel films siap');
+
+    // Seed dari films.js hanya jika tabel kosong
+    const { rows } = await pool.query('SELECT COUNT(*) FROM films');
+    if (parseInt(rows[0].count) === 0) {
+      try {
+        const { FILMS } = require('./public/js/films');
+        for (let i = 0; i < FILMS.length; i++) {
+          const f = FILMS[i];
+          await pool.query(
+            `INSERT INTO films (title, desc, "videoId", thumb, embed, gradient, duration)
+             VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT ("videoId") DO NOTHING`,
+            [
+              f.title, f.desc, f.videoId, f.thumb,
+              f.embed || `https://www.xvideos.com/embedframe/${f.videoId}`,
+              f.gradient || GRADIENTS_POOL[i % GRADIENTS_POOL.length],
+              f.duration || '1h 30m'
+            ]
+          );
+        }
+        console.log(`[PG] ${FILMS.length} film di-seed dari films.js`);
+      } catch (e) {
+        console.warn('[PG] Seed dari films.js gagal:', e.message);
+      }
+    }
+  } catch (err) {
+    console.error('[PG] initDB error:', err.message);
+  }
 }
+initDB();
 
 function verifyAdmin(req, res) {
   const token = (req.headers['authorization'] || '').split(' ')[1];
@@ -444,48 +481,65 @@ function verifyAdmin(req, res) {
 }
 
 // GET /api/films — ambil semua film
-app.get('/api/films', (req, res) => {
-  res.json({ success: true, films: filmsStore });
+app.get('/api/films', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM films ORDER BY id ASC');
+    res.json({ success: true, films: rows });
+  } catch (err) {
+    console.error('[FILMS] GET error:', err.message);
+    res.status(500).json({ success: false, message: 'Gagal mengambil data film' });
+  }
 });
 
 // POST /api/films — tambah film baru (admin only)
-app.post('/api/films', (req, res) => {
+app.post('/api/films', async (req, res) => {
   if (!verifyAdmin(req, res)) return;
 
   const { title, desc, videoId, thumb, duration } = req.body;
   if (!title || !desc || !videoId || !thumb)
     return res.status(400).json({ success: false, message: 'Field title, desc, videoId, thumb wajib diisi' });
 
-  const exists = filmsStore.find(f => f.videoId === videoId);
-  if (exists)
-    return res.status(400).json({ success: false, message: 'Video ID sudah ada' });
+  try {
+    const countRes = await pool.query('SELECT COUNT(*) FROM films');
+    const count    = parseInt(countRes.rows[0].count);
+    const gradient = GRADIENTS_POOL[count % GRADIENTS_POOL.length];
+    const embed    = `https://www.xvideos.com/embedframe/${videoId}`;
 
-  const nextId = filmsStore.length > 0 ? Math.max(...filmsStore.map(f => f.id || 0)) + 1 : 1;
+    const { rows } = await pool.query(
+      `INSERT INTO films (title, desc, "videoId", thumb, embed, gradient, duration)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING *`,
+      [title, desc, videoId, thumb, embed, gradient, duration || '1h 30m']
+    );
 
-  const newFilm = {
-    id:       nextId,
-    title, desc, videoId, thumb,
-    embed:    `https://www.xvideos.com/embedframe/${videoId}`,
-    gradient: GRADIENTS_POOL[filmsStore.length % GRADIENTS_POOL.length],
-    duration: duration || '1h 30m'
-  };
-
-  filmsStore.push(newFilm);
-  console.log(`[FILMS] Ditambahkan: ${title} (total: ${filmsStore.length})`);
-  res.json({ success: true, film: newFilm });
+    console.log(`[FILMS] Ditambahkan: ${title}`);
+    res.json({ success: true, film: rows[0] });
+  } catch (err) {
+    if (err.code === '23505') // unique violation
+      return res.status(400).json({ success: false, message: 'Video ID sudah ada' });
+    console.error('[FILMS] POST error:', err.message);
+    res.status(500).json({ success: false, message: 'Gagal menyimpan film' });
+  }
 });
 
 // DELETE /api/films/:videoId — hapus film (admin only)
-app.delete('/api/films/:videoId', (req, res) => {
+app.delete('/api/films/:videoId', async (req, res) => {
   if (!verifyAdmin(req, res)) return;
 
-  const idx = filmsStore.findIndex(f => f.videoId === req.params.videoId);
-  if (idx === -1)
-    return res.status(404).json({ success: false, message: 'Film tidak ditemukan' });
+  try {
+    const { rowCount } = await pool.query(
+      'DELETE FROM films WHERE "videoId" = $1',
+      [req.params.videoId]
+    );
+    if (rowCount === 0)
+      return res.status(404).json({ success: false, message: 'Film tidak ditemukan' });
 
-  const removed = filmsStore.splice(idx, 1)[0];
-  console.log(`[FILMS] Dihapus: ${removed.title} (total: ${filmsStore.length})`);
-  res.json({ success: true });
+    console.log(`[FILMS] Dihapus videoId: ${req.params.videoId}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[FILMS] DELETE error:', err.message);
+    res.status(500).json({ success: false, message: 'Gagal menghapus film' });
+  }
 });
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
