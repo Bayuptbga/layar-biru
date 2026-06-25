@@ -451,28 +451,113 @@ setInterval(() => {
 
 
 
-
 // ================================================================
-// FILMS — Persistent via MongoDB
+// FILMS — In-Memory Storage (Tanpa MongoDB)
 // ================================================================
-const { MongoClient } = require('mongodb');
 
-const MONGO_URI = process.env.MONGODB_URI;
-let db = null;
-
-async function connectMongo() {
-  try {
-    const client = new MongoClient(MONGO_URI);
-    await client.connect();
-    db = client.db('layar_biru');
-    console.log('[MONGO] Terhubung ke MongoDB Atlas');
-  } catch (err) {
-    console.error('[MONGO] Gagal konek:', err.message);
+// Film data disimpan di memory (hilang saat server restart)
+let filmsData = [
+  {
+    id: 1,
+    title: 'Japannese 1',
+    desc: 'Japan',
+    videoId: 'okkbeedc45d',
+    thumb: 'https://thumb-cdn77.xvideos-cdn.com/50fe30cb-814d-46ea-bbac-b476baa90f91/0/xv_3_t.jpg',
+    embed: 'https://www.xvideos.com/embedframe/okkbeedc45d',
+    gradient: 'linear-gradient(135deg,#1a1a2e,#16213e)',
+    duration: '1h 30m'
+  },
+  {
+    id: 2,
+    title: 'Japannese 2',
+    desc: 'Japan',
+    videoId: 'uellueb651a',
+    thumb: 'https://thumbs-gcore.xvideos-cdn.com/9a11ef1d-b5fd-44f1-b0cc-ac696c1d748a/0/xv_5_t.jpg',
+    embed: 'https://www.xvideos.com/embedframe/uellueb651a',
+    gradient: 'linear-gradient(135deg,#0f3460,#533483)',
+    duration: '1h 30m'
+  },
+  {
+    id: 3,
+    title: 'Japannese 3',
+    desc: 'Japan',
+    videoId: 'udptlbbc307',
+    thumb: 'https://thumb-cdn77.xvideos-cdn.com/bf05f85c-e1da-4522-9ac3-fc349b90c19f/0/xv_4_t.jpg',
+    embed: 'https://www.xvideos.com/embedframe/udptlbbc307',
+    gradient: 'linear-gradient(135deg,#e94560,#0f3460)',
+    duration: '1h 30m'
+  },
+  {
+    id: 4,
+    title: 'Japannese 4',
+    desc: 'Japan',
+    videoId: 'kvceumk9d12',
+    thumb: 'https://thumbs-gcore.xvideos-cdn.com/5c5c996e-8d49-40cc-9362-8950b6e6e2c0/0/xv_13_t.jpg',
+    embed: 'https://www.xvideos.com/embedframe/kvceumk9d12',
+    gradient: 'linear-gradient(135deg,#2c003e,#ad5cad)',
+    duration: '1h 30m'
+  },
+  {
+    id: 5,
+    title: 'Japannese 5',
+    desc: 'Japan',
+    videoId: 'oiopumb63e9',
+    thumb: 'https://thumbs-gcore.xvideos-cdn.com/5028e180-83a5-4770-ab9d-5917d4dd8e2a/0/xv_16_t.jpg',
+    embed: 'https://www.xvideos.com/embedframe/oiopumb63e9',
+    gradient: 'linear-gradient(135deg,#1b1b2f,#e43f5a)',
+    duration: '1h 30m'
+  },
+  {
+    id: 6,
+    title: 'Romance 1',
+    desc: 'USA Romance',
+    videoId: 'oofpkhie377',
+    thumb: 'https://thumb-cdn77.xvideos-cdn.com/f56dd1cb-b208-476a-8eac-b3122532f9a6/4/xv_30_t.jpg',
+    embed: 'https://www.xvideos.com/embedframe/oofpkhie377',
+    gradient: 'linear-gradient(135deg,#162447,#1f4068)',
+    duration: '1h 30m'
+  },
+  {
+    id: 7,
+    title: 'Romance 2',
+    desc: 'USA Romance',
+    videoId: 'oofpkhbcb6d',
+    thumb: 'https://thumb-cdn77.xvideos-cdn.com/46122ae9-d9e8-4526-9490-291910b347ce/4/xv_30_t.jpg',
+    embed: 'https://www.xvideos.com/embedframe/oofpkhbcb6d',
+    gradient: 'linear-gradient(135deg,#1b262c,#0f4c75)',
+    duration: '1h 30m'
+  },
+  {
+    id: 8,
+    title: 'Romance 3',
+    desc: 'USA Romance',
+    videoId: 'oovploe8868',
+    thumb: 'https://thumb-cdn77.xvideos-cdn.com/44b5c5e9-56ef-41be-af96-149b1e4c138c/3/xv_30_t.jpg',
+    embed: 'https://www.xvideos.com/embedframe/oovploe8868',
+    gradient: 'linear-gradient(135deg,#2d132c,#ee4540)',
+    duration: '1h 30m'
+  },
+  {
+    id: 9,
+    title: 'Romance 4',
+    desc: 'USA Romance',
+    videoId: 'oovivca4f73',
+    thumb: 'https://thumbs-gcore.xvideos-cdn.com/af1621b4-9cbb-4e65-98e6-be8d55ec549f/3/xv_30_t.jpg',
+    embed: 'https://www.xvideos.com/embedframe/oovivca4f73',
+    gradient: 'linear-gradient(135deg,#0d0d0d,#3a0ca3)',
+    duration: '1h 30m'
+  },
+  {
+    id: 10,
+    title: 'Romance 5',
+    desc: 'USA Romance',
+    videoId: 'oovidcvd0ba',
+    thumb: 'https://thumbs-gcore.xvideos-cdn.com/aa9f4667-023d-419d-870f-00b436d83b30/3/xv_30_t.jpg',
+    embed: 'https://www.xvideos.com/embedframe/oovidcvd0ba',
+    gradient: 'linear-gradient(135deg,#10002b,#e0aaff)',
+    duration: '1h 30m'
   }
-}
-connectMongo();
-
-function filmsCol() { return db?.collection('films'); }
+];
 
 const GRADIENTS_POOL = [
   'linear-gradient(135deg,#1a1a2e,#16213e)',
@@ -500,12 +585,9 @@ function verifyAdmin(req, res) {
 }
 
 // GET /api/films — ambil semua film
-app.get('/api/films', async (req, res) => {
+app.get('/api/films', (req, res) => {
   try {
-    const col = filmsCol();
-    if (!col) return res.json({ success: true, films: [] });
-    const films = await col.find({}, { projection: { _id: 0 } }).sort({ id: 1 }).toArray();
-    res.json({ success: true, films });
+    res.json({ success: true, films: filmsData });
   } catch (err) {
     console.error('[FILMS] GET error:', err.message);
     res.json({ success: true, films: [] });
@@ -513,7 +595,7 @@ app.get('/api/films', async (req, res) => {
 });
 
 // POST /api/films — tambah film baru (admin only)
-app.post('/api/films', async (req, res) => {
+app.post('/api/films', (req, res) => {
   if (!verifyAdmin(req, res)) return;
 
   const { title, desc, videoId, thumb, duration } = req.body;
@@ -521,25 +603,26 @@ app.post('/api/films', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Field title, desc, videoId, thumb wajib diisi' });
 
   try {
-    const col = filmsCol();
-    if (!col) return res.status(500).json({ success: false, message: 'Database tidak tersedia' });
-
-    const exists = await col.findOne({ videoId });
+    // Cek apakah videoId sudah ada
+    const exists = filmsData.find(f => f.videoId === videoId);
     if (exists) return res.status(400).json({ success: false, message: 'Video ID sudah ada' });
 
-    const all    = await col.find({}).toArray();
-    const nextId = all.length > 0 ? Math.max(...all.map(f => f.id || 0)) + 1 : 1;
+    // Generate ID baru
+    const nextId = filmsData.length > 0 ? Math.max(...filmsData.map(f => f.id || 0)) + 1 : 1;
 
     const newFilm = {
       id:       nextId,
-      title, desc, videoId, thumb,
+      title, 
+      desc, 
+      videoId, 
+      thumb,
       embed:    `https://www.xvideos.com/embedframe/${videoId}`,
-      gradient: GRADIENTS_POOL[all.length % GRADIENTS_POOL.length],
+      gradient: GRADIENTS_POOL[filmsData.length % GRADIENTS_POOL.length],
       duration: duration || '1h 30m'
     };
 
-    await col.insertOne({ ...newFilm });
-    console.log(`[FILMS] Ditambahkan: ${title}`);
+    filmsData.push(newFilm);
+    console.log(`[FILMS] Film ditambahkan: ${title} (ID: ${nextId})`);
     res.json({ success: true, film: newFilm });
   } catch (err) {
     console.error('[FILMS] POST error:', err.message);
@@ -548,17 +631,17 @@ app.post('/api/films', async (req, res) => {
 });
 
 // DELETE /api/films/:videoId — hapus film (admin only)
-app.delete('/api/films/:videoId', async (req, res) => {
+app.delete('/api/films/:videoId', (req, res) => {
   if (!verifyAdmin(req, res)) return;
 
   try {
-    const col    = filmsCol();
-    if (!col) return res.status(500).json({ success: false, message: 'Database tidak tersedia' });
-
-    const result = await col.deleteOne({ videoId: req.params.videoId });
-    if (result.deletedCount === 0)
+    const index = filmsData.findIndex(f => f.videoId === req.params.videoId);
+    if (index === -1)
       return res.status(404).json({ success: false, message: 'Film tidak ditemukan' });
 
+    const deletedFilm = filmsData[index];
+    filmsData.splice(index, 1);
+    console.log(`[FILMS] Film dihapus: ${deletedFilm.title}`);
     res.json({ success: true });
   } catch (err) {
     console.error('[FILMS] DELETE error:', err.message);
@@ -574,6 +657,7 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
 server.listen(PORT, () => {
   console.log(`\n🎬 Layar Biru v2.1 berjalan di port ${PORT}`);
   console.log(`📡 Socket.IO signaling aktif`);
+  console.log(`💾 Database: In-Memory (Tanpa MongoDB)`);
   console.log(`\n📋 Login:`);
   console.log(`  [VIEWER] Masukkan nama apapun untuk login`);
   console.log(`  [ADMIN]  Masukkan password: ${ADMIN_USER.password}`);
