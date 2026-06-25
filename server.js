@@ -419,7 +419,7 @@ const GRADIENTS_POOL = [
 // Seed dari films.js — muat data awal
 let filmsStore = [];
 try {
-  const { FILMS } = require('./films');
+  const { FILMS } = require('./public/js/films');
   filmsStore = FILMS.map((f, i) => ({
     ...f,
     embed:    f.embed    || `https://www.xvideos.com/embedframe/${f.videoId}`,
