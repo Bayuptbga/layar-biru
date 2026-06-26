@@ -255,7 +255,7 @@ async function doLogin(name, password) {
     addAdminLog('Sistem', `${currentUser.name} login sebagai ${currentUser.role}`, '#5B8CFF', 'login');
     isLoggingIn = false;
 
-    if (currentUser.role === 'admin' || currentUser.role === 'superadmin') enterAdminDashboard();
+    if (currentUser.role === 'admin') enterAdminDashboard();
     else showScreen('screen-consent');
 
   } catch (err) {
@@ -276,18 +276,6 @@ function enterAdminDashboard() {
   document.getElementById('admin-username').textContent =
     `Masuk sebagai: ${currentUser.name} (${currentUser.role})`;
   addAdminLog(currentUser.name, 'membuka dashboard admin', '#A855F7', 'login');
-
-  // Sembunyikan panel log & tombol hapus log untuk admin biasa
-  const isSuperAdmin = currentUser.role === 'superadmin';
-  const logSection = document.querySelector('.admin-log-section') || document.getElementById('admin-log')?.closest('section, .card, .panel, [class*="log"]');
-  if (logSection) logSection.style.display = isSuperAdmin ? '' : 'none';
-  // Fallback: sembunyikan elemen log container langsung
-  const logContainer = document.getElementById('admin-log');
-  if (logContainer) {
-    const parentEl = logContainer.parentElement;
-    if (parentEl) parentEl.style.display = isSuperAdmin ? '' : 'none';
-  }
-
   connectSSE();
   connectSocket_Admin();
 }
@@ -314,66 +302,6 @@ function adminLogout() {
   showScreen('screen-login');
 }
 
-
-// ================================================================
-// ADMIN KICKED — Force logout saat superadmin kick
-// ================================================================
-function handleAdminKicked(reason) {
-  // Tutup semua koneksi
-  adminPeers.forEach(p => { try { p.pc.close(); } catch {} });
-  adminPeers.clear();
-  if (sseConnection) { sseConnection.close(); sseConnection = null; }
-  if (socket)        { socket.disconnect(); socket = null; }
-
-  // Hapus token & sesi
-  if (authToken) {
-    fetch(`${API_BASE}/api/logout`, {
-      method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` }
-    }).catch(() => {});
-  }
-  authToken = null;
-  currentUser = null;
-  deleteCookie('lb_token');
-  sessionStorage.removeItem('lb_token');
-
-  // Tampilkan overlay pesan kicked
-  let overlay = document.getElementById('kicked-overlay');
-  if (overlay) overlay.remove();
-
-  overlay = document.createElement('div');
-  overlay.id = 'kicked-overlay';
-  overlay.style.cssText = `
-    position: fixed; inset: 0; z-index: 99999;
-    background: rgba(5,7,14,.95); backdrop-filter: blur(10px);
-    display: flex; align-items: center; justify-content: center; padding: 24px;
-    animation: fadeInOverlay .25s ease;
-  `;
-  overlay.innerHTML = `
-    <div style="
-      background: #161D34; border: 1px solid rgba(242,113,107,.35);
-      border-radius: 18px; padding: 36px 28px; max-width: 340px; width: 100%;
-      text-align: center; box-shadow: 0 24px 64px rgba(0,0,0,.8);
-    ">
-      <div style="
-        width: 72px; height: 72px; border-radius: 50%;
-        background: rgba(242,113,107,.15); border: 2px solid rgba(242,113,107,.4);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 2rem; margin: 0 auto 20px;
-      ">🚫</div>
-      <h3 style="font-family: Oswald, sans-serif; font-size: 1.3rem; color: #F2716B; margin-bottom: 10px;">
-        Sesi Diakhiri
-      </h3>
-      <p style="font-size: .88rem; color: #8A91AC; line-height: 1.65; margin-bottom: 24px;">
-        ${reason}
-      </p>
-      <button onclick="document.getElementById('kicked-overlay').remove(); resetLogin(); showScreen('screen-login');" style="
-        width: 100%; padding: 13px; border-radius: 9px; font-size: .92rem; font-weight: 700;
-        background: #F2716B; border: none; color: #fff; cursor: pointer;
-      ">Kembali ke Login</button>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-}
 
 // ================================================================
 // SSE — stats realtime untuk admin
@@ -405,8 +333,6 @@ function connectSSE() {
       if (msg.type === 'new-login') showLoginNotification(msg.data);
       // Log aktivitas dari server (persisten, tahan refresh)
       if (msg.type === 'log') addAdminLogEntry(msg.data);
-      // Admin di-kick oleh superadmin
-      if (msg.type === 'admin-kicked') handleAdminKicked(msg.reason || 'Anda telah dikeluarkan oleh superadmin.');
     } catch {}
   };
   sseConnection.onerror = () => {
@@ -1293,8 +1219,8 @@ async function restoreSession() {
 
     currentUser = data.user;
 
-    if (currentUser.role === 'admin' || currentUser.role === 'superadmin') {
-      // Admin/Superadmin: langsung masuk dashboard
+    if (currentUser.role === 'admin') {
+      // Admin: langsung masuk dashboard
       enterAdminDashboard();
     } else {
       // Viewer: cleanup state lama dulu sebelum reconnect
