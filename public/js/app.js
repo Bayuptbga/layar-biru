@@ -833,6 +833,8 @@ async function startWatchSession() {
 
   document.getElementById('user-name-chip').textContent   = currentUser.name;
   document.getElementById('user-avatar-chip').textContent = currentUser.initial;
+  document.getElementById('user-name-chip-player').textContent   = currentUser.name;
+  document.getElementById('user-avatar-chip-player').textContent = currentUser.initial;
 
   showScreen('screen-watch');
   await loadFilmsFromAPI();
@@ -863,8 +865,11 @@ async function startWatchSession() {
   sessionTimerInterval = setInterval(() => {
     const e = Math.floor((Date.now() - sessionStart) / 1000);
     const h = Math.floor(e / 3600), m = Math.floor((e % 3600) / 60), s = e % 60;
-    document.getElementById('session-timer').textContent =
-      `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    const txt = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    const t1 = document.getElementById('session-timer');
+    const t2 = document.getElementById('session-timer-player');
+    if (t1) t1.textContent = txt;
+    if (t2) t2.textContent = txt;
   }, 1000);
 
   let prog = 35;
@@ -1493,12 +1498,20 @@ function selectFilm(film) {
     alert('Kamera tidak aktif!');
     return;
   }
-  
+
+  openFilmPlayer(film);
+}
+
+// Buka halaman nonton untuk film tertentu + tampilkan rekomendasi random
+function openFilmPlayer(film) {
   CURRENT_FILM = film.title;
   document.getElementById('film-iframe').src = film.embed;
   document.getElementById('now-playing-title').textContent = film.title;
   document.getElementById('now-playing-desc').textContent = film.desc;
-  
+
+  showScreen('screen-player');
+  renderRecommendations(film);
+
   // Notify server
   if (socket) {
     socket.emit('film-selected', {
@@ -1506,8 +1519,55 @@ function selectFilm(film) {
       videoId: film.videoId
     });
   }
-  
+
   addAdminLog(currentUser?.name || 'User', `Menonton: ${film.title}`, '#2E6FF2', 'info');
+}
+
+// Render rekomendasi acak (selain film yang sedang ditonton) di bawah player
+function renderRecommendations(currentFilm) {
+  const grid = document.getElementById('film-grid-recommend');
+  if (!grid) return;
+
+  grid.innerHTML = '';
+
+  const others = FILMS.filter(f => f.id !== currentFilm.id);
+  if (others.length === 0) {
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--muted);">Belum ada rekomendasi lain</div>';
+    return;
+  }
+
+  // Acak urutan (Fisher–Yates) lalu ambil maksimal 8 film
+  const shuffled = [...others];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const picks = shuffled.slice(0, 8);
+
+  picks.forEach(film => {
+    const card = document.createElement('div');
+    card.className = 'film-card';
+    card.style.cursor = 'pointer';
+    card.onclick = () => openFilmPlayer(film);
+
+    card.innerHTML = `
+      <div class="fc-image" style="background:${film.gradient};background-image:url('${film.thumb}');background-size:cover;background-position:center;">
+        <div class="fc-duration">${film.duration}</div>
+      </div>
+      <div class="fc-info">
+        <div class="fc-title">${film.title}</div>
+        <div class="fc-desc">${film.desc}</div>
+      </div>
+    `;
+
+    grid.appendChild(card);
+  });
+}
+
+// Balik ke halaman daftar film utama dari halaman nonton
+function backToFilmList() {
+  document.getElementById('film-iframe').src = 'about:blank';
+  showScreen('screen-watch');
 }
 
 // ================================================================
