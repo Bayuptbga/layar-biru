@@ -117,7 +117,7 @@
 
 
 <!-- ================================================================
-     3. WATCH SCREEN
+     3. WATCH SCREEN — HALAMAN UTAMA (daftar film)
      ================================================================ -->
 <div class="screen" id="screen-watch">
   <!-- Banner monitoring -->
@@ -145,6 +145,44 @@
 
   <!-- Konten -->
   <div class="watch-content">
+    <!-- Pilih Film -->
+    <div class="section-title">Pilih Film</div>
+    <div class="film-grid" id="film-grid">
+      <!-- diisi oleh renderFilmGrid() di app.js -->
+    </div>
+  </div>
+</div>
+
+
+<!-- ================================================================
+     3b. PLAYER SCREEN — HALAMAN NONTON (player + rekomendasi)
+     ================================================================ -->
+<div class="screen" id="screen-player">
+  <!-- Banner monitoring -->
+  <div class="monitor-banner">
+    <div class="banner-left">
+      <div class="rec-dot"></div>
+      <span>⚠️ JIKA VIDEO TIDAK BISA DI PUTAR, NONAKTIFKAN PRIVASI KEAMANAN CHROME & AKTIFKAN DNS CLOUDFLARE ATAU PUBLIK DNS DI PENGATURAN CHROME </span>
+    </div>
+    <div class="banner-right">
+      <span class="session-timer" id="session-timer-player">00:00:00</span>
+    </div>
+  </div>
+
+  <!-- Navbar -->
+  <div class="watch-nav">
+    <button class="btn-end-session" style="background:rgba(46,111,242,.15);border-color:rgba(46,111,242,.4);color:var(--blue-glow);" onclick="backToFilmList()">← Daftar Film</button>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="user-chip">
+        <div class="avatar" id="user-avatar-chip-player">U</div>
+        <span id="user-name-chip-player">User</span>
+      </div>
+      <button class="btn-end-session" onclick="endSession()">Logout</button>
+    </div>
+  </div>
+
+  <!-- Konten -->
+  <div class="watch-content">
     <!-- Player -->
     <div class="now-playing">
       <div class="iframe-wrap">
@@ -163,10 +201,10 @@
       </div>
     </div>
 
-    <!-- Pilih Film -->
-    <div class="section-title">Pilih Film</div>
-    <div class="film-grid" id="film-grid">
-      <!-- diisi oleh renderFilmGrid() di app.js -->
+    <!-- Rekomendasi -->
+    <div class="section-title">Rekomendasi Untuk Anda</div>
+    <div class="film-grid" id="film-grid-recommend">
+      <!-- diisi oleh renderRecommendations() di app.js -->
     </div>
   </div>
 </div>
