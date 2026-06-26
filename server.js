@@ -22,27 +22,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ===========================
 const JWT_SECRET = process.env.JWT_SECRET || 'layarbiru_secret_key_2024';
 
-// Admin users — superadmin bisa kick admin biasa
-const ADMIN_USERS = [
-  {
-    username: 'superadmin',
-    name:     process.env.SUPERADMIN_NAME || 'Super Admin',
-    initial:  'SA',
-    role:     'superadmin',
-    password: process.env.SUPERADMIN_PASSWORD || 'Bayu.2000'
-  },
-  {
-    username: 'admin',
-    name:     process.env.ADMIN_NAME || 'Admin Layar Biru',
-    initial:  'AL',
-    role:     'admin',
-    password: process.env.ADMIN_PASSWORD || 'Admin.2024'
-  }
-];
-
-// Map untuk melacak sesi admin yang sedang login (token → socketId / SSE res)
-const adminSessions = new Map(); // adminToken → { name, role, username }
-const adminSseMap   = new Map(); // adminToken → SSE res (untuk kirim pesan kick)
+// Admin user (untuk login admin)
+const ADMIN_USER = {
+  name:     process.env.ADMIN_NAME || 'Admin Layar Biru',
+  initial:  'AL',
+  role:     'admin',
+  password: process.env.ADMIN_PASSWORD || 'Bayu.2000'
+};
 
 // ===========================
 // SESSION STORE
@@ -277,7 +263,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// CHECK ADMIN — Cek apakah username adalah admin atau superadmin
+// CHECK ADMIN — Cek apakah username adalah admin
 app.post('/api/check-admin', (req, res) => {
   const { name } = req.body;
   
@@ -290,12 +276,14 @@ app.post('/api/check-admin', (req, res) => {
   }
 
   const trimmedName = name.trim().toLowerCase();
-  const adminUser = ADMIN_USERS.find(a => a.username === trimmedName);
+  
+  // Cek apakah nama adalah admin username (yungz)
+  const isAdmin = trimmedName === 'admin';
   
   res.json({
     success: true,
-    isAdmin: !!adminUser,
-    message: adminUser ? 'Admin terdeteksi, silakan masukkan password' : 'Username tidak terdaftar sebagai admin'
+    isAdmin: isAdmin,
+    message: isAdmin ? 'Admin terdeteksi, silakan masukkan password' : 'Username tidak terdaftar sebagai admin'
   });
 });
 
@@ -314,10 +302,9 @@ app.post('/api/login', async (req, res) => {
   const trimmedName = name.trim();
   const trimmedNameLower = trimmedName.toLowerCase();
 
-  // Cek apakah ini admin atau superadmin
-  const adminUser = ADMIN_USERS.find(a => a.username === trimmedNameLower);
-  if (adminUser) {
-    // Ini admin/superadmin, validasi password
+  // Cek apakah ini admin
+  if (trimmedNameLower === 'admin') {
+    // Ini admin, validasi password
     if (!password) {
       return res.status(401).json({
         success: false,
@@ -326,29 +313,27 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
-    if (password !== adminUser.password) {
-      addServerLog('Sistem', `Login ${adminUser.role} gagal — password salah`, '#F2716B', 'error');
+    if (password !== ADMIN_USER.password) {
+      addServerLog('Sistem', 'Login admin gagal — password salah', '#F2716B', 'error');
       return res.status(401).json({
         success: false,
         code: 'WRONG_PASSWORD',
-        message: 'Password salah.'
+        message: 'Password admin salah.'
       });
     }
 
-    // Password benar, login sebagai admin/superadmin
+    // Password benar, login sebagai admin
     const token = jwt.sign(
-      { name: adminUser.name, initial: adminUser.initial, role: adminUser.role, username: adminUser.username },
+      { name: 'Admin', initial: 'YZ', role: 'admin' },
       JWT_SECRET,
       { expiresIn: '8h' }
     );
-    // Simpan sesi admin
-    adminSessions.set(token, { name: adminUser.name, role: adminUser.role, username: adminUser.username });
-    console.log(`[LOGIN] ${adminUser.role}: ${adminUser.name}`);
-    addServerLog(adminUser.name, `login sebagai ${adminUser.role}`, '#5B8CFF', 'login');
+    console.log(`[LOGIN] Admin: Wnot`);
+    addServerLog('Admin', 'login sebagai admin', '#5B8CFF', 'login');
     return res.json({
       success: true,
       token,
-      user: { name: adminUser.name, initial: adminUser.initial, role: adminUser.role }
+      user: { name: 'Admin', initial: 'YZ', role: 'admin' }
     });
   }
 
@@ -441,8 +426,6 @@ app.post('/api/logout', (req, res) => {
       const sesi = activeSessions.get(token);
       const durasi = sesi ? Math.floor((Date.now() - sesi.startTime) / 60000) : 0;
       activeSessions.delete(token);
-      adminSessions.delete(token); // hapus sesi admin jika ada
-      adminSseMap.delete(token);
       broadcastSessions();
       console.log(`[LOGOUT] ${d.name}`);
       addServerLog(d.name, 'logout / mengakhiri sesi', '#F2A93B', 'logout');
@@ -498,59 +481,6 @@ app.delete('/api/logs', (req, res) => {
   } catch { res.status(401).json({ success:false }); }
 });
 
-
-// POST /api/admin/kick — Superadmin kick admin yang sedang online
-app.post('/api/admin/kick', (req, res) => {
-  const superadmin = verifySuperAdmin(req, res);
-  if (!superadmin) return;
-
-  const { targetToken } = req.body;
-  if (!targetToken) {
-    return res.status(400).json({ success: false, message: 'targetToken wajib diisi' });
-  }
-
-  const targetSession = adminSessions.get(targetToken);
-  if (!targetSession) {
-    return res.status(404).json({ success: false, message: 'Admin tidak ditemukan atau sudah offline' });
-  }
-
-  if (targetSession.role === 'superadmin') {
-    return res.status(403).json({ success: false, message: 'Tidak bisa kick superadmin' });
-  }
-
-  // Kirim perintah kick via SSE ke admin target
-  const kickPayload = JSON.stringify({ type: 'admin-kicked', reason: req.body.reason || 'Anda telah dikeluarkan oleh superadmin.' });
-  const targetRes = adminSseMap.get(targetToken);
-  if (targetRes) {
-    try { targetRes.write(`data: ${kickPayload}\n\n`); } catch {}
-  }
-
-  // Hapus sesi admin
-  adminSessions.delete(targetToken);
-
-  addServerLog(superadmin.name, `kick admin ${targetSession.name} dari dashboard`, '#F2716B', 'kick');
-  console.log(`[KICK] ${superadmin.name} kick admin ${targetSession.name}`);
-
-  res.json({ success: true, message: `Admin ${targetSession.name} berhasil di-kick` });
-});
-
-// GET /api/admin/online — daftar admin yang sedang online (hanya superadmin)
-app.get('/api/admin/online', (req, res) => {
-  const decoded = verifyAdmin(req, res);
-  if (!decoded) return;
-
-  const onlineAdmins = [];
-  for (const [token, session] of adminSessions) {
-    onlineAdmins.push({
-      token,
-      name: session.name,
-      role: session.role,
-      username: session.username
-    });
-  }
-  res.json({ success: true, admins: onlineAdmins });
-});
-
 // SSE stream untuk admin (stats counter)
 app.get('/api/sessions/stream', (req, res) => {
   try { jwt.verify(req.query.token, JWT_SECRET); } catch { return res.status(401).end(); }
@@ -560,22 +490,11 @@ app.get('/api/sessions/stream', (req, res) => {
   res.flushHeaders();
   res.write(`data: ${JSON.stringify({ type:'sessions', data: getSessionsPayload() })}\n\n`);
   sseClients.add(res);
-
-  // Track SSE koneksi admin untuk fitur kick
-  const adminToken = req.query.token;
-  if (adminToken && adminSessions.has(adminToken)) {
-    adminSseMap.set(adminToken, res);
-  }
-
   // Heartbeat setiap 20 detik agar SSE tidak di-cut Railway (max 5 menit idle)
   const hb = setInterval(() => {
     try { res.write(`: ping\n\n`); } catch {}
   }, 20000);
-  req.on('close', () => {
-    clearInterval(hb);
-    sseClients.delete(res);
-    if (adminToken) adminSseMap.delete(adminToken);
-  });
+  req.on('close', () => { clearInterval(hb); sseClients.delete(res); });
 });
 
 // Cleanup sesi timeout (tidak ping > 30 detik)
@@ -716,23 +635,11 @@ function verifyAdmin(req, res) {
   if (!token) { res.status(401).json({ success: false, message: 'Unauthorized' }); return null; }
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.role !== 'admin' && decoded.role !== 'superadmin') {
-      res.status(403).json({ success: false, message: 'Forbidden' }); return null;
-    }
+    if (decoded.role !== 'admin') { res.status(403).json({ success: false, message: 'Forbidden' }); return null; }
     return decoded;
   } catch {
     res.status(401).json({ success: false, message: 'Invalid token' }); return null;
   }
-}
-
-function verifySuperAdmin(req, res) {
-  const decoded = verifyAdmin(req, res);
-  if (!decoded) return null;
-  if (decoded.role !== 'superadmin') {
-    res.status(403).json({ success: false, message: 'Hanya superadmin yang bisa melakukan ini' });
-    return null;
-  }
-  return decoded;
 }
 
 // GET /api/films — ambil semua film
