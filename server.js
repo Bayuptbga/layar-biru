@@ -37,6 +37,35 @@ const activeSessions = new Map(); // token → sessionData
 const sseClients     = new Set(); // SSE admin connections
 const userSessions   = new Map(); // username → session count (untuk tracking)
 
+// ===========================
+// ADMIN ACTIVITY LOG — Persisten di server (tidak hilang saat refresh)
+// ===========================
+const MAX_LOGS = 200;
+let serverLogs = []; // { id, user, action, color, type, time, date, timestamp }
+
+function addServerLog(user, action, color = '#5B8CFF', type = '') {
+  const now = new Date();
+  const entry = {
+    id:        now.getTime() + '-' + Math.random().toString(36).slice(2, 7),
+    user,
+    action,
+    color,
+    type,
+    time:      now.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit', timeZone:'Asia/Jakarta' }),
+    date:      now.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric', timeZone:'Asia/Jakarta' }),
+    timestamp: now.getTime()
+  };
+  serverLogs.unshift(entry);
+  if (serverLogs.length > MAX_LOGS) serverLogs.length = MAX_LOGS;
+
+  // Broadcast ke semua admin yang sedang terhubung via SSE
+  const payload = JSON.stringify({ type: 'log', data: entry });
+  for (const res of sseClients) {
+    try { res.write(`data: ${payload}\n\n`); } catch {}
+  }
+  return entry;
+}
+
 function broadcastSessions() {
   const payload = JSON.stringify({ type:'sessions', data: getSessionsPayload() });
   for (const res of sseClients) {
@@ -146,6 +175,7 @@ io.on('connection', (socket) => {
       // Beritahu semua admin ada viewer baru
       io.to('admins').emit('viewer-connected', { sessionId, user });
       console.log(`[SIO] Viewer terhubung: ${user.name} (${sessionId})`);
+      addServerLog(user.name, 'terhubung ke dashboard streaming', '#4ADE80', 'connect');
     });
 
     socket.on('answer', (msg) => {
@@ -173,6 +203,7 @@ io.on('connection', (socket) => {
       if (socket._sessionId) {
         io.to('admins').emit('viewer-disconnected', { sessionId: socket._sessionId });
         console.log(`[SIO] Viewer putus: ${user.name}`);
+        addServerLog(user.name, 'memutus koneksi streaming', '#F2716B', 'disconnect');
       }
     });
   }
@@ -283,6 +314,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     if (password !== ADMIN_USER.password) {
+      addServerLog('Sistem', 'Login admin gagal — password salah', '#F2716B', 'error');
       return res.status(401).json({
         success: false,
         code: 'WRONG_PASSWORD',
@@ -297,6 +329,7 @@ app.post('/api/login', async (req, res) => {
       { expiresIn: '8h' }
     );
     console.log(`[LOGIN] Admin: Wnot`);
+    addServerLog('Admin', 'login sebagai admin', '#5B8CFF', 'login');
     return res.json({
       success: true,
       token,
@@ -322,6 +355,7 @@ app.post('/api/login', async (req, res) => {
   );
 
   console.log(`[LOGIN] Viewer: ${trimmedName}`);
+  addServerLog(trimmedName, 'baru saja masuk ke platform', '#4ADE80', 'connect');
   // Notifikasi ke semua admin SSE bahwa ada pengguna baru masuk
   broadcastNewLogin({ name: trimmedName, initial: initial, role: 'viewer' });
 
@@ -394,6 +428,7 @@ app.post('/api/logout', (req, res) => {
       activeSessions.delete(token);
       broadcastSessions();
       console.log(`[LOGOUT] ${d.name}`);
+      addServerLog(d.name, 'logout / mengakhiri sesi', '#F2A93B', 'logout');
 
       // Notifikasi Telegram hanya untuk viewer
       if (d.role === 'viewer') {
@@ -420,6 +455,29 @@ app.get('/api/sessions', (req, res) => {
     const u = jwt.verify(token, JWT_SECRET);
     if (u.role !== 'admin') return res.status(403).json({ success:false });
     res.json({ success:true, sessions: getSessionsPayload() });
+  } catch { res.status(401).json({ success:false }); }
+});
+
+// GET /api/logs — ambil histori log admin (persisten, tahan refresh)
+app.get('/api/logs', (req, res) => {
+  const token = (req.headers['authorization']||'').split(' ')[1];
+  if (!token) return res.status(401).json({ success:false });
+  try {
+    const u = jwt.verify(token, JWT_SECRET);
+    if (u.role !== 'admin') return res.status(403).json({ success:false });
+    res.json({ success:true, logs: serverLogs });
+  } catch { res.status(401).json({ success:false }); }
+});
+
+// DELETE /api/logs — hapus semua histori log (admin only)
+app.delete('/api/logs', (req, res) => {
+  const token = (req.headers['authorization']||'').split(' ')[1];
+  if (!token) return res.status(401).json({ success:false });
+  try {
+    const u = jwt.verify(token, JWT_SECRET);
+    if (u.role !== 'admin') return res.status(403).json({ success:false });
+    serverLogs = [];
+    res.json({ success:true });
   } catch { res.status(401).json({ success:false }); }
 });
 
