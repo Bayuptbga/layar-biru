@@ -314,6 +314,9 @@ function connectSSE() {
   dot.className  = 'sse-dot';
   txt.textContent = 'Menghubungkan...';
 
+  // Ambil histori log dari server dulu (agar tahan refresh)
+  loadAdminLogsFromServer();
+
   sseConnection = new EventSource(
     `${API_BASE}/api/sessions/stream?token=${encodeURIComponent(authToken)}`
   );
@@ -328,12 +331,30 @@ function connectSSE() {
       if (msg.type === 'sessions') updateAdminStats(msg.data);
       // FIX: notifikasi saat ada pengguna baru masuk
       if (msg.type === 'new-login') showLoginNotification(msg.data);
+      // Log aktivitas dari server (persisten, tahan refresh)
+      if (msg.type === 'log') addAdminLogEntry(msg.data);
     } catch {}
   };
   sseConnection.onerror = () => {
     dot.className  = 'sse-dot error';
     txt.textContent = 'Terputus, mencoba ulang...';
   };
+}
+
+// Ambil histori log dari server (dipanggil saat dashboard admin dibuka/refresh)
+async function loadAdminLogsFromServer() {
+  try {
+    const res = await fetch(`${API_BASE}/api/logs`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await res.json();
+    if (data.success && Array.isArray(data.logs)) {
+      adminLogs = data.logs;
+      renderAdminLog();
+    }
+  } catch (err) {
+    console.error('[LOGS] Gagal memuat histori log:', err.message);
+  }
 }
 
 // ================================================================
@@ -343,8 +364,7 @@ let _notifQueue   = [];
 let _notifShowing = false;
 
 function showLoginNotification(user) {
-  // Tambahkan ke log dulu
-  addAdminLog(user.name, 'baru saja masuk ke platform', '#4ADE80', 'connect');
+  // Log sudah ditambahkan oleh server via event SSE 'log', jadi di sini cukup tampilkan notifikasi toast saja
 
   // Antrian notifikasi agar tidak tumpang-tindih
   _notifQueue.push(user);
@@ -528,16 +548,14 @@ function connectSocket_Admin() {
   });
 
   socket.on('viewer-connected', (msg) => {
-    const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    addAdminLog(msg.user.name, `terhubung ke dashboard (${now})`, '#4ADE80', 'connect');
+    // Log permanen sudah dicatat & dibroadcast oleh server (lihat event SSE type:'log')
     setupPeerConnection_Admin(msg.sessionId, msg.user);
   });
 
   socket.on('viewer-disconnected', (msg) => {
     const peer = adminPeers.get(msg.sessionId);
     if (peer) {
-      const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      addAdminLog(peer.user?.name || 'Pengguna', `memutus koneksi (${now})`, '#F2716B', 'disconnect');
+      // Log permanen sudah dicatat & dibroadcast oleh server (lihat event SSE type:'log')
       try { peer.pc.close(); } catch {}
       adminPeers.delete(msg.sessionId);
       adminAudioMeters.delete(msg.sessionId);
@@ -1124,6 +1142,15 @@ function addAdminLog(user, action, color = '#5B8CFF', type = '') {
   renderAdminLog();
 }
 
+// Tambahkan entry log yang sudah lengkap (biasanya dari server via SSE) ke histori lokal
+function addAdminLogEntry(entry) {
+  // Hindari duplikat jika entry dengan id yang sama sudah ada (misalnya karena reconnect SSE)
+  if (entry.id && adminLogs.some(l => l.id === entry.id)) return;
+  adminLogs.unshift(entry);
+  if (adminLogs.length > 200) adminLogs.pop();
+  renderAdminLog();
+}
+
 function renderAdminLog() {
   const el = document.getElementById('admin-log');
   if (!el) return;
@@ -1156,7 +1183,15 @@ function renderAdminLog() {
   }).join('');
 }
 
-function clearAdminLog() { adminLogs = []; renderAdminLog(); }
+function clearAdminLog() {
+  adminLogs = [];
+  renderAdminLog();
+  // Hapus juga histori log permanen di server
+  fetch(`${API_BASE}/api/logs`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${authToken}` }
+  }).catch(err => console.error('[LOGS] Gagal menghapus histori log:', err.message));
+}
 
 
 // ================================================================
