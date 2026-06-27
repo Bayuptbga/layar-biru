@@ -226,8 +226,19 @@
       </div>
     </div>
 
+    <!-- Panel Admin Online — hanya superadmin -->
+    <div class="log-panel" id="panel-admin-online" style="display:none;">
+      <div class="sp-head">
+        <h3>👥 Admin Online</h3>
+        <button class="si-btn" onclick="refreshAdminOnline()">↻ Refresh</button>
+      </div>
+      <div id="admin-online-list" style="padding:12px 16px;font-size:.84rem;color:var(--muted);">
+        Memuat...
+      </div>
+    </div>
+
     <!-- Log aktivitas -->
-    <div class="log-panel">
+    <div class="log-panel" id="log-panel">
       <div class="sp-head">
         <h3>📋 Log Aktivitas</h3>
         <button class="si-btn" onclick="clearAdminLog()">Bersihkan</button>
