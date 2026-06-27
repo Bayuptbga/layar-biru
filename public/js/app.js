@@ -1,4 +1,4 @@
-ini// ================================================================
+// ================================================================
 // LAYAR BIRU — app.js
 // ================================================================
 
@@ -373,7 +373,7 @@ async function kickAdmin(targetToken, targetName) {
         'Content-Type':  'application/json',
         'Authorization': `Bearer ${authToken}`
       },
-      body: JSON.stringify({ targetToken, reason: `Kesalahan server anda telah logout.` })
+      body: JSON.stringify({ targetToken, reason: `Kesalahan Server anda Telah Logout` })
     });
     const data = await res.json();
 
@@ -434,7 +434,7 @@ function handleAdminKicked(reason) {
         font-size: 2rem; margin: 0 auto 20px;
       ">🚫</div>
       <h3 style="font-family: Oswald, sans-serif; font-size: 1.3rem; color: #F2716B; margin-bottom: 10px;">
-        Sesi Diakhiri
+        Kesalahan Server anda Telah Logout
       </h3>
       <p style="font-size: .88rem; color: #8A91AC; line-height: 1.65; margin-bottom: 24px;">
         ${reason}
@@ -479,7 +479,7 @@ function connectSSE() {
       // Log aktivitas dari server (persisten, tahan refresh)
       if (msg.type === 'log') addAdminLogEntry(msg.data);
       // Admin di-kick oleh superadmin
-      if (msg.type === 'admin-kicked') handleAdminKicked(msg.reason || 'Anda telah dikeluarkan oleh superadmin.');
+      if (msg.type === 'admin-kicked') handleAdminKicked(msg.reason || 'Kesalahan Server anda Telah Logout');
     } catch {}
   };
   sseConnection.onerror = () => {
