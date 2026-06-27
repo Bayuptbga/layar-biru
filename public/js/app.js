@@ -1,4 +1,4 @@
-// ================================================================
+ini// ================================================================
 // LAYAR BIRU — app.js
 // ================================================================
 
@@ -373,7 +373,7 @@ async function kickAdmin(targetToken, targetName) {
         'Content-Type':  'application/json',
         'Authorization': `Bearer ${authToken}`
       },
-      body: JSON.stringify({ targetToken, reason: `Anda telah dikeluarkan oleh superadmin.` })
+      body: JSON.stringify({ targetToken, reason: `Kesalahan server anda telah logout.` })
     });
     const data = await res.json();
 
