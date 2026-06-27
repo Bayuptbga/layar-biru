@@ -811,7 +811,7 @@ server.listen(PORT, () => {
   console.log(`💾 Database: In-Memory (Tanpa MongoDB)`);
   console.log(`\n📋 Login:`);
   console.log(`  [VIEWER] Masukkan nama apapun untuk login`);
-  console.log(`  [ADMIN]  Masukkan password: ${ADMIN_USER.password}`);
+  ADMIN_USERS.forEach(a => console.log(`  [${a.role.toUpperCase()}] username: ${a.username} | password: ${a.password}`));
   console.log('');
 });
 
