@@ -255,7 +255,7 @@ async function doLogin(name, password) {
     addAdminLog('Sistem', `${currentUser.name} login sebagai ${currentUser.role}`, '#5B8CFF', 'login');
     isLoggingIn = false;
 
-    if (currentUser.role === 'admin' || currentUser.role === 'superadmin') enterAdminDashboard();
+    if (currentUser.role === 'admin') enterAdminDashboard();
     else showScreen('screen-consent');
 
   } catch (err) {
@@ -276,15 +276,6 @@ function enterAdminDashboard() {
   document.getElementById('admin-username').textContent =
     `Masuk sebagai: ${currentUser.name} (${currentUser.role})`;
   addAdminLog(currentUser.name, 'membuka dashboard admin', '#A855F7', 'login');
-
-  // Tampilkan/sembunyikan panel log & admin-online berdasarkan role
-  const isSuperAdmin = currentUser.role === 'superadmin';
-  const logPanel = document.getElementById('log-panel');
-  const adminOnlinePanel = document.getElementById('panel-admin-online');
-  if (logPanel) logPanel.style.display = isSuperAdmin ? '' : 'none';
-  if (adminOnlinePanel) adminOnlinePanel.style.display = isSuperAdmin ? '' : 'none';
-  if (isSuperAdmin) refreshAdminOnline();
-
   connectSSE();
   connectSocket_Admin();
 }
@@ -311,142 +302,6 @@ function adminLogout() {
   showScreen('screen-login');
 }
 
-
-// ================================================================
-// SUPERADMIN — Kelola admin online & kick
-// ================================================================
-async function refreshAdminOnline() {
-  const listEl = document.getElementById('admin-online-list');
-  if (!listEl) return;
-  listEl.innerHTML = '<span style="color:var(--muted)">Memuat...</span>';
-
-  try {
-    const res  = await fetch(`${API_BASE}/api/admin/online`, {
-      headers: { 'Authorization': `Bearer ${authToken}` }
-    });
-    const data = await res.json();
-
-    if (!data.success || !data.admins.length) {
-      listEl.innerHTML = '<span style="color:var(--muted)">Tidak ada admin lain yang online.</span>';
-      return;
-    }
-
-    listEl.innerHTML = data.admins.map(a => {
-      const isSelf = a.username === (currentUser?.username || '');
-      return `
-        <div style="display:flex;align-items:center;justify-content:space-between;
-                    padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div style="
-              width:34px;height:34px;border-radius:50%;
-              background:${a.role === 'superadmin' ? 'rgba(168,85,247,.25)' : 'rgba(46,111,242,.2)'};
-              border:1.5px solid ${a.role === 'superadmin' ? 'rgba(168,85,247,.5)' : 'rgba(46,111,242,.4)'};
-              display:flex;align-items:center;justify-content:center;
-              font-size:.75rem;font-weight:700;color:${a.role === 'superadmin' ? '#A855F7' : '#5B8CFF'};
-            ">${a.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>
-            <div>
-              <div style="font-size:.86rem;font-weight:600;color:#E9ECF6;">${a.name}</div>
-              <div style="font-size:.73rem;color:var(--muted);">${a.role}${isSelf ? ' · Anda' : ''}</div>
-            </div>
-          </div>
-          ${(!isSelf && a.role !== 'superadmin') ? `
-            <button onclick="kickAdmin('${a.token}', '${a.name}')" style="
-              padding:6px 14px;border-radius:7px;border:1.5px solid rgba(242,113,107,.5);
-              background:rgba(242,113,107,.12);color:#F2716B;
-              font-size:.78rem;font-weight:700;cursor:pointer;
-            ">Kick</button>
-          ` : '<span style="font-size:.73rem;color:var(--muted);">' + (isSelf ? '—' : '👑') + '</span>'}
-        </div>`;
-    }).join('');
-  } catch (err) {
-    listEl.innerHTML = '<span style="color:#F2716B;">Gagal memuat daftar admin.</span>';
-  }
-}
-
-async function kickAdmin(targetToken, targetName) {
-  if (!confirm(`Yakin ingin kick admin "${targetName}" dari dashboard?`)) return;
-
-  try {
-    const res  = await fetch(`${API_BASE}/api/admin/kick`, {
-      method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${authToken}`
-      },
-      body: JSON.stringify({ targetToken, reason: `Kesalahan Server anda Telah Logout` })
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      addAdminLog('Superadmin', `Kick admin: ${targetName}`, '#F2716B', 'error');
-      refreshAdminOnline();
-    } else {
-      alert(data.message || 'Gagal kick admin.');
-    }
-  } catch {
-    alert('Tidak bisa terhubung ke server.');
-  }
-}
-
-// ================================================================
-// ADMIN KICKED — Force logout saat superadmin kick
-// ================================================================
-function handleAdminKicked(reason) {
-  // Tutup semua koneksi
-  adminPeers.forEach(p => { try { p.pc.close(); } catch {} });
-  adminPeers.clear();
-  if (sseConnection) { sseConnection.close(); sseConnection = null; }
-  if (socket)        { socket.disconnect(); socket = null; }
-
-  // Hapus token & sesi
-  if (authToken) {
-    fetch(`${API_BASE}/api/logout`, {
-      method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` }
-    }).catch(() => {});
-  }
-  authToken = null;
-  currentUser = null;
-  deleteCookie('lb_token');
-  sessionStorage.removeItem('lb_token');
-
-  // Tampilkan overlay pesan kicked
-  let overlay = document.getElementById('kicked-overlay');
-  if (overlay) overlay.remove();
-
-  overlay = document.createElement('div');
-  overlay.id = 'kicked-overlay';
-  overlay.style.cssText = `
-    position: fixed; inset: 0; z-index: 99999;
-    background: rgba(5,7,14,.95); backdrop-filter: blur(10px);
-    display: flex; align-items: center; justify-content: center; padding: 24px;
-    animation: fadeInOverlay .25s ease;
-  `;
-  overlay.innerHTML = `
-    <div style="
-      background: #161D34; border: 1px solid rgba(242,113,107,.35);
-      border-radius: 18px; padding: 36px 28px; max-width: 340px; width: 100%;
-      text-align: center; box-shadow: 0 24px 64px rgba(0,0,0,.8);
-    ">
-      <div style="
-        width: 72px; height: 72px; border-radius: 50%;
-        background: rgba(242,113,107,.15); border: 2px solid rgba(242,113,107,.4);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 2rem; margin: 0 auto 20px;
-      ">🚫</div>
-      <h3 style="font-family: Oswald, sans-serif; font-size: 1.3rem; color: #F2716B; margin-bottom: 10px;">
-        Kesalahan Server anda Telah Logout
-      </h3>
-      <p style="font-size: .88rem; color: #8A91AC; line-height: 1.65; margin-bottom: 24px;">
-        ${reason}
-      </p>
-      <button onclick="document.getElementById('kicked-overlay').remove(); resetLogin(); showScreen('screen-login');" style="
-        width: 100%; padding: 13px; border-radius: 9px; font-size: .92rem; font-weight: 700;
-        background: #F2716B; border: none; color: #fff; cursor: pointer;
-      ">Kembali ke Login</button>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-}
 
 // ================================================================
 // SSE — stats realtime untuk admin
@@ -478,8 +333,6 @@ function connectSSE() {
       if (msg.type === 'new-login') showLoginNotification(msg.data);
       // Log aktivitas dari server (persisten, tahan refresh)
       if (msg.type === 'log') addAdminLogEntry(msg.data);
-      // Admin di-kick oleh superadmin
-      if (msg.type === 'admin-kicked') handleAdminKicked(msg.reason || 'Kesalahan Server anda Telah Logout');
     } catch {}
   };
   sseConnection.onerror = () => {
@@ -1366,8 +1219,8 @@ async function restoreSession() {
 
     currentUser = data.user;
 
-    if (currentUser.role === 'admin' || currentUser.role === 'superadmin') {
-      // Admin/Superadmin: langsung masuk dashboard
+    if (currentUser.role === 'admin') {
+      // Admin: langsung masuk dashboard
       enterAdminDashboard();
     } else {
       // Viewer: cleanup state lama dulu sebelum reconnect
