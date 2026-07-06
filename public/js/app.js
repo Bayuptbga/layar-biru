@@ -782,20 +782,88 @@ function closeExpandSession() {
 }
 // ================================================================
 
+// Simpan film yang sedang aktif untuk retry
+let _currentPlayingFilm = null;
+
 function playFilm(id) {
   const film = FILMS.find(f => f.id === id);
   if (!film) return;
+  _currentPlayingFilm = film;
+  loadVideoPlayer(film);
+}
 
-  const iframe = document.getElementById('film-iframe');
-  if (iframe) iframe.src = film.embed;
+function retryPlayFilm() {
+  if (_currentPlayingFilm) loadVideoPlayer(_currentPlayingFilm);
+}
 
+function loadVideoPlayer(film) {
+  const videoEl      = document.getElementById('film-video');
+  const srcEl        = document.getElementById('film-video-src');
+  const placeholder  = document.getElementById('player-placeholder');
+  const loadingEl    = document.getElementById('player-loading');
+  const errorEl      = document.getElementById('player-error');
+
+  if (!videoEl) return;
+
+  // Sembunyikan semua state
+  if (placeholder) placeholder.style.display = 'none';
+  if (errorEl)     errorEl.style.display     = 'none';
+
+  // Tampilkan loading
+  videoEl.style.display = 'none';
+  if (loadingEl) loadingEl.style.display = 'flex';
+
+  // Buat URL stream langsung dari Google Drive
+  // Format: uc?export=stream&id=FILE_ID lebih stabil dari /preview
+  const fileId  = film.videoId;
+  const videoUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${window.GDRIVE_API_KEY || 'AIzaSyB8MY-5lLPOirCFvXO8qEwHgY5zntv0m4c'}`;
+
+  // Set source
+  videoEl.pause();
+  if (srcEl) {
+    srcEl.src = videoUrl;
+  } else {
+    videoEl.src = videoUrl;
+  }
+  videoEl.load();
+
+  // Event handlers
+  videoEl.oncanplay = () => {
+    if (loadingEl) loadingEl.style.display = 'none';
+    videoEl.style.display = 'block';
+    videoEl.play().catch(() => {});
+  };
+
+  videoEl.onerror = () => {
+    // Fallback: coba pakai URL uc?export=stream
+    const fallbackUrl = `https://drive.google.com/uc?export=stream&id=${fileId}`;
+    if (videoEl.src !== fallbackUrl) {
+      videoEl.src = fallbackUrl;
+      videoEl.load();
+      return;
+    }
+    // Kedua URL gagal → tampilkan error
+    if (loadingEl) loadingEl.style.display = 'none';
+    videoEl.style.display = 'none';
+    if (errorEl) errorEl.style.display = 'flex';
+  };
+
+  videoEl.onwaiting = () => {
+    if (loadingEl) loadingEl.style.display = 'flex';
+  };
+
+  videoEl.onplaying = () => {
+    if (loadingEl) loadingEl.style.display = 'none';
+  };
+
+  // Update info
   const title = document.getElementById('now-playing-title');
   const desc  = document.getElementById('now-playing-desc');
   if (title) title.textContent = film.title;
   if (desc)  desc.textContent  = film.desc + ' · Sedang diputar';
 
   document.querySelectorAll('.film-card').forEach(c => c.classList.remove('active'));
-  const card = document.getElementById(`film-card-${id}`);
+  const card = document.getElementById(`film-card-${film.id}`);
   if (card) card.classList.add('active');
 
   CURRENT_FILM = film.title;
@@ -1382,7 +1450,10 @@ window.addEventListener('DOMContentLoaded', () => {
   restoreSession();
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && currentExpandedSession) closeExpandSession();
+    if (e.key === 'Escape') {
+      if (currentExpandedSession) closeExpandSession();
+      if (document.getElementById('film-fullscreen-modal')?.classList.contains('active')) closeFilmFullscreen();
+    }
   });
 
   // ── BUTTON LOGIN — satu handler terpusat ──
@@ -1470,12 +1541,16 @@ function renderFilmGrid() {
   FILMS.forEach(film => {
     const card = document.createElement('div');
     card.className = 'film-card';
-    card.style.cursor = 'pointer';
-    card.onclick = () => selectFilm(film);
+    card.id = `film-card-${film.id}`;
+    card.onclick = () => openFilmFullscreen(film);
     
     card.innerHTML = `
-      <div class="fc-image" style="background:${film.gradient};background-image:url('${film.thumb}');background-size:cover;background-position:center;">
-        <div class="fc-duration">${film.duration}</div>
+      <div class="fc-image" style="background:${film.gradient};background-image:url('${film.thumb}');background-size:cover;background-position:center top;">
+        <div class="fc-play-btn">
+          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        </div>
+        <div class="fc-title-overlay">${film.title}</div>
+        <div class="fc-duration">${film.duration || '—'}</div>
       </div>
       <div class="fc-info">
         <div class="fc-title">${film.title}</div>
@@ -1487,15 +1562,95 @@ function renderFilmGrid() {
   });
 }
 
-// Select film untuk ditonton
-function selectFilm(film) {
+// ================================================================
+// FULLSCREEN VIDEO PLAYER — buka dari card film
+// ================================================================
+function openFilmFullscreen(film) {
+  const modal   = document.getElementById('film-fullscreen-modal');
+  const videoEl = document.getElementById('fs-video');
+  const srcEl   = document.getElementById('fs-video-src');
+  const titleEl = document.getElementById('fs-title');
+  const descEl  = document.getElementById('fs-desc');
+  const loadEl  = document.getElementById('fs-loading');
+  const errEl   = document.getElementById('fs-error');
+
+  if (!modal || !videoEl) return;
+
+  // Reset state
+  errEl.style.display  = 'none';
+  loadEl.style.display = 'flex';
+  videoEl.style.display = 'block';
+  titleEl.textContent  = film.title;
+  descEl.textContent   = film.desc;
+
+  // Build stream URL
+  const fileId   = film.videoId;
+  const apiKey   = window.GDRIVE_API_KEY || 'AIzaSyB8MY-5lLPOirCFvXO8qEwHgY5zntv0m4c';
+  const videoUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
+
+  videoEl.pause();
+  srcEl.src = videoUrl;
+  videoEl.load();
+
+  videoEl.oncanplay = () => {
+    loadEl.style.display = 'none';
+    videoEl.play().catch(() => {});
+  };
+
+  videoEl.onerror = () => {
+    const fallback = `https://drive.google.com/uc?export=stream&id=${fileId}`;
+    if (videoEl.src !== fallback) {
+      videoEl.src = fallback;
+      videoEl.load();
+      return;
+    }
+    loadEl.style.display = 'none';
+    errEl.style.display  = 'flex';
+  };
+
+  videoEl.onwaiting = () => { loadEl.style.display = 'flex'; };
+  videoEl.onplaying = () => { loadEl.style.display = 'none'; };
+
+  // Update state
+  CURRENT_FILM = film.title;
+  _currentPlayingFilm = film;
+
+  // Tandai card aktif
+  document.querySelectorAll('.film-card').forEach(c => c.classList.remove('active'));
+  const card = document.getElementById(`film-card-${film.id}`);
+  if (card) card.classList.add('active');
+
+  // Buka modal
+  modal.classList.add('active');
+
+  // Lock scroll body
+  document.body.style.overflow = 'hidden';
+
+  // Notify server
+  if (typeof socket !== 'undefined' && socket) {
+    socket.emit('film-selected', { film: film.title, videoId: film.videoId });
+  }
+
+  if (typeof addAdminLog === 'function') {
+    addAdminLog(currentUser?.name || 'User', `Menonton: ${film.title}`, '#2E6FF2', 'info');
+  }
+}
+
+function closeFilmFullscreen() {
+  const modal   = document.getElementById('film-fullscreen-modal');
+  const videoEl = document.getElementById('fs-video');
+  if (videoEl) { videoEl.pause(); videoEl.src = ''; }
+  if (modal)   { modal.classList.remove('active'); }
+  document.body.style.overflow = '';
+}
   if (!camStream && document.getElementById('screen-watch').classList.contains('active')) {
     alert('Kamera tidak aktif!');
     return;
   }
   
   CURRENT_FILM = film.title;
-  document.getElementById('film-iframe').src = film.embed;
+  _currentPlayingFilm = film;
+  loadVideoPlayer(film);
   document.getElementById('now-playing-title').textContent = film.title;
   document.getElementById('now-playing-desc').textContent = film.desc;
   
