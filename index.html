@@ -145,23 +145,26 @@
 
   <!-- Konten -->
   <div class="watch-content">
-    <!-- Player -->
-    <div class="now-playing">
-      <div class="iframe-wrap">
-        <div id="gdrive-player-container" style="width:100%;height:100%;background:#000;"></div>
-        <!-- iframe fallback jika GDrive player gagal -->
-        <iframe id="film-iframe"
-          src="about:blank"
-          frameborder="0"
-          allowfullscreen
-          scrolling="no"
-          allow="autoplay; fullscreen"
-          style="width:100%;height:100%;border:0;display:none;">
-        </iframe>
-      </div>
-      <div class="video-info">
-        <h3 id="now-playing-title">Memuat...</h3>
-        <p id="now-playing-desc">Sedang diputar</p>
+
+    <!-- Player aktif — muncul di atas grid saat film dipilih -->
+    <div id="active-player" style="display:none;">
+      <div class="active-player-wrap">
+        <div class="active-player-header">
+          <div class="active-player-info">
+            <span id="now-playing-title" class="ap-title">—</span>
+            <span id="now-playing-desc" class="ap-desc">Google Drive</span>
+          </div>
+          <button class="ap-close-btn" onclick="closeActivePlayer()">✕ Tutup</button>
+        </div>
+        <div class="iframe-wrap">
+          <iframe id="film-iframe"
+            src="about:blank"
+            frameborder="0"
+            allowfullscreen
+            allow="autoplay; fullscreen"
+            style="width:100%;height:100%;border:0;display:block;">
+          </iframe>
+        </div>
       </div>
     </div>
 
@@ -292,7 +295,6 @@
      ================================================================ -->
 <script src="/films.js"></script>
 <script src="/app.js"></script>
-
 
 </body>
 </html>
