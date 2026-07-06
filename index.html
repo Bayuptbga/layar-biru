@@ -145,34 +145,9 @@
 
   <!-- Konten -->
   <div class="watch-content">
-
-    <!-- Player aktif — muncul di atas grid saat film dipilih -->
-    <div id="active-player" style="display:none;">
-      <div class="active-player-wrap">
-        <div class="active-player-header">
-          <div class="active-player-info">
-            <span id="now-playing-title" class="ap-title">—</span>
-            <span id="now-playing-desc" class="ap-desc">Google Drive</span>
-          </div>
-          <button class="ap-close-btn" onclick="closeActivePlayer()">✕ Tutup</button>
-        </div>
-        <div class="iframe-wrap">
-          <iframe id="film-iframe"
-            src="about:blank"
-            frameborder="0"
-            allowfullscreen
-            allow="autoplay; fullscreen"
-            style="width:100%;height:100%;border:0;display:block;">
-          </iframe>
-        </div>
-      </div>
-    </div>
-
-    <!-- Pilih Film -->
+    <!-- Pilih Film — klik langsung putar inline -->
     <div class="section-title">Pilih Film</div>
-    <div class="film-grid" id="film-grid">
-      <!-- diisi oleh renderFilmGrid() di app.js -->
-    </div>
+    <div class="film-grid" id="film-grid"></div>
   </div>
 </div>
 
@@ -291,10 +266,9 @@
 
 
 <!-- ================================================================
-     SCRIPTS — urutan penting: films.js dulu, baru app.js
+     SCRIPTS
      ================================================================ -->
 <script src="/films.js"></script>
 <script src="/app.js"></script>
-
 </body>
 </html>
