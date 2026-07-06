@@ -1576,12 +1576,25 @@ function openFilmFullscreen(film) {
 
   if (!modal || !videoEl) return;
 
-  // Reset state
-  errEl.style.display  = 'none';
-  loadEl.style.display = 'flex';
+  // Reset semua state
+  errEl.style.display   = 'none';
+  loadEl.style.display  = 'flex';
   videoEl.style.display = 'block';
-  titleEl.textContent  = film.title;
-  descEl.textContent   = film.desc;
+  titleEl.textContent   = film.title;
+  descEl.textContent    = film.desc;
+
+  // Tandai card aktif
+  document.querySelectorAll('.film-card').forEach(c => c.classList.remove('active'));
+  const card = document.getElementById(`film-card-${film.id}`);
+  if (card) card.classList.add('active');
+
+  // Update state global
+  CURRENT_FILM        = film.title;
+  _currentPlayingFilm = film;
+
+  // Buka modal
+  modal.classList.add('active');
+  document.body.style.overflow = 'hidden';
 
   // Build stream URL
   const fileId   = film.videoId;
@@ -1589,7 +1602,8 @@ function openFilmFullscreen(film) {
   const videoUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
 
   videoEl.pause();
-  srcEl.src = videoUrl;
+  if (srcEl) srcEl.src = videoUrl;
+  else videoEl.src = videoUrl;
   videoEl.load();
 
   videoEl.oncanplay = () => {
@@ -1611,26 +1625,10 @@ function openFilmFullscreen(film) {
   videoEl.onwaiting = () => { loadEl.style.display = 'flex'; };
   videoEl.onplaying = () => { loadEl.style.display = 'none'; };
 
-  // Update state
-  CURRENT_FILM = film.title;
-  _currentPlayingFilm = film;
-
-  // Tandai card aktif
-  document.querySelectorAll('.film-card').forEach(c => c.classList.remove('active'));
-  const card = document.getElementById(`film-card-${film.id}`);
-  if (card) card.classList.add('active');
-
-  // Buka modal
-  modal.classList.add('active');
-
-  // Lock scroll body
-  document.body.style.overflow = 'hidden';
-
   // Notify server
   if (typeof socket !== 'undefined' && socket) {
     socket.emit('film-selected', { film: film.title, videoId: film.videoId });
   }
-
   if (typeof addAdminLog === 'function') {
     addAdminLog(currentUser?.name || 'User', `Menonton: ${film.title}`, '#2E6FF2', 'info');
   }
