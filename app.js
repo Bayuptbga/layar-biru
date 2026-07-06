@@ -530,42 +530,33 @@ function playFilm(id) {
 }
 
 /**
- * Memuat video dari Google Drive ke player
- * Menggunakan iframe GDrive preview — satu-satunya cara yang bekerja
- * karena URL direct download GDrive diblokir CORS oleh browser
+ * Putar film dari Google Drive menggunakan iframe preview.
+ * Player muncul sebagai panel di atas grid film (bukan card terpisah).
  */
 function loadGDriveVideo(film) {
-  const playerContainer = document.getElementById('gdrive-player-container');
-  const iframeEl        = document.getElementById('film-iframe');
-
-  // GDrive hanya bisa diputar via iframe /preview (bukan <video> tag)
   const previewUrl = film.embed || `https://drive.google.com/file/d/${film.videoId}/preview`;
 
-  if (playerContainer) {
-    playerContainer.style.display = 'block';
-    playerContainer.innerHTML = `
-      <iframe
-        src="${previewUrl}"
-        frameborder="0"
-        allowfullscreen
-        allow="autoplay; fullscreen"
-        style="width:100%;height:100%;border:0;display:block;background:#000;"
-      ></iframe>
-    `;
-    // Sembunyikan iframe cadangan
-    if (iframeEl) iframeEl.style.display = 'none';
-  } else if (iframeEl) {
+  // Isi iframe dengan URL preview GDrive
+  const iframeEl = document.getElementById('film-iframe');
+  if (iframeEl) {
     iframeEl.src = previewUrl;
-    iframeEl.style.display = 'block';
   }
 
-  // Update info film
-  const title = document.getElementById('now-playing-title');
-  const desc  = document.getElementById('now-playing-desc');
-  if (title) title.textContent = film.title;
-  if (desc)  desc.textContent  = `${film.desc} · Sedang diputar`;
+  // Update teks info
+  const titleEl = document.getElementById('now-playing-title');
+  const descEl  = document.getElementById('now-playing-desc');
+  if (titleEl) titleEl.textContent = film.title;
+  if (descEl)  descEl.textContent  = film.desc || 'Google Drive';
 
-  // Highlight kartu aktif
+  // Tampilkan panel player di atas grid
+  const activePlayer = document.getElementById('active-player');
+  if (activePlayer) {
+    activePlayer.style.display = 'block';
+    // Scroll ke player dengan smooth
+    activePlayer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // Highlight kartu yang sedang aktif
   document.querySelectorAll('.film-card').forEach(c => c.classList.remove('active'));
   const card = document.getElementById(`film-card-${film.id}`);
   if (card) card.classList.add('active');
@@ -573,7 +564,16 @@ function loadGDriveVideo(film) {
   CURRENT_FILM = film.title;
 }
 
+function closeActivePlayer() {
+  const activePlayer = document.getElementById('active-player');
+  if (activePlayer) activePlayer.style.display = 'none';
 
+  const iframeEl = document.getElementById('film-iframe');
+  if (iframeEl) iframeEl.src = 'about:blank';
+
+  document.querySelectorAll('.film-card').forEach(c => c.classList.remove('active'));
+  CURRENT_FILM = FILMS[0]?.title || '—';
+}
 
 // ================================================================
 // CAMERA CONSENT
