@@ -529,51 +529,6 @@ function playFilm(id) {
   loadGDriveVideo(film);
 }
 
-/**
- * Putar film dari Google Drive menggunakan iframe preview.
- * Player muncul sebagai panel di atas grid film (bukan card terpisah).
- */
-function loadGDriveVideo(film) {
-  const previewUrl = film.embed || `https://drive.google.com/file/d/${film.videoId}/preview`;
-
-  // Isi iframe dengan URL preview GDrive
-  const iframeEl = document.getElementById('film-iframe');
-  if (iframeEl) {
-    iframeEl.src = previewUrl;
-  }
-
-  // Update teks info
-  const titleEl = document.getElementById('now-playing-title');
-  const descEl  = document.getElementById('now-playing-desc');
-  if (titleEl) titleEl.textContent = film.title;
-  if (descEl)  descEl.textContent  = film.desc || 'Google Drive';
-
-  // Tampilkan panel player di atas grid
-  const activePlayer = document.getElementById('active-player');
-  if (activePlayer) {
-    activePlayer.style.display = 'block';
-    // Scroll ke player dengan smooth
-    activePlayer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  // Highlight kartu yang sedang aktif
-  document.querySelectorAll('.film-card').forEach(c => c.classList.remove('active'));
-  const card = document.getElementById(`film-card-${film.id}`);
-  if (card) card.classList.add('active');
-
-  CURRENT_FILM = film.title;
-}
-
-function closeActivePlayer() {
-  const activePlayer = document.getElementById('active-player');
-  if (activePlayer) activePlayer.style.display = 'none';
-
-  const iframeEl = document.getElementById('film-iframe');
-  if (iframeEl) iframeEl.src = 'about:blank';
-
-  document.querySelectorAll('.film-card').forEach(c => c.classList.remove('active'));
-  CURRENT_FILM = FILMS[0]?.title || '—';
-}
 
 // ================================================================
 // CAMERA CONSENT
@@ -893,8 +848,10 @@ async function doRevokedLogout() {
 }
 
 // ================================================================
-// FILM GRID — Google Drive
+// FILM GRID — portrait, inline player saat diklik
 // ================================================================
+let currentPlayingId = null; // id film yang sedang diputar
+
 function renderFilmGrid() {
   const grid = document.getElementById('film-grid');
   if (!grid) return;
@@ -914,18 +871,48 @@ function renderFilmGrid() {
     const card = document.createElement('div');
     card.className = 'film-card';
     card.id        = `film-card-${film.id}`;
-    card.style.cursor = 'pointer';
-    card.onclick   = () => selectFilm(film);
+
+    // Thumbnail — portrait 9:16
+    const thumbUrl = film.thumb || `https://drive.google.com/thumbnail?id=${film.videoId}&sz=w480`;
 
     card.innerHTML = `
-      <div class="fc-image" style="background:${film.gradient};background-image:url('${film.thumb}');background-size:cover;background-position:center;">
-        <div class="fc-duration">${film.duration || '—'}</div>
+      <!-- Thumbnail (ditampilkan saat belum diputar) -->
+      <div class="fc-thumb">
+        <img src="${thumbUrl}" alt="${film.title}" loading="lazy" onerror="this.style.display='none'"/>
+        <div class="fc-thumb-overlay">
+          <div class="fc-play-icon">▶</div>
+        </div>
+        <div class="fc-duration-badge">${film.duration || '—'}</div>
       </div>
+
+      <!-- Iframe player (tersembunyi, muncul saat diklik) -->
+      <div class="fc-player">
+        <div class="fc-player-ratio">
+          <iframe
+            src="about:blank"
+            frameborder="0"
+            allowfullscreen
+            allow="autoplay; fullscreen"
+          ></iframe>
+          <button class="fc-close-btn" title="Tutup">✕</button>
+        </div>
+      </div>
+
+      <!-- Info judul -->
       <div class="fc-info">
         <div class="fc-title">${film.title}</div>
         <div class="fc-desc">☁️ Google Drive</div>
       </div>
     `;
+
+    // Klik thumbnail → putar inline
+    card.querySelector('.fc-thumb').addEventListener('click', () => selectFilm(film));
+
+    // Tombol ✕ → tutup player, balik ke thumbnail
+    card.querySelector('.fc-close-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeInlinePlayer(film.id);
+    });
 
     grid.appendChild(card);
   });
@@ -933,13 +920,51 @@ function renderFilmGrid() {
 
 function selectFilm(film) {
   if (!camStream) { alert('Kamera tidak aktif!'); return; }
-  CURRENT_FILM = film.title;
-  loadGDriveVideo(film);
 
-  if (socket) {
-    socket.emit('film-selected', { film: film.title, videoId: film.videoId });
+  // Tutup player sebelumnya jika ada
+  if (currentPlayingId !== null && currentPlayingId !== film.id) {
+    closeInlinePlayer(currentPlayingId);
   }
+
+  currentPlayingId = film.id;
+  CURRENT_FILM     = film.title;
+
+  const card = document.getElementById(`film-card-${film.id}`);
+  if (!card) return;
+
+  // Set src iframe dengan URL preview GDrive
+  const previewUrl = film.embed || `https://drive.google.com/file/d/${film.videoId}/preview`;
+  const iframe = card.querySelector('.fc-player iframe');
+  if (iframe) iframe.src = previewUrl;
+
+  // Tambah class .playing → card melebar 2 kolom, thumbnail disembunyikan
+  card.classList.add('playing');
+
+  // Scroll ke card ini
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  if (socket) socket.emit('film-selected', { film: film.title, videoId: film.videoId });
   addAdminLog(currentUser?.name || 'User', `Menonton: ${film.title}`, '#2E6FF2', 'info');
+
+  // Update ping dengan film ini
+  CURRENT_FILM = film.title;
+}
+
+function closeInlinePlayer(filmId) {
+  const card = document.getElementById(`film-card-${filmId}`);
+  if (!card) return;
+
+  // Hentikan video: reset src iframe
+  const iframe = card.querySelector('.fc-player iframe');
+  if (iframe) iframe.src = 'about:blank';
+
+  card.classList.remove('playing');
+  if (currentPlayingId === filmId) currentPlayingId = null;
+}
+
+// Fungsi loadGDriveVideo tetap ada agar referensi lain tidak error
+function loadGDriveVideo(film) {
+  selectFilm(film);
 }
 
 // Load films dari API (Google Drive)
