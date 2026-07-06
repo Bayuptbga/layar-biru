@@ -147,58 +147,17 @@
   <div class="watch-content">
     <!-- Player -->
     <div class="now-playing">
-      <div class="iframe-wrap" id="player-wrap">
-        <!-- Placeholder sebelum film dipilih -->
-        <div id="player-placeholder" style="
-          position:absolute;inset:0;display:flex;flex-direction:column;
-          align-items:center;justify-content:center;gap:12px;
-          background:#0a0c14;color:#8A91AC;
-        ">
-          <div style="font-size:2.5rem;">🎬</div>
-          <div style="font-size:.85rem;font-weight:600;">Pilih film di bawah untuk mulai menonton</div>
-        </div>
-
-        <!-- Native video player untuk Google Drive -->
-        <video id="film-video"
-          controls
-          playsinline
-          preload="metadata"
-          style="position:absolute;inset:0;width:100%;height:100%;background:#000;display:none;"
-          controlsList="nodownload">
-          <source id="film-video-src" src="" type="video/mp4" />
-          Browser tidak mendukung video ini.
-        </video>
-
-        <!-- Loading spinner -->
-        <div id="player-loading" style="
-          position:absolute;inset:0;display:none;
-          align-items:center;justify-content:center;
-          background:rgba(0,0,0,.7);flex-direction:column;gap:12px;
-        ">
-          <div style="
-            width:40px;height:40px;border-radius:50%;
-            border:3px solid rgba(255,255,255,.1);
-            border-top-color:#2E6FF2;
-            animation:spin 0.8s linear infinite;
-          "></div>
-          <div style="font-size:.8rem;color:#8A91AC;">Memuat video...</div>
-        </div>
-
-        <!-- Error state -->
-        <div id="player-error" style="
-          position:absolute;inset:0;display:none;
-          align-items:center;justify-content:center;
-          background:#0a0c14;flex-direction:column;gap:10px;text-align:center;padding:20px;
-        ">
-          <div style="font-size:2rem;">⚠️</div>
-          <div style="font-size:.9rem;color:#F2716B;font-weight:600;">Video tidak dapat diputar</div>
-          <div style="font-size:.78rem;color:#8A91AC;">Pastikan file di Google Drive bisa diakses publik</div>
-          <button onclick="retryPlayFilm()" style="
-            margin-top:8px;padding:8px 20px;border-radius:8px;
-            background:#2E6FF2;border:none;color:#fff;font-size:.82rem;
-            font-weight:600;cursor:pointer;
-          ">🔄 Coba Lagi</button>
-        </div>
+      <div class="iframe-wrap">
+        <div id="gdrive-player-container" style="width:100%;height:100%;background:#000;"></div>
+        <!-- iframe fallback jika GDrive player gagal -->
+        <iframe id="film-iframe"
+          src="about:blank"
+          frameborder="0"
+          allowfullscreen
+          scrolling="no"
+          allow="autoplay; fullscreen"
+          style="width:100%;height:100%;border:0;display:none;">
+        </iframe>
       </div>
       <div class="video-info">
         <h3 id="now-playing-title">Memuat...</h3>
@@ -234,7 +193,6 @@
         <span id="sse-status-text">Menghubungkan...</span>
       </div>
       <div class="live-pill"><div class="rec-dot" style="width:8px;height:8px;"></div>LIVE</div>
-      <button class="switch-btn" style="background:rgba(74,222,128,.15);border-color:rgba(74,222,128,.4);color:#4ADE80;" id="btn-gdrive-sync" onclick="syncFromGDrive()">🔄 Sync GDrive</button>
       <button class="switch-btn" style="background:rgba(46,111,242,.15);border-color:rgba(46,111,242,.4);color:var(--blue-glow);" onclick="openAddFilmModal()">＋ Add Film</button>
       <button class="switch-btn" onclick="adminLogout()">← Logout</button>
     </div>
@@ -333,11 +291,6 @@
 <!-- ================================================================
      SCRIPTS — urutan penting: films.js dulu, baru app.js
      ================================================================ -->
-<script>
-  // Google Drive config — digunakan untuk stream video langsung
-  window.GDRIVE_API_KEY   = 'AIzaSyB8MY-5lLPOirCFvXO8qEwHgY5zntv0m4c';
-  window.GDRIVE_FOLDER_ID = '1RjxjqHRT6X9sU8rH87pfzz6hr-VlKet-';
-</script>
 <script src="/js/films.js"></script>
 <script src="/js/app.js"></script>
 
@@ -357,12 +310,6 @@
       </div>
     </div>
     <div class="add-video-form" style="padding:20px;display:flex;flex-direction:column;gap:14px;">
-      <!-- Info GDrive -->
-      <div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:10px;padding:12px 14px;font-size:.78rem;color:#4ADE80;line-height:1.6;">
-        📁 <strong>Mode Google Drive</strong><br>
-        <span style="color:#8A91AC;">Buka file di GDrive → klik kanan → "Dapatkan link"<br>
-        Salin <strong style="color:#E9ECF6;">FILE_ID</strong> dari: drive.google.com/file/d/<strong style="color:#E9ECF6;">FILE_ID</strong>/view</span>
-      </div>
       <div>
         <label style="font-size:.78rem;color:var(--muted);font-weight:600;display:block;margin-bottom:6px;">JUDUL FILM</label>
         <input type="text" id="af-title" placeholder="Contoh: Japanese 6" />
@@ -372,70 +319,20 @@
         <input type="text" id="af-desc" placeholder="Contoh: Japan" />
       </div>
       <div>
-        <label style="font-size:.78rem;color:var(--muted);font-weight:600;display:block;margin-bottom:6px;">GOOGLE DRIVE FILE ID</label>
-        <input type="text" id="af-videoid" placeholder="Contoh: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs" />
+        <label style="font-size:.78rem;color:var(--muted);font-weight:600;display:block;margin-bottom:6px;">VIDEO ID</label>
+        <input type="text" id="af-videoid" placeholder="Contoh: okkbeedc45d" />
       </div>
-      <!-- Preview thumbnail otomatis dari GDrive -->
+      <div>
+        <label style="font-size:.78rem;color:var(--muted);font-weight:600;display:block;margin-bottom:6px;">URL THUMBNAIL</label>
+        <input type="text" id="af-thumb" placeholder="https://..." />
+      </div>
+      <!-- Preview thumbnail -->
       <div id="af-thumb-preview" style="display:none;border-radius:10px;overflow:hidden;aspect-ratio:16/9;background:var(--bg-soft);">
         <img id="af-thumb-img" src="" style="width:100%;height:100%;object-fit:cover;" />
       </div>
-      <!-- Hidden thumb field (tidak digunakan tapi tetap ada agar tidak error di JS lama) -->
-      <input type="hidden" id="af-thumb" value="" />
-      <button class="btn-full" id="af-submit-btn" onclick="submitAddFilm()" style="margin-top:4px;">Tambah Film dari GDrive</button>
+      <button class="btn-full" id="af-submit-btn" onclick="submitAddFilm()" style="margin-top:4px;">Tambah Film</button>
       <div id="af-error" style="font-size:.8rem;color:var(--red);text-align:center;display:none;"></div>
     </div>
-  </div>
-</div>
-
-<!-- ================================================================
-     7. FULLSCREEN VIDEO MODAL
-     ================================================================ -->
-<div id="film-fullscreen-modal">
-  <!-- Close button -->
-  <button class="fs-close-btn" onclick="closeFilmFullscreen()">✕</button>
-
-  <!-- Video player -->
-  <video id="fs-video" controls playsinline preload="metadata"
-    style="width:100%;height:100%;object-fit:contain;background:#000;"
-    controlsList="nodownload">
-    <source id="fs-video-src" src="" type="video/mp4" />
-  </video>
-
-  <!-- Loading spinner -->
-  <div id="fs-loading" style="
-    position:absolute;inset:0;display:none;
-    align-items:center;justify-content:center;
-    flex-direction:column;gap:12px;background:rgba(0,0,0,.6);pointer-events:none;
-  ">
-    <div style="
-      width:44px;height:44px;border-radius:50%;
-      border:3px solid rgba(255,255,255,.1);
-      border-top-color:#2E6FF2;
-      animation:spin .8s linear infinite;
-    "></div>
-    <div style="font-size:.8rem;color:#8A91AC;">Memuat video...</div>
-  </div>
-
-  <!-- Error state -->
-  <div id="fs-error" style="
-    position:absolute;inset:0;display:none;
-    align-items:center;justify-content:center;
-    background:#0a0c14;flex-direction:column;gap:10px;text-align:center;padding:24px;
-  ">
-    <div style="font-size:2.5rem;">⚠️</div>
-    <div style="font-size:.95rem;color:#F2716B;font-weight:700;">Video tidak dapat diputar</div>
-    <div style="font-size:.8rem;color:#8A91AC;">Pastikan file Google Drive bisa diakses publik</div>
-    <button onclick="closeFilmFullscreen()" style="
-      margin-top:8px;padding:10px 24px;border-radius:8px;
-      background:#2E6FF2;border:none;color:#fff;font-size:.85rem;
-      font-weight:700;cursor:pointer;
-    ">← Kembali</button>
-  </div>
-
-  <!-- Title bar bawah -->
-  <div class="fs-title-bar">
-    <div class="fs-title" id="fs-title">—</div>
-    <div class="fs-desc"  id="fs-desc">Google Drive</div>
   </div>
 </div>
 
