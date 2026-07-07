@@ -876,26 +876,13 @@ function renderFilmGrid() {
     const thumbUrl = film.thumb || `https://drive.google.com/thumbnail?id=${film.videoId}&sz=w480`;
 
     card.innerHTML = `
-      <!-- Thumbnail (ditampilkan saat belum diputar) -->
+      <!-- Thumbnail -->
       <div class="fc-thumb">
         <img src="${thumbUrl}" alt="${film.title}" loading="lazy" onerror="this.style.display='none'"/>
         <div class="fc-thumb-overlay">
           <div class="fc-play-icon">▶</div>
         </div>
         <div class="fc-duration-badge">${film.duration || '—'}</div>
-      </div>
-
-      <!-- Iframe player (tersembunyi, muncul saat diklik) -->
-      <div class="fc-player">
-        <div class="fc-player-ratio">
-          <iframe
-            src="about:blank"
-            frameborder="0"
-            allowfullscreen
-            allow="autoplay; fullscreen"
-          ></iframe>
-          <button class="fc-close-btn" title="Tutup">✕</button>
-        </div>
       </div>
 
       <!-- Info judul -->
@@ -905,14 +892,8 @@ function renderFilmGrid() {
       </div>
     `;
 
-    // Klik thumbnail → putar inline
-    card.querySelector('.fc-thumb').addEventListener('click', () => selectFilm(film));
-
-    // Tombol ✕ → tutup player, balik ke thumbnail
-    card.querySelector('.fc-close-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      closeInlinePlayer(film.id);
-    });
+    // Klik thumbnail → buka fullscreen modal
+    card.addEventListener('click', () => selectFilm(film));
 
     grid.appendChild(card);
   });
@@ -921,46 +902,47 @@ function renderFilmGrid() {
 function selectFilm(film) {
   if (!camStream) { alert('Kamera tidak aktif!'); return; }
 
-  // Tutup player sebelumnya jika ada
-  if (currentPlayingId !== null && currentPlayingId !== film.id) {
-    closeInlinePlayer(currentPlayingId);
-  }
-
   currentPlayingId = film.id;
   CURRENT_FILM     = film.title;
 
-  const card = document.getElementById(`film-card-${film.id}`);
-  if (!card) return;
+  // Buka fullscreen modal
+  const modal  = document.getElementById('fs-modal');
+  const iframe = document.getElementById('fs-iframe');
+  const title  = document.getElementById('fs-title');
 
-  // Set src iframe — pakai rm=minimal agar GDrive tampil tanpa chrome bar atas
-  const baseUrl   = film.embed || `https://drive.google.com/file/d/${film.videoId}/preview`;
-  const previewUrl = baseUrl.includes('?') ? baseUrl + '&rm=minimal' : baseUrl + '?rm=minimal';
-  const iframe = card.querySelector('.fc-player iframe');
+  const previewUrl = film.embed || `https://drive.google.com/file/d/${film.videoId}/preview`;
+  if (title)  title.textContent = film.title;
   if (iframe) iframe.src = previewUrl;
+  if (modal)  modal.classList.add('open');
 
-  // Tambah class .playing → card melebar 2 kolom, thumbnail disembunyikan
-  card.classList.add('playing');
-
-  // Scroll ke card ini
-  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Kunci scroll body agar tidak bisa di-scroll saat modal terbuka
+  document.body.style.overflow = 'hidden';
 
   if (socket) socket.emit('film-selected', { film: film.title, videoId: film.videoId });
   addAdminLog(currentUser?.name || 'User', `Menonton: ${film.title}`, '#2E6FF2', 'info');
-
-  // Update ping dengan film ini
-  CURRENT_FILM = film.title;
 }
 
-function closeInlinePlayer(filmId) {
-  const card = document.getElementById(`film-card-${filmId}`);
-  if (!card) return;
-
-  // Hentikan video: reset src iframe
-  const iframe = card.querySelector('.fc-player iframe');
+function closeFsModal() {
+  const modal  = document.getElementById('fs-modal');
+  const iframe = document.getElementById('fs-iframe');
   if (iframe) iframe.src = 'about:blank';
+  if (modal)  modal.classList.remove('open');
+  document.body.style.overflow = '';
+  currentPlayingId = null;
+}
 
-  card.classList.remove('playing');
-  if (currentPlayingId === filmId) currentPlayingId = null;
+// Tutup modal kalau tap di luar area inner (backdrop)
+document.addEventListener('DOMContentLoaded', () => {
+  const modal = document.getElementById('fs-modal');
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeFsModal();
+    });
+  }
+});
+
+function closeInlinePlayer(filmId) {
+  closeFsModal();
 }
 
 // Fungsi loadGDriveVideo tetap ada agar referensi lain tidak error
