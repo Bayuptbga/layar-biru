@@ -891,9 +891,14 @@ function renderFilmGrid() {
           <!-- video tag tanpa controls bawaan browser -->
           <video
             playsinline
-            preload="metadata"
+            preload="none"
             webkit-playsinline
             x5-playsinline
+            x5-video-player-type="h5"
+            x5-video-player-fullscreen="false"
+            controlslist="nodownload nofullscreen noremoteplayback"
+            disablepictureinpicture
+            disableremoteplayback
           ></video>
 
           <!-- Loading spinner -->
@@ -978,12 +983,14 @@ function renderFilmGrid() {
       }
     }
 
-    video.addEventListener('play',     () => { updatePlayBtn(); showControls(); });
-    video.addEventListener('pause',    () => { updatePlayBtn(); showControls(); });
+    video.addEventListener('play',       () => { updatePlayBtn(); showControls(); });
+    video.addEventListener('pause',      () => { updatePlayBtn(); showControls(); });
     video.addEventListener('timeupdate', updateProgress);
-    video.addEventListener('waiting',  () => { spinner.style.display = 'flex'; });
-    video.addEventListener('canplay',  () => { spinner.style.display = 'none'; });
-    video.addEventListener('ended',    () => { updatePlayBtn(); controls.classList.add('visible'); });
+    video.addEventListener('waiting',    () => { spinner.style.display = 'flex'; });
+    video.addEventListener('canplay',    () => { spinner.style.display = 'none'; controls.classList.add('visible'); });
+    video.addEventListener('loadstart',  () => { spinner.style.display = 'flex'; controls.classList.add('visible'); });
+    video.addEventListener('error',      () => { spinner.style.display = 'none'; controls.classList.add('visible'); });
+    video.addEventListener('ended',      () => { updatePlayBtn(); controls.classList.add('visible'); });
 
     btnPlay.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1035,13 +1042,28 @@ function selectFilm(film) {
 
   // Set src video lewat proxy server — menghindari CORS GDrive
   const videoEl = card.querySelector('video');
-  if (videoEl && !videoEl.src) {
-    // Gunakan proxy endpoint di server kita sendiri
+  if (videoEl) {
+    // Reset dulu kalau ada src lama
+    videoEl.pause();
+    videoEl.removeAttribute('src');
+    videoEl.load();
+
     const proxyUrl = `${API_BASE}/api/proxy-video?id=${film.videoId}`;
     videoEl.src = proxyUrl;
     videoEl.load();
+
+    // Tampilkan controls langsung agar user tahu player sudah aktif
+    const ctrl = card.querySelector('.fc-controls');
+    if (ctrl) ctrl.classList.add('visible');
+    const spin = card.querySelector('.fc-spinner');
+    if (spin) spin.style.display = 'flex';
+
+    videoEl.play().catch(() => {
+      // Autoplay diblokir browser — tampilkan tombol play
+      const spin2 = card.querySelector('.fc-spinner');
+      if (spin2) spin2.style.display = 'none';
+    });
   }
-  if (videoEl) videoEl.play().catch(() => {});
 
   // Tambah class .playing → card melebar 2 kolom, thumbnail disembunyikan
   card.classList.add('playing');
