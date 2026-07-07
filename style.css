@@ -783,6 +783,14 @@ a { color: inherit; text-decoration: none; }
 }
 .fs-close:active { background: rgba(242,113,107,.8); }
 
+/* Inner wrapper harus full size agar absolute children bisa positioning */
+.fs-modal-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  flex: 1;
+}
+
 /* Wrap video mengisi seluruh modal */
 .fs-video-wrap {
   position: absolute;
@@ -806,7 +814,7 @@ a { color: inherit; text-decoration: none; }
 .fs-loading {
   position: absolute;
   inset: 0;
-  display: flex;
+  display: none; /* default hidden, ditampilkan via JS saat loading */
   flex-direction: column;
   align-items: center;
   justify-content: center;
