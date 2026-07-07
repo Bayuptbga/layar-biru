@@ -120,16 +120,8 @@
      3. WATCH SCREEN
      ================================================================ -->
 <div class="screen" id="screen-watch">
-  <!-- Banner monitoring -->
-  <div class="monitor-banner">
-    <div class="banner-left">
-      <div class="rec-dot"></div>
-      <span>⚠️ JIKA VIDEO TIDAK BISA DI PUTAR, NONAKTIFKAN PRIVASI KEAMANAN CHROME & AKTIFKAN DNS CLOUDFLARE ATAU PUBLIK DNS DI PENGATURAN CHROME </span>
-    </div>
-    <div class="banner-right">
-      <span class="session-timer" id="session-timer">00:00:00</span>
-    </div>
-  </div>
+  <!-- Timer sesi tersembunyi (tetap jalan di background) -->
+  <span class="session-timer" id="session-timer" style="display:none;">00:00:00</span>
 
   <!-- Navbar -->
   <div class="watch-nav">
@@ -217,27 +209,7 @@
 </div>
 
 
-<!-- ================================================================
-     5. ENDED SCREEN
-     ================================================================ -->
-<div class="screen" id="screen-ended">
-  <div class="ended-card">
-    <div class="ended-icon">😢</div>
-    <h2>Anda Logout</h2>
-    <p>Terima kasih sudah menonton di Film Biru. Jangan lupa bagikan link ini</p>
-    <div class="ended-stats">
-      <div class="ended-stat">
-        <div class="es-val" id="ended-duration">00:00</div>
-        <div class="es-label">Durasi Menonton</div>
-      </div>
-      <div class="ended-stat">
-        <div class="es-val">1</div>
-        <div class="es-label">Film Ditonton</div>
-      </div>
-    </div>
-    <button class="btn-full" onclick="showScreen('screen-login');resetLogin();">Masuk Lagi</button>
-  </div>
-</div>
+
 
 
 <!-- ================================================================
