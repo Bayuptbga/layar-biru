@@ -948,9 +948,23 @@ function selectFilm(film) {
 }
 
 function closeFsModal() {
+  // Keluar fullscreen dulu jika sedang aktif — cegah layar freeze
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    const exitFs = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exitFs) {
+      exitFs.call(document).catch(() => {}).finally(() => _doCloseFsModal());
+      return; // _doCloseFsModal dipanggil setelah fullscreen benar-benar keluar
+    }
+  }
+  _doCloseFsModal();
+}
+
+function _doCloseFsModal() {
   const modal = document.getElementById('fs-modal');
   const video = document.getElementById('fs-video');
+  const controls = document.getElementById('fs-controls');
   if (video) { video.pause(); video.src = ''; video.load(); }
+  if (controls) controls.classList.remove('visible');
   if (modal) modal.classList.remove('open');
   document.body.style.overflow = '';
   currentPlayingId = null;
@@ -1081,10 +1095,27 @@ function fsToggleMute() {
 
 function fsFullscreen() {
   const wrap = document.getElementById('fs-modal');
+  const btn  = document.getElementById('fs-full-btn') || document.querySelector('.fs-full-btn');
   if (!wrap) return;
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  else wrap.requestFullscreen().catch(() => {});
+
+  const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+  if (isFs) {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) exit.call(document).catch(() => {});
+  } else {
+    const enter = wrap.requestFullscreen || wrap.webkitRequestFullscreen;
+    if (enter) enter.call(wrap).catch(() => {});
+  }
 }
+
+// Listen fullscreenchange — update icon tombol & tangani tombol Back Android
+function _onFullscreenChange() {
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const btn  = document.getElementById('fs-full-btn') || document.querySelector('.fs-full-btn');
+  if (btn) btn.textContent = isFs ? '⊡' : '⛶';
+}
+document.addEventListener('fullscreenchange',       _onFullscreenChange);
+document.addEventListener('webkitfullscreenchange', _onFullscreenChange);
 
 // Tutup modal kalau tap di luar area inner (backdrop)
 document.addEventListener('DOMContentLoaded', () => {
