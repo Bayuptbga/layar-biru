@@ -3,6 +3,11 @@
 // ================================================================
 
 // ================================================================
+// FILMS — fallback array, diisi dari /api/films (Google Drive)
+// ================================================================
+const FILMS = [];
+
+// ================================================================
 // CONFIG
 // ================================================================
 const API_BASE = (
@@ -920,8 +925,16 @@ function selectFilm(film) {
 
   if (video) {
     video.src = videoUrl;
+    // Tidak langsung play() — tunggu browser siap (cegah autoplay error di mobile)
+    const onCanPlay = () => {
+      video.removeEventListener('canplay', onCanPlay);
+      video.play().catch(() => {
+        // Autoplay diblokir browser — tampilkan controls agar user tap manual
+        if (controls) controls.classList.add('visible');
+      });
+    };
+    video.addEventListener('canplay', onCanPlay);
     video.load();
-    video.play().catch(() => {});
   }
 
   if (modal) modal.classList.add('open');
