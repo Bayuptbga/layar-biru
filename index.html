@@ -266,6 +266,28 @@
 
 
 <!-- ================================================================
+     FULLSCREEN VIDEO MODAL
+     ================================================================ -->
+<div class="fs-modal" id="fs-modal">
+  <div class="fs-modal-inner">
+    <div class="fs-header">
+      <span class="fs-title" id="fs-title">—</span>
+      <button class="fs-close" onclick="closeFsModal()">✕</button>
+    </div>
+    <div class="fs-iframe-wrap">
+      <iframe
+        id="fs-iframe"
+        src="about:blank"
+        frameborder="0"
+        allowfullscreen
+        allow="autoplay; fullscreen"
+      ></iframe>
+    </div>
+  </div>
+</div>
+
+
+<!-- ================================================================
      SCRIPTS
      ================================================================ -->
 <script src="/films.js"></script>
