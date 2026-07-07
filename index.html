@@ -274,18 +274,40 @@
       <span class="fs-title" id="fs-title">—</span>
       <button class="fs-close" onclick="closeFsModal()">✕</button>
     </div>
-    <div class="fs-iframe-wrap">
-      <iframe
-        id="fs-iframe"
-        src="about:blank"
-        frameborder="0"
-        allowfullscreen
-        allow="autoplay; fullscreen"
-      ></iframe>
-      <!-- Mask bawah: tutupi tombol pause/skip/timer GDrive -->
-      <div class="fs-controls-mask"></div>
-      <!-- Mask atas-kanan: tutupi tombol expand GDrive -->
-      <div class="fs-controls-mask-top"></div>
+    <div class="fs-video-wrap">
+      <!-- Video native — tanpa kontrol GDrive sama sekali -->
+      <video
+        id="fs-video"
+        playsinline
+        autoplay
+        preload="auto"
+      ></video>
+      <!-- Loading spinner -->
+      <div class="fs-loading" id="fs-loading">
+        <div class="fs-spinner"></div>
+        <div class="fs-loading-text">Memuat video...</div>
+      </div>
+      <!-- Error state -->
+      <div class="fs-error" id="fs-error" style="display:none;">
+        <div style="font-size:2rem;margin-bottom:12px;">⚠️</div>
+        <div class="fs-error-text">Video gagal dimuat</div>
+        <button class="fs-retry-btn" id="fs-retry-btn">Coba Lagi</button>
+      </div>
+      <!-- Custom controls -->
+      <div class="fs-controls" id="fs-controls">
+        <div class="fs-progress-wrap">
+          <input type="range" class="fs-progress" id="fs-progress" value="0" min="0" step="0.1"/>
+          <div class="fs-time" id="fs-time">0:00 / 0:00</div>
+        </div>
+        <div class="fs-btn-row">
+          <button class="fs-ctrl-btn" id="fs-play-btn" onclick="fsTogglePlay()">▶</button>
+          <button class="fs-ctrl-btn" onclick="fsSeek(-10)">↺10</button>
+          <button class="fs-ctrl-btn" onclick="fsSeek(10)">↻10</button>
+          <button class="fs-ctrl-btn" id="fs-mute-btn" onclick="fsToggleMute()">🔊</button>
+          <input type="range" class="fs-vol" id="fs-vol" min="0" max="1" step="0.05" value="1"/>
+          <button class="fs-ctrl-btn fs-full-btn" onclick="fsFullscreen()">⛶</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
