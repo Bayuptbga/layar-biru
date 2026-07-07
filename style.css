@@ -129,14 +129,14 @@ a { color: inherit; text-decoration: none; }
 .btn-end-session         { padding: 8px 16px; border-radius: 7px; background: rgba(242,113,107,.15); border: 1px solid rgba(242,113,107,.3); color: var(--red); font-size: .82rem; font-weight: 600; cursor: pointer; transition: all .2s; }
 .btn-end-session:hover   { background: rgba(242,113,107,.25); }
 
-.watch-content           { flex: 1; padding: 24px 20px; max-width: 1000px; margin: 0 auto; width: 100%; }
+.watch-content           { flex: 1; padding: 16px 10px; max-width: 1000px; margin: 0 auto; width: 100%; }
 
 
 
 .section-title           { font-size: 1.1rem; font-weight: 600; margin-bottom: 14px; }
 
 /* Grid 3 kolom portrait */
-.film-grid               { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.film-grid               { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
 
 /* Card thumbnail normal */
 .film-card               { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; cursor: pointer; transition: border-color .2s, box-shadow .2s; position: relative; }
@@ -407,7 +407,7 @@ a { color: inherit; text-decoration: none; }
   .admin-stats                { grid-template-columns: 1fr 1fr; }
   .sessions-grid              { grid-template-columns: 1fr; }
   .btn-row                    { flex-direction: column; }
-  .film-grid                  { grid-template-columns: repeat(3, 1fr); }
+  .film-grid                  { grid-template-columns: repeat(3, 1fr) !important; gap: 6px !important; }
   .video-modal-inner          { max-height: 92vh; }
   .vm-header                  { flex-direction: column; align-items: flex-start; }
 }
@@ -439,9 +439,9 @@ a { color: inherit; text-decoration: none; }
    FILM CARDS — 16:9 ASPECT RATIO
    ================================================================ */
 .film-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 8px !important;
 }
 
 .film-card {
@@ -580,14 +580,14 @@ a { color: inherit; text-decoration: none; }
 /* Film grid responsive */
 @media (max-width: 1024px) {
   .film-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, 1fr) !important;
   }
 }
 
 @media (max-width: 768px) {
   .film-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
   }
   
   .fc-image {
@@ -605,8 +605,8 @@ a { color: inherit; text-decoration: none; }
 
 @media (max-width: 600px) {
   .film-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
   }
   
   .fc-info {
