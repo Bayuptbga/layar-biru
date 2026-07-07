@@ -1,4 +1,3 @@
-
 /* ================================================================
    LAYAR BIRU — style.css
    ================================================================ */
@@ -743,18 +742,20 @@ a { color: inherit; text-decoration: none; }
   z-index: 9999;
   background: #000;
   flex-direction: column;
+  overflow: hidden; /* cegah konten iframe meluber keluar */
 }
 .fs-modal.open {
   display: flex;
 }
 
-/* Header tipis: judul + tombol tutup */
+/* Header tipis: judul + tombol tutup — tinggi tetap 52px */
 .fs-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: rgba(0,0,0,.6);
+  height: 52px; /* harus sama dengan top di .fs-iframe-wrap */
+  background: rgba(0,0,0,.85);
   position: absolute;
   top: 0; left: 0; right: 0;
   z-index: 10;
@@ -783,14 +784,18 @@ a { color: inherit; text-decoration: none; }
 }
 .fs-close:active { background: rgba(242,113,107,.8); }
 
-/* Iframe mengisi seluruh layar */
+/* Iframe mengisi seluruh layar, mulai di bawah header (52px) */
 .fs-iframe-wrap {
   position: absolute;
-  inset: 0;
+  top: 52px; /* tinggi header agar kontrol GDrive tidak tertutup */
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 .fs-iframe-wrap iframe {
   width: 100%;
   height: 100%;
   border: 0;
   display: block;
+  background: #000;
 }
