@@ -183,41 +183,32 @@ a { color: inherit; text-decoration: none; }
   background: #000;
 }
 
-/* Batasi tinggi di mobile agar tidak terlalu panjang */
 @media (max-width: 600px) {
   .fc-player-ratio { max-height: 75vh; aspect-ratio: auto; height: 75vh; }
 }
 
-/* iframe GDrive — isi penuh kontainer */
+/*
+  Trick: iframe diperbesar 160% lalu di-scale balik 0.625x
+  Efeknya: konten GDrive (termasuk tombol play/pause besar)
+  terlihat 37% lebih kecil, tapi video tetap mengisi layar penuh.
+  Rumus: scale = 1 / zoom  →  1 / 1.6 = 0.625
+*/
 .fc-player-ratio iframe {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  /* Geser ke tengah setelah diperbesar */
+  top: 50%;
+  left: 50%;
+  /* 160% ukuran kontainer */
+  width: 160%;
+  height: 160%;
+  /* Kembalikan ke posisi tengah */
+  transform: translate(-50%, -50%) scale(0.625);
+  transform-origin: center center;
   border: 0;
   display: block;
 }
 
-/*
-  Overlay transparan di atas iframe.
-  Fungsi: mencegah Chrome menampilkan kontrol media native-nya
-  (yang muncul sebagai layer kedua di atas iframe GDrive).
-  pointer-events: none = sentuhan tetap tembus ke iframe GDrive di bawahnya.
-  Kontrol bawaan GDrive (yang ada DI DALAM iframe) tetap bisa dipakai.
-*/
-.fc-player-ratio::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  /* Tidak ada background — benar-benar transparan */
-  background: transparent;
-  /* Ini yang memblokir Chrome media overlay */
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Tombol tutup — z-index di atas overlay */
+/* Tombol tutup — z-index tinggi agar tetap kelihatan */
 .fc-close-btn {
   position: absolute;
   top: 10px;
@@ -237,7 +228,6 @@ a { color: inherit; text-decoration: none; }
   backdrop-filter: blur(6px);
   box-shadow: 0 2px 8px rgba(0,0,0,.5);
   transition: background .15s;
-  pointer-events: all;
 }
 .fc-close-btn:hover,
 .fc-close-btn:active { background: rgba(242,113,107,.85); }
