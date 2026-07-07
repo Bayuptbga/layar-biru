@@ -885,15 +885,39 @@ function renderFilmGrid() {
         <div class="fc-duration-badge">${film.duration || '—'}</div>
       </div>
 
-      <!-- Iframe player (tersembunyi, muncul saat diklik) -->
+      <!-- Custom video player (tersembunyi, muncul saat diklik) -->
       <div class="fc-player">
         <div class="fc-player-ratio">
-          <iframe
-            src="about:blank"
-            frameborder="0"
-            allowfullscreen
-            allow="autoplay; fullscreen"
-          ></iframe>
+          <!-- video tag tanpa controls bawaan browser -->
+          <video
+            playsinline
+            preload="metadata"
+            webkit-playsinline
+            x5-playsinline
+          ></video>
+
+          <!-- Loading spinner -->
+          <div class="fc-spinner" style="display:none;">
+            <div class="fc-spin-ring"></div>
+          </div>
+
+          <!-- Tap area tengah untuk play/pause -->
+          <div class="fc-tap-area"></div>
+
+          <!-- Custom controls bar bawah -->
+          <div class="fc-controls">
+            <button class="fc-btn fc-btn-play" title="Play/Pause">▶</button>
+            <div class="fc-progress-wrap">
+              <div class="fc-progress-bg">
+                <div class="fc-progress-fill"></div>
+              </div>
+              <input class="fc-seek" type="range" min="0" max="100" value="0" step="0.1"/>
+            </div>
+            <span class="fc-time">0:00</span>
+            <button class="fc-btn fc-btn-fs" title="Fullscreen">⛶</button>
+          </div>
+
+          <!-- Tombol tutup pojok kanan atas -->
           <button class="fc-close-btn" title="Tutup">✕</button>
         </div>
       </div>
@@ -914,6 +938,83 @@ function renderFilmGrid() {
       closeInlinePlayer(film.id);
     });
 
+    // ── Custom video controls ──
+    const video    = card.querySelector('video');
+    const btnPlay  = card.querySelector('.fc-btn-play');
+    const tapArea  = card.querySelector('.fc-tap-area');
+    const seekEl   = card.querySelector('.fc-seek');
+    const fillEl   = card.querySelector('.fc-progress-fill');
+    const timeEl   = card.querySelector('.fc-time');
+    const spinner  = card.querySelector('.fc-spinner');
+    const btnFs    = card.querySelector('.fc-btn-fs');
+    const controls = card.querySelector('.fc-controls');
+
+    function fmtTime(s) {
+      s = Math.floor(s || 0);
+      const m = Math.floor(s / 60);
+      const ss = String(s % 60).padStart(2, '0');
+      return `${m}:${ss}`;
+    }
+
+    function updatePlayBtn() {
+      btnPlay.textContent = video.paused ? '▶' : '⏸';
+    }
+
+    function updateProgress() {
+      if (!video.duration) return;
+      const pct = (video.currentTime / video.duration) * 100;
+      seekEl.value = pct;
+      fillEl.style.width = pct + '%';
+      timeEl.textContent = fmtTime(video.currentTime) + ' / ' + fmtTime(video.duration);
+    }
+
+    // Auto-hide controls setelah 3 detik
+    let hideTimer;
+    function showControls() {
+      controls.classList.add('visible');
+      clearTimeout(hideTimer);
+      if (!video.paused) {
+        hideTimer = setTimeout(() => controls.classList.remove('visible'), 3000);
+      }
+    }
+
+    video.addEventListener('play',     () => { updatePlayBtn(); showControls(); });
+    video.addEventListener('pause',    () => { updatePlayBtn(); showControls(); });
+    video.addEventListener('timeupdate', updateProgress);
+    video.addEventListener('waiting',  () => { spinner.style.display = 'flex'; });
+    video.addEventListener('canplay',  () => { spinner.style.display = 'none'; });
+    video.addEventListener('ended',    () => { updatePlayBtn(); controls.classList.add('visible'); });
+
+    btnPlay.addEventListener('click', (e) => {
+      e.stopPropagation();
+      video.paused ? video.play() : video.pause();
+    });
+
+    tapArea.addEventListener('click', () => {
+      video.paused ? video.play() : video.pause();
+      showControls();
+    });
+
+    card.querySelector('.fc-player-ratio').addEventListener('touchstart', showControls, { passive: true });
+    card.querySelector('.fc-player-ratio').addEventListener('mousemove',  showControls);
+
+    seekEl.addEventListener('input', () => {
+      if (video.duration) {
+        video.currentTime = (seekEl.value / 100) * video.duration;
+        fillEl.style.width = seekEl.value + '%';
+      }
+    });
+
+    btnFs.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wrap = card.querySelector('.fc-player-ratio');
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        (wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullScreen).call(wrap);
+      }
+    });
+
     grid.appendChild(card);
   });
 }
@@ -932,10 +1033,15 @@ function selectFilm(film) {
   const card = document.getElementById(`film-card-${film.id}`);
   if (!card) return;
 
-  // Set src iframe dengan URL preview GDrive
-  const previewUrl = film.embed || `https://drive.google.com/file/d/${film.videoId}/preview`;
-  const iframe = card.querySelector('.fc-player iframe');
-  if (iframe) iframe.src = previewUrl;
+  // Set src video lewat proxy server — menghindari CORS GDrive
+  const videoEl = card.querySelector('video');
+  if (videoEl && !videoEl.src) {
+    // Gunakan proxy endpoint di server kita sendiri
+    const proxyUrl = `${API_BASE}/api/proxy-video?id=${film.videoId}`;
+    videoEl.src = proxyUrl;
+    videoEl.load();
+  }
+  if (videoEl) videoEl.play().catch(() => {});
 
   // Tambah class .playing → card melebar 2 kolom, thumbnail disembunyikan
   card.classList.add('playing');
@@ -954,9 +1060,14 @@ function closeInlinePlayer(filmId) {
   const card = document.getElementById(`film-card-${filmId}`);
   if (!card) return;
 
-  // Hentikan video: reset src iframe
-  const iframe = card.querySelector('.fc-player iframe');
-  if (iframe) iframe.src = 'about:blank';
+  // Hentikan video dan reset
+  const videoEl = card.querySelector('video');
+  if (videoEl) {
+    videoEl.pause();
+    videoEl.currentTime = 0;
+    videoEl.src = '';
+    videoEl.load();
+  }
 
   card.classList.remove('playing');
   if (currentPlayingId === filmId) currentPlayingId = null;
