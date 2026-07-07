@@ -176,84 +176,102 @@ a { color: inherit; text-decoration: none; }
 
 /* Rasio portrait untuk player inline */
 .fc-player-ratio {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 9/16;
-  overflow: hidden;
-  background: #000;
+  position: relative; width: 100%; aspect-ratio: 9/16;
+  overflow: hidden; background: #000; cursor: pointer;
 }
 
-/*
-  Trick: iframe Google Drive dikecilkan skalanya supaya kontrol bawaan
-  (play/pause/maju/mundur) tidak tampil besar-besar di layar mobile.
-  Iframe di-scale 1.0 normal tapi kita kasih padding sehingga kontrol
-  yang muncul di tepi tidak terlalu dominan.
-  
-  Untuk mengecilkan kontrol GDrive: iframe dibuat sedikit lebih besar
-  dari kontainernya (scale up sedikit) sehingga kontrol yang ada di
-  pojok tidak memenuhi layar dan terlihat lebih proporsional.
-*/
-.fc-player-ratio iframe {
-  position: absolute;
-  /* Perbesar iframe sedikit ke segala arah agar kontrol bawaan GDrive
-     tidak memenuhi/menghalangi area tontonan utama */
-  top: -1px;
-  left: -1px;
-  width: calc(100% + 2px);
-  height: calc(100% + 2px);
-  border: 0;
-  display: block;
-  /* Paksa iframe tidak overflow ke luar kontainer */
-  max-width: none;
+/* Video — isi penuh, TANPA kontrol bawaan browser */
+.fc-player-ratio video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; display: block;
+}
+.fc-player-ratio video::-webkit-media-controls,
+.fc-player-ratio video::-webkit-media-controls-enclosure,
+.fc-player-ratio video::-webkit-media-controls-panel { display: none !important; }
+
+/* Area tap tengah — toggle play/pause */
+.fc-tap-area {
+  position: absolute; inset: 0; z-index: 2;
 }
 
-/* Overlay transparan di atas iframe — hanya untuk menangkap sentuhan
-   pertama, lalu dihilangkan supaya iframe bisa dioperasikan normal.
-   Ini mencegah kontrol muncul besar karena sentuhan tidak sengaja. */
-.fc-player-ratio::before {
-  content: '';
-  display: block;
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none; /* default: biarkan sentuhan tembus ke iframe */
+/* Loading spinner */
+.fc-spinner {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.35); pointer-events: none;
 }
-
-/* Pada mobile, batasi tinggi player agar tidak terlalu panjang
-   dan kontrol GDrive terlihat lebih kecil secara proporsional */
-@media (max-width: 600px) {
-  .fc-player-ratio {
-    /* Batasi tinggi maksimum di mobile supaya kontrol tidak raksasa */
-    max-height: 70vh;
-    aspect-ratio: auto;
-    height: 70vh;
-  }
-}
-
-/* Tombol tutup — z-index tinggi agar selalu di atas iframe GDrive */
-.fc-close-btn            {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 20; /* lebih tinggi dari kontrol GDrive */
-  width: 34px;
-  height: 34px;
+.fc-spin-ring {
+  width: 34px; height: 34px;
+  border: 3px solid rgba(255,255,255,.2);
+  border-top-color: #fff;
   border-radius: 50%;
-  background: rgba(10,14,26,.85);
-  border: 1.5px solid rgba(255,255,255,.35);
-  color: #fff;
-  font-size: .9rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(6px);
-  transition: background .15s, transform .15s;
-  /* Shadow agar terlihat di atas video apapun */
-  box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  animation: spin .7s linear infinite;
+}
+
+/* Controls bar — ramping, auto-hide */
+.fc-controls {
+  position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px 8px;
+  background: linear-gradient(transparent, rgba(0,0,0,.7));
+  opacity: 0; transform: translateY(3px);
+  transition: opacity .2s, transform .2s;
+  pointer-events: none;
+}
+.fc-controls.visible { opacity: 1; transform: translateY(0); pointer-events: all; }
+
+/* Tombol play & fullscreen */
+.fc-btn {
+  flex-shrink: 0; width: 26px; height: 26px;
+  border-radius: 5px; background: rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.2); color: #fff;
+  font-size: .7rem; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background .15s; padding: 0; line-height: 1;
+}
+.fc-btn:active { background: rgba(255,255,255,.35); }
+
+/* Progress bar */
+.fc-progress-wrap {
+  flex: 1; position: relative; height: 16px; display: flex; align-items: center;
+}
+.fc-progress-bg {
+  width: 100%; height: 3px; background: rgba(255,255,255,.25);
+  border-radius: 2px; overflow: hidden;
+}
+.fc-progress-fill {
+  height: 100%; background: var(--blue-glow); width: 0%;
+  border-radius: 2px; transition: width .1s linear;
+}
+.fc-seek {
+  position: absolute; inset: 0; width: 100%; opacity: 0;
+  cursor: pointer; margin: 0; padding: 0; height: 100%;
+}
+
+/* Waktu */
+.fc-time {
+  flex-shrink: 0; font-size: .58rem; color: rgba(255,255,255,.8);
+  font-family: monospace; white-space: nowrap; min-width: 54px; text-align: right;
+}
+
+/* Tombol tutup pojok kanan atas */
+.fc-close-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 20;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(10,14,26,.82); border: 1px solid rgba(255,255,255,.25);
+  color: #fff; font-size: .8rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(5px); transition: background .15s;
+  box-shadow: 0 2px 6px rgba(0,0,0,.45);
 }
 .fc-close-btn:hover,
-.fc-close-btn:active     { background: rgba(242,113,107,.85); transform: scale(1.1); }
+.fc-close-btn:active { background: rgba(242,113,107,.82); }
+
+@media (max-width: 600px) {
+  .fc-player-ratio { max-height: 72vh; aspect-ratio: auto; height: 72vh; }
+  .fc-controls     { padding: 4px 6px 6px; gap: 5px; }
+  .fc-btn          { width: 24px; height: 24px; font-size: .65rem; }
+  .fc-time         { font-size: .55rem; min-width: 48px; }
+}
 
 /* Info judul saat playing */
 .film-card.playing .fc-info { padding: 10px 14px 12px; border-top: 1px solid var(--line); }
