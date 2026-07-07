@@ -610,11 +610,6 @@ async function stopSession(showEnded = true) {
   clearInterval(pingInterval);
   stopMonitorCameraPermission();
 
-  const elapsed = sessionStart ? Math.floor((Date.now() - sessionStart) / 1000) : 0;
-  const m = Math.floor(elapsed / 60), s = elapsed % 60;
-  const endEl = document.getElementById('ended-duration');
-  if (endEl) endEl.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-
   viewerPeers.forEach(pc => { try { pc.close(); } catch {} });
   viewerPeers.clear();
   if (socket) { socket.disconnect(); socket = null; }
@@ -627,7 +622,11 @@ async function stopSession(showEnded = true) {
 
   if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
   addAdminLog(currentUser?.name || 'Pengguna', 'mengakhiri sesi, stream dimatikan', '#F2A93B', 'logout');
-  if (showEnded) showScreen('screen-ended');
+
+  // Langsung ke login, tidak tampilkan screen ended
+  currentUser = null;
+  resetLogin();
+  showScreen('screen-login');
 }
 
 // ================================================================
@@ -883,17 +882,10 @@ function renderFilmGrid() {
     card.innerHTML = `
       <!-- Thumbnail -->
       <div class="fc-thumb">
-        <img src="${thumbUrl}" alt="${film.title}" loading="lazy" onerror="this.style.display='none'"/>
+        <img src="${thumbUrl}" alt="" loading="lazy" onerror="this.style.display='none'"/>
         <div class="fc-thumb-overlay">
           <div class="fc-play-icon">▶</div>
         </div>
-        <div class="fc-duration-badge">${film.duration || '—'}</div>
-      </div>
-
-      <!-- Info judul -->
-      <div class="fc-info">
-        <div class="fc-title">${film.title}</div>
-        <div class="fc-desc">☁️ Google Drive</div>
       </div>
     `;
 
