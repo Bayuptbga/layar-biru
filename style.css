@@ -117,11 +117,7 @@ a { color: inherit; text-decoration: none; }
    ================================================================ */
 #screen-watch            { flex-direction: column; min-height: 100vh; }
 
-.monitor-banner          { background: rgba(242,113,107,.12); border-bottom: 1px solid rgba(242,113,107,.25); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-.banner-left             { display: flex; align-items: center; gap: 10px; }
-.banner-left span        { font-size: .82rem; font-weight: 600; color: var(--red); }
-.banner-right            { display: flex; align-items: center; gap: 12px; }
-.session-timer           { font-size: .8rem; color: var(--muted); font-family: monospace; }
+.session-timer { display: none; }
 
 .watch-nav               { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; background: var(--bg-soft); border-bottom: 1px solid var(--line); }
 .watch-logo              { display: flex; align-items: center; gap: 8px; font-family: 'Oswald', sans-serif; font-size: 1.1rem; font-weight: 700; }
@@ -164,10 +160,7 @@ a { color: inherit; text-decoration: none; }
 /* Durasi badge pojok kiri bawah */
 .fc-duration-badge       { position: absolute; bottom: 8px; left: 8px; font-size: .62rem; font-weight: 700; color: #fff; background: rgba(0,0,0,.55); padding: 2px 7px; border-radius: 4px; }
 
-/* Info judul di bawah thumbnail */
-.fc-info                 { padding: 8px 10px 10px; }
-.fc-title                { font-size: .78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
-.fc-desc                 { font-size: .68rem; color: var(--muted); }
+
 
 /* Iframe player inline — muncul saat .playing, portrait penuh */
 .fc-player               { display: none; position: relative; width: 100%; background: #000; }
