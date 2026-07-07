@@ -135,8 +135,8 @@ a { color: inherit; text-decoration: none; }
 
 .section-title           { font-size: 1.1rem; font-weight: 600; margin-bottom: 14px; }
 
-/* Grid 2 kolom portrait */
-.film-grid               { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* Grid 3 kolom portrait */
+.film-grid               { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 
 /* Card thumbnail normal */
 .film-card               { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; cursor: pointer; transition: border-color .2s, box-shadow .2s; position: relative; }
