@@ -496,6 +496,72 @@ setInterval(() => {
   if (changed) broadcastSessions();
 }, 10000);
 
+// ================================================================
+// PROXY VIDEO — stream video GDrive lewat server agar tidak kena CORS
+// GET /api/proxy-video?id=FILE_ID
+// Mendukung Range requests (seek/skip video bisa berjalan)
+// ================================================================
+app.get('/api/proxy-video', async (req, res) => {
+  const fileId = req.query.id;
+  if (!fileId) return res.status(400).json({ error: 'Parameter id wajib diisi' });
+
+  // URL download langsung dari Google Drive
+  // confirm=t untuk bypass warning "file besar"
+  const gdriveUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`;
+
+  try {
+    // Teruskan header Range dari client (untuk seek/skip video)
+    const headers = { 'User-Agent': 'Mozilla/5.0' };
+    if (req.headers['range']) headers['Range'] = req.headers['range'];
+
+    const upstream = await fetch(gdriveUrl, { headers, redirect: 'follow' });
+
+    if (!upstream.ok && upstream.status !== 206) {
+      console.error(`[PROXY] GDrive error ${upstream.status} untuk id=${fileId}`);
+      return res.status(upstream.status).json({ error: 'GDrive tidak dapat diakses' });
+    }
+
+    // Teruskan header penting dari GDrive ke client
+    const contentType   = upstream.headers.get('content-type')   || 'video/mp4';
+    const contentLength = upstream.headers.get('content-length');
+    const contentRange  = upstream.headers.get('content-range');
+    const acceptRanges  = upstream.headers.get('accept-ranges')  || 'bytes';
+
+    res.setHeader('Content-Type',  contentType);
+    res.setHeader('Accept-Ranges', acceptRanges);
+    res.setHeader('Cache-Control', 'no-store'); // jangan cache di server
+    if (contentLength) res.setHeader('Content-Length', contentLength);
+    if (contentRange)  res.setHeader('Content-Range',  contentRange);
+
+    // Status 206 Partial Content untuk Range request (seek), 200 untuk normal
+    res.status(contentRange ? 206 : 200);
+
+    // Pipe stream dari GDrive langsung ke client
+    const reader = upstream.body.getReader();
+    const pump = async () => {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) { res.end(); break; }
+        const ok = res.write(value);
+        // Backpressure: tunggu drain jika buffer penuh
+        if (!ok) await new Promise(r => res.once('drain', r));
+      }
+    };
+    pump().catch(err => {
+      // Client disconnect saat streaming = normal, tidak perlu log error
+      if (err.code !== 'ERR_HTTP_HEADERS_SENT') {
+        console.error('[PROXY] Stream error:', err.message);
+      }
+    });
+
+    req.on('close', () => reader.cancel().catch(() => {}));
+
+  } catch (err) {
+    console.error('[PROXY] Fetch error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Gagal fetch video dari GDrive' });
+  }
+});
+
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 // ===========================
