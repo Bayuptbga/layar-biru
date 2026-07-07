@@ -733,7 +733,7 @@ a { color: inherit; text-decoration: none; }
 
 
 /* ================================================================
-   FULLSCREEN VIDEO MODAL
+   FULLSCREEN VIDEO MODAL — native video player
    ================================================================ */
 .fs-modal {
   display: none;
@@ -742,10 +742,9 @@ a { color: inherit; text-decoration: none; }
   z-index: 9999;
   background: #000;
   flex-direction: column;
+  overflow: hidden;
 }
-.fs-modal.open {
-  display: flex;
-}
+.fs-modal.open { display: flex; }
 
 /* Header tipis: judul + tombol tutup */
 .fs-header {
@@ -753,16 +752,17 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: rgba(0,0,0,.6);
+  height: 48px;
+  background: linear-gradient(to bottom, rgba(0,0,0,.85), transparent);
   position: absolute;
   top: 0; left: 0; right: 0;
-  z-index: 10;
+  z-index: 20;
   gap: 10px;
 }
 .fs-title {
   font-size: .82rem;
   font-weight: 600;
-  color: rgba(255,255,255,.85);
+  color: rgba(255,255,255,.9);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -770,51 +770,179 @@ a { color: inherit; text-decoration: none; }
 }
 .fs-close {
   flex-shrink: 0;
-  width: 32px; height: 32px;
+  width: 34px; height: 34px;
   border-radius: 50%;
   background: rgba(255,255,255,.15);
-  border: 1px solid rgba(255,255,255,.25);
+  border: 1px solid rgba(255,255,255,.2);
   color: #fff;
-  font-size: .85rem;
+  font-size: .9rem;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   transition: background .15s;
+  -webkit-tap-highlight-color: transparent;
 }
 .fs-close:active { background: rgba(242,113,107,.8); }
 
-/* Iframe mengisi seluruh layar */
-.fs-iframe-wrap {
+/* Wrap video mengisi seluruh modal */
+.fs-video-wrap {
   position: absolute;
   inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
 }
-.fs-iframe-wrap iframe {
+
+/* Video element — object-fit contain agar tidak crop */
+#fs-video {
   width: 100%;
   height: 100%;
-  border: 0;
+  object-fit: contain;
   display: block;
+  background: #000;
 }
 
-/* Overlay untuk menyembunyikan kontrol bawaan Google Drive player */
-/* Menutupi bagian bawah iframe tempat tombol pause/skip/timer muncul */
-.fs-controls-mask {
+/* Loading spinner */
+.fs-loading {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 140px; /* tinggi area kontrol GDrive */
-  background: #000;
-  z-index: 5;
-  pointer-events: none; /* tap tetap tembus ke iframe di atasnya */
-}
-
-/* Mask atas: tutupi tombol expand (pojok kanan atas iframe GDrive) */
-.fs-controls-mask-top {
-  position: absolute;
-  top: 52px; /* tepat di bawah header kita */
-  right: 0;
-  width: 60px;
-  height: 60px;
-  background: #000;
-  z-index: 5;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(0,0,0,.5);
+  z-index: 15;
   pointer-events: none;
+}
+.fs-spinner {
+  width: 42px; height: 42px;
+  border: 3px solid rgba(255,255,255,.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+.fs-loading-text {
+  font-size: .82rem;
+  color: rgba(255,255,255,.7);
+}
+
+/* Error state */
+.fs-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(0,0,0,.8);
+  z-index: 15;
+  color: #fff;
+  text-align: center;
+  padding: 24px;
+}
+.fs-error-text { font-size: .9rem; color: rgba(255,255,255,.7); }
+.fs-retry-btn {
+  margin-top: 8px;
+  padding: 10px 24px;
+  border-radius: 8px;
+  background: #2E6FF2;
+  color: #fff;
+  font-size: .88rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+
+/* Custom controls — muncul saat .visible */
+.fs-controls {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  z-index: 20;
+  padding: 12px 16px 20px;
+  background: linear-gradient(transparent, rgba(0,0,0,.85));
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .25s, transform .25s;
+  pointer-events: none;
+}
+.fs-controls.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: all;
+}
+
+/* Progress bar */
+.fs-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.fs-progress {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.25);
+  outline: none;
+  cursor: pointer;
+}
+.fs-progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(0,0,0,.5);
+}
+.fs-time {
+  font-size: .72rem;
+  color: rgba(255,255,255,.8);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-width: 80px;
+  text-align: right;
+}
+
+/* Tombol kontrol bawah */
+.fs-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fs-ctrl-btn {
+  background: rgba(255,255,255,.12);
+  border: none;
+  color: #fff;
+  font-size: .88rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+.fs-ctrl-btn:active { background: rgba(255,255,255,.28); }
+.fs-full-btn { margin-left: auto; }
+
+/* Volume slider */
+.fs-vol {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 70px;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.25);
+  outline: none;
+  cursor: pointer;
+}
+.fs-vol::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
 }
