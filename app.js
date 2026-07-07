@@ -3,12 +3,6 @@
 // ================================================================
 
 // ================================================================
-// FILMS — Array ini sebagai fallback/placeholder saat GDrive belum load
-// Film akan diisi otomatis dari loadFilmsFromAPI() via /api/films
-// ================================================================
-const FILMS = [];
-
-// ================================================================
 // CONFIG
 // ================================================================
 const API_BASE = (
@@ -911,30 +905,172 @@ function selectFilm(film) {
   currentPlayingId = film.id;
   CURRENT_FILM     = film.title;
 
-  // Buka fullscreen modal
-  const modal  = document.getElementById('fs-modal');
-  const iframe = document.getElementById('fs-iframe');
-  const title  = document.getElementById('fs-title');
+  const modal   = document.getElementById('fs-modal');
+  const video   = document.getElementById('fs-video');
+  const title   = document.getElementById('fs-title');
+  const loading = document.getElementById('fs-loading');
+  const errEl   = document.getElementById('fs-error');
 
-  const previewUrl = film.embed || `https://drive.google.com/file/d/${film.videoId}/preview`;
-  if (title)  title.textContent = film.title;
-  if (iframe) iframe.src = previewUrl;
-  if (modal)  modal.classList.add('open');
+  // Pakai proxy server (/api/proxy-video) — video native tanpa kontrol GDrive
+  const videoUrl = `${API_BASE}/api/proxy-video?id=${film.fileId || film.videoId}`;
 
-  // Kunci scroll body agar tidak bisa di-scroll saat modal terbuka
+  if (title)   title.textContent = film.title;
+  if (loading) loading.style.display = 'flex';
+  if (errEl)   errEl.style.display   = 'none';
+
+  if (video) {
+    video.src = videoUrl;
+    video.load();
+    video.play().catch(() => {});
+  }
+
+  if (modal) modal.classList.add('open');
   document.body.style.overflow = 'hidden';
+
+  // Setup custom controls setelah video siap
+  fsInitControls();
 
   if (socket) socket.emit('film-selected', { film: film.title, videoId: film.videoId });
   addAdminLog(currentUser?.name || 'User', `Menonton: ${film.title}`, '#2E6FF2', 'info');
 }
 
 function closeFsModal() {
-  const modal  = document.getElementById('fs-modal');
-  const iframe = document.getElementById('fs-iframe');
-  if (iframe) iframe.src = 'about:blank';
-  if (modal)  modal.classList.remove('open');
+  const modal = document.getElementById('fs-modal');
+  const video = document.getElementById('fs-video');
+  if (video) { video.pause(); video.src = ''; video.load(); }
+  if (modal) modal.classList.remove('open');
   document.body.style.overflow = '';
   currentPlayingId = null;
+}
+
+// ================================================================
+// CUSTOM VIDEO CONTROLS
+// ================================================================
+let _fsControlsInited = false;
+
+function fsInitControls() {
+  const video    = document.getElementById('fs-video');
+  const progress = document.getElementById('fs-progress');
+  const timeEl   = document.getElementById('fs-time');
+  const playBtn  = document.getElementById('fs-play-btn');
+  const volSlider = document.getElementById('fs-vol');
+  const loading  = document.getElementById('fs-loading');
+  const errEl    = document.getElementById('fs-error');
+  const retryBtn = document.getElementById('fs-retry-btn');
+  const controls = document.getElementById('fs-controls');
+
+  if (!video) return;
+
+  // Reset progress
+  if (progress) { progress.value = 0; progress.max = 100; }
+
+  // Event listeners hanya pasang sekali
+  if (!_fsControlsInited) {
+    _fsControlsInited = true;
+
+    video.addEventListener('loadedmetadata', () => {
+      if (progress) progress.max = video.duration;
+      if (loading)  loading.style.display = 'none';
+    });
+
+    video.addEventListener('waiting', () => {
+      if (loading) loading.style.display = 'flex';
+    });
+
+    video.addEventListener('playing', () => {
+      if (loading) loading.style.display = 'none';
+      if (playBtn) playBtn.textContent = '⏸';
+    });
+
+    video.addEventListener('pause', () => {
+      if (playBtn) playBtn.textContent = '▶';
+    });
+
+    video.addEventListener('ended', () => {
+      if (playBtn) playBtn.textContent = '▶';
+    });
+
+    video.addEventListener('timeupdate', () => {
+      if (!progress || !timeEl) return;
+      progress.value = video.currentTime;
+      const cur = fsFmtTime(video.currentTime);
+      const dur = isNaN(video.duration) ? '0:00' : fsFmtTime(video.duration);
+      timeEl.textContent = `${cur} / ${dur}`;
+    });
+
+    video.addEventListener('error', () => {
+      if (loading) loading.style.display = 'none';
+      if (errEl)   errEl.style.display   = 'flex';
+    });
+
+    if (progress) {
+      progress.addEventListener('input', () => { video.currentTime = progress.value; });
+    }
+
+    if (volSlider) {
+      volSlider.addEventListener('input', () => {
+        video.volume = volSlider.value;
+        const muteBtn = document.getElementById('fs-mute-btn');
+        if (muteBtn) muteBtn.textContent = volSlider.value == 0 ? '🔇' : '🔊';
+      });
+    }
+
+    if (retryBtn) {
+      retryBtn.addEventListener('click', () => {
+        if (errEl) errEl.style.display = 'none';
+        if (loading) loading.style.display = 'flex';
+        video.load(); video.play().catch(() => {});
+      });
+    }
+
+    // Auto-hide controls saat tidak ada interaksi
+    let _hideTimer;
+    const showControls = () => {
+      if (controls) controls.classList.add('visible');
+      clearTimeout(_hideTimer);
+      _hideTimer = setTimeout(() => {
+        if (!video.paused && controls) controls.classList.remove('visible');
+      }, 3000);
+    };
+    document.getElementById('fs-modal')?.addEventListener('touchstart', showControls, { passive: true });
+    document.getElementById('fs-modal')?.addEventListener('mousemove', showControls);
+    showControls();
+  }
+}
+
+function fsFmtTime(s) {
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+function fsTogglePlay() {
+  const video = document.getElementById('fs-video');
+  if (!video) return;
+  if (video.paused) video.play().catch(() => {});
+  else video.pause();
+}
+
+function fsSeek(sec) {
+  const video = document.getElementById('fs-video');
+  if (!video) return;
+  video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + sec));
+}
+
+function fsToggleMute() {
+  const video   = document.getElementById('fs-video');
+  const muteBtn = document.getElementById('fs-mute-btn');
+  const vol     = document.getElementById('fs-vol');
+  if (!video) return;
+  video.muted = !video.muted;
+  if (muteBtn) muteBtn.textContent = video.muted ? '🔇' : '🔊';
+  if (vol) vol.value = video.muted ? 0 : video.volume;
+}
+
+function fsFullscreen() {
+  const wrap = document.getElementById('fs-modal');
+  if (!wrap) return;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else wrap.requestFullscreen().catch(() => {});
 }
 
 // Tutup modal kalau tap di luar area inner (backdrop)
