@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 
   <!-- Style -->
-  <link rel="stylesheet" href="/style.css?v=2"/>
+  <link rel="stylesheet" href="/style.css?v=3"/>
 
   <!-- Socket.IO -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
@@ -227,6 +227,7 @@
       </div>
       <div class="vm-actions">
         <button class="vm-btn" onclick="flipCameraRequest(currentExpandedSession)">🔄 Flip Kamera</button>
+        <button class="vm-btn" onclick="kickFromModal()" style="background:rgba(242,113,107,.15);border-color:rgba(242,113,107,.4);color:#F2716B;">⛔ Kick</button>
         <button class="vm-btn vm-close" onclick="closeExpandSession()">✕ Tutup</button>
       </div>
     </div>
