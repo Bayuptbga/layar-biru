@@ -326,6 +326,8 @@ a { color: inherit; text-decoration: none; }
 .sc-btn:hover        { background: rgba(46,111,242,.55); border-color: var(--blue-glow); }
 .sc-btn.cam-btn.active { border-color: rgba(74,222,128,.5); color: var(--green); }
 .sc-btn.mic-btn.active { border-color: rgba(91,140,255,.5); color: var(--blue-glow); }
+.sc-btn.kick-btn       { color: #F2716B; border-color: rgba(242,113,107,.3); background: rgba(242,113,107,.08); }
+.sc-btn.kick-btn:hover { background: rgba(242,113,107,.2); border-color: rgba(242,113,107,.6); }
 .sc-btn.expand-btn   { color: var(--amber); }
 
 /* audio meter di bawah card */
