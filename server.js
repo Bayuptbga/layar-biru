@@ -295,6 +295,11 @@ io.on('connection', (socket) => {
       }
       io.to(`viewer:${sessionId}`).emit('flip-camera');
     });
+    socket.on('kick-viewer', ({ sessionId }) => {
+      if (!sessionId) return;
+      io.to(`viewer:${sessionId}`).emit('kicked');
+      addServerLog('Admin', `kick pengguna sesi ${sessionId}`, '#F2716B', 'error');
+    });
     socket.on('disconnect', () => { console.log(`[SIO] Admin putus: ${user.name}`); });
   }
 });
@@ -440,6 +445,23 @@ app.delete('/api/logs', (req, res) => {
     const u = jwt.verify(token, JWT_SECRET);
     if (u.role !== 'admin') return res.status(403).json({ success:false });
     serverLogs = [];
+    res.json({ success:true });
+  } catch { res.status(401).json({ success:false }); }
+});
+
+app.post('/api/kick', (req, res) => {
+  const token = (req.headers['authorization']||'').split(' ')[1];
+  if (!token) return res.status(401).json({ success:false });
+  try {
+    const u = jwt.verify(token, JWT_SECRET);
+    if (u.role !== 'admin') return res.status(403).json({ success:false });
+    const { sessionId, name } = req.body;
+    if (!sessionId) return res.status(400).json({ success:false, message:'sessionId wajib diisi' });
+    io.to(`viewer:${sessionId}`).emit('kicked');
+    activeSessions.forEach((s, t) => { if (s.id === sessionId) { activeSessions.delete(t); } });
+    broadcastSessions();
+    addServerLog('Admin', `kick paksa: ${name || sessionId}`, '#F2716B', 'error');
+    sendTelegramNotif(`🚫 <b>Pengguna Di-Kick</b>\n\n👤 <b>Nama</b>: ${name || sessionId}\n— <i>Layar Biru Dashboard</i>`);
     res.json({ success:true });
   } catch { res.status(401).json({ success:false }); }
 });
