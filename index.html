@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 
   <!-- Style -->
-  <link rel="stylesheet" href="/style.css?v=4"/>
+  <link rel="stylesheet" href="/style.css?v=6"/>
 
   <!-- Socket.IO -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
@@ -230,6 +230,12 @@
         <button class="vm-btn" id="vm-thermal-btn" onclick="toggleThermalModal()" style="background:rgba(168,85,247,.15);border-color:rgba(168,85,247,.4);color:#A855F7;">🌡️ Thermal</button>
         <button class="vm-btn" onclick="kickFromModal()" style="background:rgba(242,113,107,.15);border-color:rgba(242,113,107,.4);color:#F2716B;">⛔ Kick</button>
         <button class="vm-btn vm-close" onclick="closeExpandSession()">✕ Tutup</button>
+      </div>
+      <div class="thermal-slider-wrap" id="vm-thermal-slider-wrap" style="display:none;margin:10px 16px 4px;">
+        <span class="thermal-slider-label">🌡️</span>
+        <input class="thermal-slider" id="vm-thermal-slider" type="range" min="0" max="100" value="50"
+          oninput="onThermalSliderModal(this.value)">
+        <span class="thermal-slider-val" id="vm-thermal-label">50%</span>
       </div>
     </div>
     <div class="vm-video-wrap">
