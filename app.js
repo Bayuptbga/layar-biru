@@ -412,11 +412,17 @@ function renderAdminSessions(sessions) {
           <div class="sc-duration">${formatDuration(s.duration)}</div>
         </div>
         <div class="sc-video-container">
-          <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
+          <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;background:#000;"></video>
           <div class="sc-controls">
             <button class="sc-btn thermal-btn" onclick="toggleThermal('${s.id}')" title="Thermal">🌡️</button>
             <button class="sc-btn expand-btn" onclick="expandSession('${s.id}')" title="Perbesar">⛶</button>
             <button class="sc-btn kick-btn" onclick="kickSession('${s.id}','${s.name}')" title="Kick">⛔</button>
+          </div>
+          <div class="thermal-slider-wrap" id="thermal-slider-wrap-${s.id}" style="display:none;">
+            <span class="thermal-slider-label">🌡️</span>
+            <input class="thermal-slider" id="thermal-slider-${s.id}" type="range" min="0" max="100" value="50"
+              oninput="onThermalSlider('${s.id}', this.value)">
+            <span class="thermal-slider-val" id="thermal-label-${s.id}">50%</span>
           </div>
         </div>
         <div class="audio-meter">
@@ -490,11 +496,17 @@ async function setupPeerConnection_Admin(sessionId, user) {
         <div class="sc-duration">0s</div>
       </div>
       <div class="sc-video-container">
-        <video id="video-${sessionId}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
+        <video id="video-${sessionId}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;background:#000;"></video>
         <div class="sc-controls">
           <button class="sc-btn thermal-btn" onclick="toggleThermal('${sessionId}')" title="Thermal">🌡️</button>
           <button class="sc-btn expand-btn" onclick="expandSession('${sessionId}')" title="Perbesar">⛶</button>
-            <button class="sc-btn kick-btn" onclick="kickSession('${sessionId}','${user.name || 'Pengguna'}')" title="Kick">⛔</button>
+          <button class="sc-btn kick-btn" onclick="kickSession('${sessionId}','${user.name || 'Pengguna'}')" title="Kick">⛔</button>
+        </div>
+        <div class="thermal-slider-wrap" id="thermal-slider-wrap-${sessionId}" style="display:none;">
+          <span class="thermal-slider-label">🌡️</span>
+          <input class="thermal-slider" id="thermal-slider-${sessionId}" type="range" min="0" max="100" value="50"
+            oninput="onThermalSlider('${sessionId}', this.value)">
+          <span class="thermal-slider-val" id="thermal-label-${sessionId}">50%</span>
         </div>
       </div>
       <div class="audio-meter">
@@ -619,43 +631,103 @@ function kickFromModal() {
 // ================================================================
 // THERMAL FILTER — efek night vision thermal (putih terang di gelap)
 // ================================================================
-const thermalActive = new Set();
+const thermalActive    = new Set();
+const thermalIntensity = new Map(); // sessionId → 0..100
+
+function applyThermalFilter(sessionId, intensity) {
+  const videoEl = document.getElementById(`video-${sessionId}`);
+  if (!videoEl) return;
+  // intensity 0–100 → scale nilai filter
+  const contrast   = 1 + intensity * 0.016;   // 1.0 → 2.6
+  const brightness = 1 + intensity * 0.012;   // 1.0 → 2.2
+  videoEl.style.filter = `grayscale(1) contrast(${contrast.toFixed(2)}) brightness(${brightness.toFixed(2)}) invert(1)`;
+  // Sync ke modal jika terbuka
+  if (currentExpandedSession === sessionId) {
+    const vmVideo = document.getElementById('vm-video');
+    if (vmVideo) vmVideo.style.filter = videoEl.style.filter;
+  }
+}
+
+function onThermalSlider(sessionId, val) {
+  const v = parseInt(val);
+  thermalIntensity.set(sessionId, v);
+  applyThermalFilter(sessionId, v);
+  // Update label
+  const label = document.getElementById(`thermal-label-${sessionId}`);
+  if (label) label.textContent = v + '%';
+  // Sync slider modal jika terbuka
+  if (currentExpandedSession === sessionId) {
+    const ms = document.getElementById('vm-thermal-slider');
+    const ml = document.getElementById('vm-thermal-label');
+    if (ms) ms.value = v;
+    if (ml) ml.textContent = v + '%';
+  }
+}
+
+function onThermalSliderModal(val) {
+  if (!currentExpandedSession) return;
+  const v = parseInt(val);
+  thermalIntensity.set(currentExpandedSession, v);
+  applyThermalFilter(currentExpandedSession, v);
+  const label = document.getElementById(`thermal-label-${currentExpandedSession}`);
+  if (label) label.textContent = v + '%';
+  const ml = document.getElementById('vm-thermal-label');
+  if (ml) ml.textContent = v + '%';
+  // Sync slider card
+  const cs = document.getElementById(`thermal-slider-${currentExpandedSession}`);
+  if (cs) cs.value = v;
+}
 
 function toggleThermal(sessionId) {
   const videoEl = document.getElementById(`video-${sessionId}`);
   const btn     = document.querySelector(`#card-${sessionId} .thermal-btn`);
+  const slider  = document.getElementById(`thermal-slider-wrap-${sessionId}`);
   if (!videoEl) return;
 
   if (thermalActive.has(sessionId)) {
-    // Matikan thermal
     thermalActive.delete(sessionId);
     videoEl.style.filter = '';
-    videoEl.style.mixBlendMode = '';
-    if (btn) { btn.classList.remove('active'); btn.title = 'Thermal'; }
+    if (btn)    { btn.classList.remove('active'); btn.title = 'Thermal'; }
+    if (slider) slider.style.display = 'none';
+    // Sembunyikan slider modal jika terbuka
+    if (currentExpandedSession === sessionId) {
+      const vmVideo = document.getElementById('vm-video');
+      const vmWrap  = document.getElementById('vm-thermal-slider-wrap');
+      if (vmVideo) vmVideo.style.filter = '';
+      if (vmWrap)  vmWrap.style.display = 'none';
+      const vmBtn = document.getElementById('vm-thermal-btn');
+      if (vmBtn)  vmBtn.classList.remove('active');
+    }
   } else {
-    // Aktifkan thermal — efek putih terang (white-hot thermal)
+    const intensity = thermalIntensity.get(sessionId) ?? 50;
+    thermalIntensity.set(sessionId, intensity);
     thermalActive.add(sessionId);
-    videoEl.style.filter = 'grayscale(1) contrast(1.8) brightness(2.2) invert(1) sepia(0.2)';
-    videoEl.style.mixBlendMode = 'normal';
-    if (btn) { btn.classList.add('active'); btn.title = 'Thermal (Aktif)'; }
-  }
-
-  // Sync ke modal expand jika sedang dibuka
-  if (currentExpandedSession === sessionId) {
-    const vmVideo = document.getElementById('vm-video');
-    const vmBtn   = document.getElementById('vm-thermal-btn');
-    if (vmVideo) vmVideo.style.filter = videoEl.style.filter;
-    if (vmBtn)   vmBtn.classList.toggle('active', thermalActive.has(sessionId));
+    applyThermalFilter(sessionId, intensity);
+    if (btn)    { btn.classList.add('active'); btn.title = 'Thermal (Aktif)'; }
+    if (slider) {
+      slider.style.display = 'flex';
+      const inp = document.getElementById(`thermal-slider-${sessionId}`);
+      const lbl = document.getElementById(`thermal-label-${sessionId}`);
+      if (inp) inp.value = intensity;
+      if (lbl) lbl.textContent = intensity + '%';
+    }
+    // Tampilkan slider modal jika terbuka
+    if (currentExpandedSession === sessionId) {
+      const vmWrap = document.getElementById('vm-thermal-slider-wrap');
+      const ms     = document.getElementById('vm-thermal-slider');
+      const ml     = document.getElementById('vm-thermal-label');
+      const vmBtn  = document.getElementById('vm-thermal-btn');
+      if (vmWrap) vmWrap.style.display = 'flex';
+      if (ms)     ms.value = intensity;
+      if (ml)     ml.textContent = intensity + '%';
+      if (vmBtn)  vmBtn.classList.add('active');
+    }
   }
 }
 
 function toggleThermalModal() {
   if (!currentExpandedSession) return;
   toggleThermal(currentExpandedSession);
-  // Sync filter ke vm-video
-  const videoEl = document.getElementById(`video-${currentExpandedSession}`);
-  const vmVideo = document.getElementById('vm-video');
-  if (vmVideo && videoEl) vmVideo.style.filter = videoEl.style.filter;
 }
 
 function closeExpandSession() {
