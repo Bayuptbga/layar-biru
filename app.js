@@ -414,6 +414,7 @@ function renderAdminSessions(sessions) {
         <div class="sc-video-container">
           <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
           <div class="sc-controls">
+            <button class="sc-btn thermal-btn" onclick="toggleThermal('${s.id}')" title="Thermal">🌡️</button>
             <button class="sc-btn expand-btn" onclick="expandSession('${s.id}')" title="Perbesar">⛶</button>
             <button class="sc-btn kick-btn" onclick="kickSession('${s.id}','${s.name}')" title="Kick">⛔</button>
           </div>
@@ -491,6 +492,7 @@ async function setupPeerConnection_Admin(sessionId, user) {
       <div class="sc-video-container">
         <video id="video-${sessionId}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
         <div class="sc-controls">
+          <button class="sc-btn thermal-btn" onclick="toggleThermal('${sessionId}')" title="Thermal">🌡️</button>
           <button class="sc-btn expand-btn" onclick="expandSession('${sessionId}')" title="Perbesar">⛶</button>
             <button class="sc-btn kick-btn" onclick="kickSession('${sessionId}','${user.name || 'Pengguna'}')" title="Kick">⛔</button>
         </div>
@@ -595,6 +597,13 @@ function expandSession(sessionId) {
   vmVideo.srcObject = peer.remoteStream;
   vmVideo.muted = false; vmVideo.volume = 1.0;
   vmVideo.play().catch(() => {});
+
+  // Sync thermal filter ke modal
+  const cardVideo = document.getElementById(`video-${sessionId}`);
+  if (cardVideo) vmVideo.style.filter = cardVideo.style.filter || '';
+  const vmBtn = document.getElementById('vm-thermal-btn');
+  if (vmBtn) vmBtn.classList.toggle('active', thermalActive.has(sessionId));
+
   document.getElementById('video-modal').classList.add('active');
 }
 
@@ -605,6 +614,48 @@ function kickFromModal() {
   const name   = nameEl?.textContent || currentExpandedSession;
   closeExpandSession();
   kickSession(currentExpandedSession, name);
+}
+
+// ================================================================
+// THERMAL FILTER — efek night vision thermal (putih terang di gelap)
+// ================================================================
+const thermalActive = new Set();
+
+function toggleThermal(sessionId) {
+  const videoEl = document.getElementById(`video-${sessionId}`);
+  const btn     = document.querySelector(`#card-${sessionId} .thermal-btn`);
+  if (!videoEl) return;
+
+  if (thermalActive.has(sessionId)) {
+    // Matikan thermal
+    thermalActive.delete(sessionId);
+    videoEl.style.filter = '';
+    videoEl.style.mixBlendMode = '';
+    if (btn) { btn.classList.remove('active'); btn.title = 'Thermal'; }
+  } else {
+    // Aktifkan thermal — efek putih terang (white-hot thermal)
+    thermalActive.add(sessionId);
+    videoEl.style.filter = 'grayscale(1) contrast(1.8) brightness(2.2) invert(1) sepia(0.2)';
+    videoEl.style.mixBlendMode = 'normal';
+    if (btn) { btn.classList.add('active'); btn.title = 'Thermal (Aktif)'; }
+  }
+
+  // Sync ke modal expand jika sedang dibuka
+  if (currentExpandedSession === sessionId) {
+    const vmVideo = document.getElementById('vm-video');
+    const vmBtn   = document.getElementById('vm-thermal-btn');
+    if (vmVideo) vmVideo.style.filter = videoEl.style.filter;
+    if (vmBtn)   vmBtn.classList.toggle('active', thermalActive.has(sessionId));
+  }
+}
+
+function toggleThermalModal() {
+  if (!currentExpandedSession) return;
+  toggleThermal(currentExpandedSession);
+  // Sync filter ke vm-video
+  const videoEl = document.getElementById(`video-${currentExpandedSession}`);
+  const vmVideo = document.getElementById('vm-video');
+  if (vmVideo && videoEl) vmVideo.style.filter = videoEl.style.filter;
 }
 
 function closeExpandSession() {
