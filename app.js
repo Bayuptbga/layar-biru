@@ -712,8 +712,7 @@ function handleKicked() {
   overlay.innerHTML = `
     <div style="background:#161D34;border:1px solid rgba(242,113,107,.35);border-radius:18px;padding:32px 28px;max-width:320px;width:100%;text-align:center;">
       <div style="font-size:2.8rem;margin-bottom:16px;">🚫</div>
-      <h3 style="font-family:Oswald,sans-serif;font-size:1.2rem;color:#F2716B;margin-bottom:10px;">Sesi Anda Diakhiri</h3>
-      <p style="font-size:.84rem;color:#8A91AC;line-height:1.65;margin-bottom:24px;">Admin telah mengakhiri sesi Anda. Silakan hubungi admin untuk informasi lebih lanjut.</p>
+      <h3 style="font-family:Oswald,sans-serif;font-size:1.2rem;color:#F2716B;margin-bottom:10px;">Sesi anda telah di akhiri silahkan login kembali</h3>
       <button onclick="document.getElementById('kicked-overlay').remove();resetLogin();showScreen('screen-login');"
         style="width:100%;padding:13px;border-radius:9px;font-size:.92rem;font-weight:700;background:#F2716B;border:none;color:#fff;cursor:pointer;">
         Kembali ke Halaman Login
