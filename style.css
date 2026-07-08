@@ -311,7 +311,7 @@ a { color: inherit; text-decoration: none; }
 
 /* sc-video-container: wrapper video di dalam card */
 .sc-video-container  { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; }
-.sc-video-container video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sc-video-container video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
 
 /* sc-controls: tombol di pojok kanan atas area VIDEO (harus di dalam .sc-video-container yg position:relative) */
 .sc-video-container .sc-controls { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; gap: 6px; }
@@ -332,6 +332,14 @@ a { color: inherit; text-decoration: none; }
 .sc-btn.thermal-btn:hover  { background: rgba(168,85,247,.2); border-color: rgba(168,85,247,.6); }
 .sc-btn.thermal-btn.active { background: rgba(168,85,247,.25); border-color: rgba(168,85,247,.8); color: #fff; box-shadow: 0 0 8px rgba(168,85,247,.4); }
 #vm-thermal-btn.active     { background: rgba(168,85,247,.3) !important; border-color: rgba(168,85,247,.8) !important; color: #fff !important; }
+
+/* Thermal slider */
+.thermal-slider-wrap       { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: rgba(168,85,247,.08); border-top: 1px solid rgba(168,85,247,.2); }
+.thermal-slider-label      { font-size: .85rem; flex-shrink: 0; }
+.thermal-slider-val        { font-size: .75rem; color: #A855F7; font-weight: 700; min-width: 32px; text-align: right; flex-shrink: 0; }
+.thermal-slider            { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 4px; background: linear-gradient(to right, #A855F7, #E879F9); outline: none; cursor: pointer; }
+.thermal-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #A855F7; box-shadow: 0 0 6px rgba(168,85,247,.6); cursor: pointer; }
+.thermal-slider::-moz-range-thumb     { width: 16px; height: 16px; border-radius: 50%; background: #A855F7; border: none; box-shadow: 0 0 6px rgba(168,85,247,.6); cursor: pointer; }
 .sc-btn.expand-btn   { color: var(--amber); }
 
 /* audio meter di bawah card */
@@ -390,7 +398,7 @@ a { color: inherit; text-decoration: none; }
 .vm-btn.vm-close:hover { background: rgba(242,113,107,.18); border-color: var(--red); }
 
 .vm-video-wrap { width: 100%; aspect-ratio: 16/9; background: #000; }
-.vm-video-wrap video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.vm-video-wrap video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
 
 /* ================================================================
    VIEWER — TOAST NOTIFIKASI FLIP KAMERA
