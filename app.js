@@ -346,8 +346,6 @@ function renderAdminSessions(sessions) {
         <div class="sc-video-container">
           <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
           <div class="sc-controls">
-            <button class="sc-btn cam-btn ${s.camActive ? 'active' : ''}" title="Kamera">📹</button>
-            <button class="sc-btn mic-btn ${s.micActive ? 'active' : ''}" title="Mikrofon">🎤</button>
             <button class="sc-btn expand-btn" onclick="expandSession('${s.id}')" title="Perbesar">⛶</button>
             <button class="sc-btn kick-btn" onclick="kickSession('${s.id}','${s.name}')" title="Kick">⛔</button>
           </div>
@@ -425,8 +423,6 @@ async function setupPeerConnection_Admin(sessionId, user) {
       <div class="sc-video-container">
         <video id="video-${sessionId}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
         <div class="sc-controls">
-          <button class="sc-btn cam-btn active" title="Kamera">📹</button>
-          <button class="sc-btn mic-btn active" title="Mikrofon">🎤</button>
           <button class="sc-btn expand-btn" onclick="expandSession('${sessionId}')" title="Perbesar">⛶</button>
             <button class="sc-btn kick-btn" onclick="kickSession('${sessionId}','${user.name || 'Pengguna'}')" title="Kick">⛔</button>
         </div>
