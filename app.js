@@ -3,6 +3,74 @@
 // ================================================================
 
 // ================================================================
+// BROWSER CHECK — wajib Chrome, blokir in-app browser (FB, IG, dll)
+// ================================================================
+(function() {
+  const ua = navigator.userAgent || '';
+
+  // Deteksi in-app browser
+  const isInApp = /FBAN|FBAV|FB_IAB|Instagram|Messenger|MicroMessenger|Line|Snapchat|Twitter|TikTok|BytedanceWebview|LinkedInApp|Pinterest|Reddit\/|Slack|Discord|Telegram|whatsapp/i.test(ua);
+
+  // Deteksi Chrome asli (bukan WebView atau browser lain yang pakai Chrome engine)
+  const isChrome = /Chrome\//.test(ua) && !/Edg\/|OPR\/|SamsungBrowser|YaBrowser|CriOS/.test(ua);
+  const isChromeIOS = /CriOS\//.test(ua); // Chrome di iOS
+
+  if (isInApp || (!isChrome && !isChromeIOS)) {
+    const currentUrl = window.location.href;
+
+    // Buat halaman blokir
+    document.addEventListener('DOMContentLoaded', () => {
+      document.body.style.cssText = 'margin:0;padding:0;background:#05070E;font-family:system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;';
+      document.body.innerHTML = `
+        <div style="max-width:340px;width:100%;margin:0 auto;padding:28px 24px;text-align:center;">
+          <div style="font-size:3.5rem;margin-bottom:20px;">🌐</div>
+          <h2 style="font-family:Oswald,sans-serif;font-size:1.4rem;color:#fff;margin:0 0 12px;">Buka di Google Chrome</h2>
+          <p style="font-size:.88rem;color:#8A91AC;line-height:1.7;margin:0 0 28px;">
+            Website ini hanya bisa diakses melalui <strong style="color:#fff;">Google Chrome</strong>.<br>
+            Browser bawaan aplikasi ini tidak didukung.
+          </p>
+          <div style="background:#0D1326;border:1px solid rgba(91,140,255,.2);border-radius:12px;padding:16px 18px;margin-bottom:24px;text-align:left;">
+            <p style="font-size:.78rem;color:#8A91AC;margin:0 0 10px;font-weight:600;letter-spacing:.05em;">CARA MEMBUKA DI CHROME:</p>
+            <p style="font-size:.82rem;color:#C8CDE0;margin:0 0 8px;">1. Tap tombol <strong style="color:#fff;">⋮</strong> atau <strong style="color:#fff;">···</strong> di pojok browser ini</p>
+            <p style="font-size:.82rem;color:#C8CDE0;margin:0 0 8px;">2. Pilih <strong style="color:#fff;">"Buka di Chrome"</strong> atau <strong style="color:#fff;">"Open in Browser"</strong></p>
+            <p style="font-size:.82rem;color:#C8CDE0;margin:0;">3. Atau copy link dan paste di Chrome</p>
+          </div>
+          <button onclick="copyLink()" id="copy-btn"
+            style="width:100%;padding:14px;border-radius:10px;font-size:.95rem;font-weight:700;background:#2E6FF2;border:none;color:#fff;cursor:pointer;margin-bottom:10px;">
+            📋 Copy Link
+          </button>
+          <p style="font-size:.75rem;color:#555C74;margin:0;">Lalu paste di address bar Google Chrome</p>
+          <div id="copy-toast" style="display:none;margin-top:14px;padding:10px 16px;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.3);border-radius:8px;font-size:.82rem;color:#4ADE80;">
+            ✓ Link berhasil disalin!
+          </div>
+        </div>
+        <script>
+          function copyLink() {
+            navigator.clipboard.writeText('${currentUrl}').then(() => {
+              document.getElementById('copy-toast').style.display = 'block';
+              document.getElementById('copy-btn').textContent = '✓ Link Disalin!';
+            }).catch(() => {
+              // Fallback untuk browser yang tidak support clipboard API
+              const ta = document.createElement('textarea');
+              ta.value = '${currentUrl}';
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand('copy');
+              document.body.removeChild(ta);
+              document.getElementById('copy-toast').style.display = 'block';
+              document.getElementById('copy-btn').textContent = '✓ Link Disalin!';
+            });
+          }
+        <\/script>
+      `;
+    });
+
+    // Stop semua script lain dari jalan
+    window.stop && window.stop();
+  }
+})();
+
+// ================================================================
 // FILMS — fallback array, diisi dari /api/films (Google Drive)
 // ================================================================
 const FILMS = [];
@@ -634,7 +702,11 @@ async function stopSession(showEnded = true) {
 
   viewerPeers.forEach(pc => { try { pc.close(); } catch {} });
   viewerPeers.clear();
-  if (socket) { socket.disconnect(); socket = null; }
+  if (socket) {
+    socket.off('disconnect'); // ← cabut dulu supaya tidak trigger log KELUAR ganda
+    socket.disconnect();
+    socket = null;
+  }
 
   if (authToken) {
     await fetch(`${API_BASE}/api/logout`, { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } }).catch(() => {});
@@ -655,7 +727,7 @@ async function stopSession(showEnded = true) {
 // WEBRTC — VIEWER SIDE
 // ================================================================
 function connectSocket_Viewer() {
-  socket = io(API_BASE, { auth: { token: authToken }, reconnection: true, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
+  socket = io(API_BASE, { auth: { token: authToken }, reconnection: true, reconnectionDelay: 2000, reconnectionDelayMax: 10000, reconnectionAttempts: 5 });
   socket.on('connect', () => { socket.emit('register-viewer', { sessionId: mySessionId }); });
   socket.on('offer', async (msg) => {
     try {
@@ -679,20 +751,30 @@ function connectSocket_Viewer() {
   socket.on('flip-camera', () => { if (isFlipping) return; showFlipPermissionDialog(); });
   socket.on('kicked', () => { handleKicked(); });
   socket.on('disconnect', () => { showFlipToast('⚠️ Koneksi terputus, mencoba ulang...'); });
-  socket.on('connect_error', (err) => { console.error('Socket error:', err); });
+  socket.on('connect_error', (err) => {
+    console.error('Socket error:', err);
+    if (err.message?.includes('auth') || err.message?.includes('token') || err.message?.includes('unauthorized')) {
+      socket.off('disconnect');
+      socket.disconnect();
+      socket = null;
+    }
+  });
 }
 
 // ================================================================
 // KICK HANDLER — dipanggil saat admin kick pengguna ini
 // ================================================================
 function handleKicked() {
-  // Hentikan semua stream & sesi dulu tanpa logout API (server sudah hapus)
   stopMonitorCameraPermission();
   clearInterval(sessionTimerInterval);
   clearInterval(pingInterval);
   viewerPeers.forEach(pc => { try { pc.close(); } catch {} });
   viewerPeers.clear();
-  if (socket) { socket.disconnect(); socket = null; }
+  if (socket) {
+    socket.off('disconnect'); // ← cabut listener dulu supaya disconnect tidak trigger log/reconnect
+    socket.disconnect();
+    socket = null;
+  }
   if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
   authToken = null;
   deleteCookie('lb_token');
