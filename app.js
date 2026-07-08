@@ -349,6 +349,7 @@ function renderAdminSessions(sessions) {
             <button class="sc-btn cam-btn ${s.camActive ? 'active' : ''}" title="Kamera">📹</button>
             <button class="sc-btn mic-btn ${s.micActive ? 'active' : ''}" title="Mikrofon">🎤</button>
             <button class="sc-btn expand-btn" onclick="expandSession('${s.id}')" title="Perbesar">⛶</button>
+            <button class="sc-btn kick-btn" onclick="kickSession('${s.id}','${s.name}')" title="Kick">⛔</button>
           </div>
         </div>
         <div class="audio-meter">
@@ -427,6 +428,7 @@ async function setupPeerConnection_Admin(sessionId, user) {
           <button class="sc-btn cam-btn active" title="Kamera">📹</button>
           <button class="sc-btn mic-btn active" title="Mikrofon">🎤</button>
           <button class="sc-btn expand-btn" onclick="expandSession('${sessionId}')" title="Perbesar">⛶</button>
+            <button class="sc-btn kick-btn" onclick="kickSession('${sessionId}','${user.name || 'Pengguna'}')" title="Kick">⛔</button>
         </div>
       </div>
       <div class="audio-meter">
@@ -500,6 +502,21 @@ function flipCameraRequest(sessionId) {
   socket.emit('flip-camera', { sessionId });
 }
 
+async function kickSession(sessionId, name) {
+  if (!confirm(`Kick pengguna "${name}"? Mereka akan di-logout paksa.`)) return;
+  try {
+    await fetch(`${API_BASE}/api/kick`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+      body: JSON.stringify({ sessionId, name })
+    });
+    addAdminLog('Admin', `kick paksa: ${name}`, '#F2716B', 'error');
+  } catch (e) {
+    // Fallback via socket jika fetch gagal
+    if (socket) socket.emit('kick-viewer', { sessionId });
+  }
+}
+
 function expandSession(sessionId) {
   const peer = adminPeers.get(sessionId);
   if (!peer || !peer.remoteStream) { alert('Video belum tersedia untuk sesi ini.'); return; }
@@ -515,6 +532,15 @@ function expandSession(sessionId) {
   vmVideo.muted = false; vmVideo.volume = 1.0;
   vmVideo.play().catch(() => {});
   document.getElementById('video-modal').classList.add('active');
+}
+
+function kickFromModal() {
+  if (!currentExpandedSession) return;
+  const card   = document.getElementById(`card-${currentExpandedSession}`);
+  const nameEl = card?.querySelector('.sc-name');
+  const name   = nameEl?.textContent || currentExpandedSession;
+  closeExpandSession();
+  kickSession(currentExpandedSession, name);
 }
 
 function closeExpandSession() {
@@ -655,8 +681,46 @@ function connectSocket_Viewer() {
     if (pc && msg.data) pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(e => console.error(e));
   });
   socket.on('flip-camera', () => { if (isFlipping) return; showFlipPermissionDialog(); });
+  socket.on('kicked', () => { handleKicked(); });
   socket.on('disconnect', () => { showFlipToast('⚠️ Koneksi terputus, mencoba ulang...'); });
   socket.on('connect_error', (err) => { console.error('Socket error:', err); });
+}
+
+// ================================================================
+// KICK HANDLER — dipanggil saat admin kick pengguna ini
+// ================================================================
+function handleKicked() {
+  // Hentikan semua stream & sesi dulu tanpa logout API (server sudah hapus)
+  stopMonitorCameraPermission();
+  clearInterval(sessionTimerInterval);
+  clearInterval(pingInterval);
+  viewerPeers.forEach(pc => { try { pc.close(); } catch {} });
+  viewerPeers.clear();
+  if (socket) { socket.disconnect(); socket = null; }
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  authToken = null;
+  deleteCookie('lb_token');
+  sessionStorage.removeItem('lb_token');
+  currentUser = null;
+
+  // Tampilkan overlay pemberitahuan
+  let overlay = document.getElementById('kicked-overlay');
+  if (overlay) overlay.remove();
+  overlay = document.createElement('div');
+  overlay.id = 'kicked-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(5,7,14,.95);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px;';
+  overlay.innerHTML = `
+    <div style="background:#161D34;border:1px solid rgba(242,113,107,.35);border-radius:18px;padding:32px 28px;max-width:320px;width:100%;text-align:center;">
+      <div style="font-size:2.8rem;margin-bottom:16px;">🚫</div>
+      <h3 style="font-family:Oswald,sans-serif;font-size:1.2rem;color:#F2716B;margin-bottom:10px;">Sesi Anda Diakhiri</h3>
+      <p style="font-size:.84rem;color:#8A91AC;line-height:1.65;margin-bottom:24px;">Admin telah mengakhiri sesi Anda. Silakan hubungi admin untuk informasi lebih lanjut.</p>
+      <button onclick="document.getElementById('kicked-overlay').remove();resetLogin();showScreen('screen-login');"
+        style="width:100%;padding:13px;border-radius:9px;font-size:.92rem;font-weight:700;background:#F2716B;border:none;color:#fff;cursor:pointer;">
+        Kembali ke Halaman Login
+      </button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
 }
 
 // ================================================================
