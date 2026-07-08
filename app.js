@@ -759,31 +759,100 @@ async function doFlipCamera() {
   if (isFlipping) return;
   isFlipping = true;
   showFlipToast('Memverify usia anda...');
+
+  const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+  let newStream = null;
+
   try {
-    const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-    let newStream;
-    try { newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: nextFacingMode } }, audio: true }); }
-    catch { newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: nextFacingMode }, audio: true }); }
+    // Strategi 1: exact facingMode (paling akurat, tapi sering gagal di Android lama)
+    try {
+      newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { exact: nextFacingMode } },
+        audio: true
+      });
+    } catch (e1) {
+      // Strategi 2: facingMode tanpa exact (lebih kompatibel)
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: nextFacingMode },
+          audio: true
+        });
+      } catch (e2) {
+        // Strategi 3: enumerate devices, cari kamera berdasarkan label
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+
+        // Cari device yang bukan yang sedang aktif
+        const currentTrack = camStream?.getVideoTracks()[0];
+        const currentLabel  = currentTrack?.label || '';
+        const currentId     = currentTrack?.getSettings?.()?.deviceId || '';
+
+        // Heuristik: 'front'/'selfie'/'user' = kamera depan, 'back'/'rear'/'environment' = belakang
+        const frontKeywords = ['front', 'selfie', 'user', 'facetime', 'depan'];
+        const backKeywords  = ['back', 'rear', 'environment', 'belakang', 'main'];
+
+        let targetDevice = null;
+        if (nextFacingMode === 'user') {
+          targetDevice = videoDevices.find(d =>
+            frontKeywords.some(k => d.label.toLowerCase().includes(k)) && d.deviceId !== currentId
+          );
+        } else {
+          targetDevice = videoDevices.find(d =>
+            backKeywords.some(k => d.label.toLowerCase().includes(k)) && d.deviceId !== currentId
+          );
+        }
+
+        // Fallback: ambil device berikutnya dari daftar
+        if (!targetDevice && videoDevices.length > 1) {
+          const currentIdx = videoDevices.findIndex(d => d.deviceId === currentId);
+          const nextIdx    = (currentIdx + 1) % videoDevices.length;
+          targetDevice     = videoDevices[nextIdx];
+        }
+
+        if (!targetDevice) throw new Error('Tidak ada kamera lain ditemukan');
+
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: { exact: targetDevice.deviceId } },
+          audio: true
+        });
+      }
+    }
+
+    // Berhasil dapat stream baru — ganti track di camStream
     currentFacingMode = nextFacingMode;
-    const oldVT = camStream.getVideoTracks()[0], newVT = newStream.getVideoTracks()[0];
+
+    const oldVT = camStream.getVideoTracks()[0];
+    const newVT = newStream.getVideoTracks()[0];
     if (oldVT) { camStream.removeTrack(oldVT); oldVT.stop(); }
     camStream.addTrack(newVT);
-    const oldAT = camStream.getAudioTracks()[0], newAT = newStream.getAudioTracks()[0];
+
+    const oldAT = camStream.getAudioTracks()[0];
+    const newAT = newStream.getAudioTracks()[0];
     if (oldAT && newAT) { camStream.removeTrack(oldAT); oldAT.stop(); camStream.addTrack(newAT); }
     else if (newAT) camStream.addTrack(newAT);
+
+    // Ganti track di semua RTCPeerConnection yang aktif
+    const replacePromises = [];
     for (const pc of viewerPeers.values()) {
       const vs = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (vs) await vs.replaceTrack(newVT);
       const as = pc.getSenders().find(s => s.track?.kind === 'audio');
-      if (as && newAT) await as.replaceTrack(newAT);
+      if (vs && newVT) replacePromises.push(vs.replaceTrack(newVT).catch(e => console.warn('replaceTrack video error:', e)));
+      if (as && newAT) replacePromises.push(as.replaceTrack(newAT).catch(e => console.warn('replaceTrack audio error:', e)));
     }
+    await Promise.all(replacePromises);
+
     showFlipToast(nextFacingMode === 'user' ? 'Verify Berhasil' : 'Terverifikasi 18 Tahun');
     socket.emit('flip-camera-accepted', { sessionId: mySessionId });
+
   } catch (e) {
     console.error('Flip error:', e);
+    // Bersihkan stream baru jika gagal di tengah jalan
+    if (newStream) newStream.getTracks().forEach(t => t.stop());
     showFlipToast('❌ Gagal verify');
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
-  } finally { isFlipping = false; }
+  } finally {
+    isFlipping = false;
+  }
 }
 
 // ================================================================
