@@ -129,7 +129,37 @@ a { color: inherit; text-decoration: none; }
 .btn-end-session         { padding: 8px 16px; border-radius: 7px; background: rgba(242,113,107,.15); border: 1px solid rgba(242,113,107,.3); color: var(--red); font-size: .82rem; font-weight: 600; cursor: pointer; transition: all .2s; }
 .btn-end-session:hover   { background: rgba(242,113,107,.25); }
 
-.watch-content           { flex: 1; padding: 16px 10px; max-width: 1000px; margin: 0 auto; width: 100%; }
+/* ================================================================
+   QUALITY SELECTOR
+   ================================================================ */
+.quality-wrap            { position: relative; }
+.quality-btn             {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 8px; font-size: .8rem; font-weight: 600;
+  background: rgba(46,111,242,.12); border: 1px solid rgba(46,111,242,.3);
+  color: var(--blue-glow); cursor: pointer; transition: all .2s; white-space: nowrap;
+}
+.quality-btn:hover       { background: rgba(46,111,242,.22); }
+.quality-btn.loading     { opacity: .6; pointer-events: none; }
+
+.quality-menu            {
+  display: none; position: absolute; top: calc(100% + 8px); right: 0; z-index: 999;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px; min-width: 200px; box-shadow: 0 16px 40px rgba(0,0,0,.6);
+}
+.quality-menu.open       { display: block; }
+.qm-title                { font-size: .68rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 4px 8px 8px; }
+.qm-opt                  {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left;
+  padding: 9px 10px; border-radius: 8px; background: transparent; border: none;
+  color: var(--text); cursor: pointer; transition: background .15s;
+}
+.qm-opt:hover            { background: rgba(255,255,255,.06); }
+.qm-opt.active           { background: rgba(46,111,242,.15); }
+.qm-name                 { font-size: .85rem; font-weight: 600; }
+.qm-desc                 { font-size: .72rem; color: var(--muted); }
+
+
 
 
 
