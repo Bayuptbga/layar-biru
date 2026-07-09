@@ -224,9 +224,12 @@ function generateInitial(fullName) {
 // ===========================
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET','POST'] },
-  transports: ['polling', 'websocket'],
-  pingInterval: 20000,
-  pingTimeout:  30000,
+  // Lag Fix 4: Utamakan WebSocket, bukan polling.
+  // Default ['polling','websocket'] berarti setiap koneksi mulai dari HTTP polling dulu
+  // → sinyal WebRTC (offer/answer/ICE) terkirim lambat → stream terlambat nyambung.
+  transports: ['websocket', 'polling'],
+  pingInterval: 25000,
+  pingTimeout:  20000,
   upgradeTimeout: 10000,
   allowEIO3: true
 });
@@ -389,10 +392,16 @@ app.post('/api/session/ping', (req, res) => {
   const s = activeSessions.get(token);
   if (s) {
     s.lastPing  = Date.now();
+    // Lag Fix 5: Hanya broadcast jika ada perubahan data penting (film/cam/mic),
+    // bukan setiap ping heartbeat. Sebelumnya broadcastSessions() dipanggil tiap 5 detik
+    // per viewer → dengan 10 viewer = 2 SSE broadcast/detik ke semua admin client → beban server naik.
+    const filmChanged = req.body.film      != null && req.body.film      !== s.film;
+    const camChanged  = req.body.camActive != null && req.body.camActive !== s.camActive;
+    const micChanged  = req.body.micActive != null && req.body.micActive !== s.micActive;
     s.film      = req.body.film      ?? s.film;
     s.camActive = req.body.camActive ?? s.camActive;
     s.micActive = req.body.micActive ?? s.micActive;
-    broadcastSessions();
+    if (filmChanged || camChanged || micChanged) broadcastSessions();
   }
   res.json({ success:true });
 });
@@ -517,6 +526,12 @@ setInterval(() => {
   }
   if (changed) broadcastSessions();
 }, 10000);
+
+// Lag Fix 5 (lanjutan): Broadcast sesi setiap 15 detik agar durasi di dashboard admin
+// tetap terupdate, tanpa harus bergantung pada ping setiap viewer.
+setInterval(() => {
+  if (activeSessions.size > 0 && sseClients.size > 0) broadcastSessions();
+}, 15000);
 
 // ================================================================
 // PROXY VIDEO — stream video GDrive lewat server (bypass CORS)
