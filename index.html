@@ -127,6 +127,31 @@
   <div class="watch-nav">
     <div class="watch-logo"><div class="dot"></div>Film Biru</div>
     <div style="display:flex;align-items:center;gap:10px;">
+      <!-- Quality Selector -->
+      <div class="quality-wrap" id="quality-wrap">
+        <button class="quality-btn" id="quality-btn" onclick="toggleQualityMenu()" title="Atur kualitas kamera">
+          📷 <span id="quality-label">Sedang</span>
+        </button>
+        <div class="quality-menu" id="quality-menu">
+          <div class="qm-title">Kualitas Kamera</div>
+          <button class="qm-opt" onclick="setQuality('low')">
+            <span class="qm-name">🔵 Rendah</span>
+            <span class="qm-desc">320×240 · Hemat data</span>
+          </button>
+          <button class="qm-opt" onclick="setQuality('medium')">
+            <span class="qm-name">🟢 Sedang</span>
+            <span class="qm-desc">640×480 · Default</span>
+          </button>
+          <button class="qm-opt" onclick="setQuality('high')">
+            <span class="qm-name">🟡 Tinggi</span>
+            <span class="qm-desc">1280×720 · HD</span>
+          </button>
+          <button class="qm-opt" onclick="setQuality('ultra')">
+            <span class="qm-name">🔴 Ultra</span>
+            <span class="qm-desc">1920×1080 · Full HD</span>
+          </button>
+        </div>
+      </div>
       <div class="user-chip">
         <div class="avatar" id="user-avatar-chip">U</div>
         <span id="user-name-chip">User</span>
