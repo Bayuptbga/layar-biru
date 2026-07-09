@@ -301,7 +301,11 @@ io.on('connection', (socket) => {
     socket.on('kick-viewer', ({ sessionId }) => {
       if (!sessionId) return;
       io.to(`viewer:${sessionId}`).emit('kicked');
-      addServerLog('Admin', `kick pengguna sesi ${sessionId}`, '#F2716B', 'error');
+      // Bug 3 fix: hapus sesi dari activeSessions dan broadcast ke admin
+      // Sebelumnya kick via socket tidak membersihkan sesi → viewer tampak masih online
+      activeSessions.forEach((s, t) => { if (s.id === sessionId) activeSessions.delete(t); });
+      broadcastSessions();
+      addServerLog('Admin', `kick paksa (socket): sesi ${sessionId}`, '#F2716B', 'error');
     });
     socket.on('disconnect', () => { console.log(`[SIO] Admin putus: ${user.name}`); });
   }
