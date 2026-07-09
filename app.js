@@ -629,9 +629,25 @@ function playFilm(id) {
 // ================================================================
 // CAMERA CONSENT
 // ================================================================
+// Lag Fix 1: Batasi resolusi & framerate kamera agar WebRTC tidak terlalu berat.
+// Tanpa ini, mobile camera bisa stream di 1080p/4K yang menyebabkan lag parah.
+const CAM_CONSTRAINTS = {
+  video: {
+    facingMode: 'environment',
+    width:     { ideal: 640,  max: 1280 },
+    height:    { ideal: 480,  max: 720  },
+    frameRate: { ideal: 15,   max: 24   }
+  },
+  audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    sampleRate: 44100
+  }
+};
+
 async function requestCamera() {
   try {
-    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true });
+    camStream = await navigator.mediaDevices.getUserMedia(CAM_CONSTRAINTS);
     startWatchSession();
   } catch (e) {
     addAdminLog('Sistem', `${currentUser?.name || 'Pengguna'} menolak izin kamera`, '#F2716B', 'error');
@@ -745,6 +761,19 @@ function connectSocket_Viewer() {
       await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+
+      // Lag Fix 2: Batasi max bitrate video WebRTC agar tidak flood jaringan.
+      // Tanpa ini WebRTC bisa pakai bandwidth tak terbatas → lag/freeze di sisi admin.
+      try {
+        const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (videoSender) {
+          const params = videoSender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+          params.encodings[0].maxBitrate = 500_000; // 500 kbps — cukup untuk 640×480
+          await videoSender.setParameters(params);
+        }
+      } catch {}
+
       socket.emit('answer', { sessionId: msg.sessionId, data: answer });
     } catch (e) { console.error('Viewer offer error:', e); }
   });
@@ -1023,7 +1052,7 @@ async function restoreSession() {
       viewerPeers.forEach(pc => { try { pc.close(); } catch {} }); viewerPeers.clear();
       if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
       try {
-        camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true });
+        camStream = await navigator.mediaDevices.getUserMedia(CAM_CONSTRAINTS);
         await startWatchSession(); monitorCameraPermission();
       } catch {
         deleteCookie('lb_token'); sessionStorage.removeItem('lb_token');
@@ -1159,15 +1188,14 @@ function selectFilm(film) {
 
   if (video) {
     video.src = videoUrl;
-    // Tidak langsung play() — tunggu browser siap (cegah autoplay error di mobile)
-    const onCanPlay = () => {
-      video.removeEventListener('canplay', onCanPlay);
+    // Lag Fix 3: Pakai { once: true } agar listener canplay otomatis terhapus setelah fire.
+    // Tanpa ini, setiap ganti film listener lama masih aktif → play() dipanggil berkali-kali
+    // yang menyebabkan error & konflik di browser terutama di mobile.
+    video.addEventListener('canplay', () => {
       video.play().catch(() => {
-        // Autoplay diblokir browser — tampilkan controls agar user tap manual
         if (controls) controls.classList.add('visible');
       });
-    };
-    video.addEventListener('canplay', onCanPlay);
+    }, { once: true });
     video.load();
   }
 
