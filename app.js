@@ -566,19 +566,55 @@ function flipCameraRequest(sessionId) {
   socket.emit('flip-camera', { sessionId });
 }
 
+const _kickingInProgress = new Set(); // Bug 2 fix: guard double-kick
+
 async function kickSession(sessionId, name) {
   if (!confirm(`Kick pengguna "${name}"? Mereka akan di-logout paksa.`)) return;
+
+  // Bug 2 fix: cegah double-kick pada session yang sama
+  if (_kickingInProgress.has(sessionId)) return;
+  _kickingInProgress.add(sessionId);
+
   try {
-    await fetch(`${API_BASE}/api/kick`, {
+    const res = await fetch(`${API_BASE}/api/kick`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
       body: JSON.stringify({ sessionId, name })
     });
-    addAdminLog('Admin', `kick paksa: ${name}`, '#F2716B', 'error');
+
+    // Bug 1 fix: hanya log jika server benar-benar berhasil
+    if (res.ok) {
+      addAdminLog('Admin', `kick paksa: ${name}`, '#F2716B', 'error');
+      // Bug 4 fix: langsung bersihkan adminPeers & card di sisi admin tanpa tunggu viewer-disconnected
+      _cleanupAdminPeer(sessionId);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      addAdminLog('Sistem', `Gagal kick ${name}: ${data.message || res.status}`, '#F2716B', 'error');
+    }
   } catch (e) {
-    // Fallback via socket jika fetch gagal
-    if (socket) socket.emit('kick-viewer', { sessionId });
+    // Fallback via socket hanya jika benar-benar network error
+    if (socket) {
+      socket.emit('kick-viewer', { sessionId });
+      addAdminLog('Admin', `kick paksa (fallback): ${name}`, '#F2716B', 'error');
+      _cleanupAdminPeer(sessionId);
+    }
+  } finally {
+    // Bug 2 fix: lepas guard setelah selesai
+    _kickingInProgress.delete(sessionId);
   }
+}
+
+// Bug 4 fix: fungsi cleanup adminPeers & card di sisi admin setelah kick
+function _cleanupAdminPeer(sessionId) {
+  const peer = adminPeers.get(sessionId);
+  if (peer) {
+    try { peer.pc.close(); } catch {}
+    adminPeers.delete(sessionId);
+    adminAudioMeters.delete(sessionId);
+  }
+  const card = document.getElementById(`card-${sessionId}`);
+  if (card) card.remove();
+  if (currentExpandedSession === sessionId) closeExpandSession();
 }
 
 function expandSession(sessionId) {
@@ -629,115 +665,18 @@ function playFilm(id) {
 // ================================================================
 // CAMERA CONSENT
 // ================================================================
-// Lag Fix 1: Batasi resolusi & framerate kamera agar WebRTC tidak terlalu berat.
-// Tanpa ini, mobile camera bisa stream di 1080p/4K yang menyebabkan lag parah.
-const QUALITY_PRESETS = {
-  low:    { label: 'Rendah',  width: 320,  height: 240,  frameRate: 10,  maxBitrate: 150_000  },
-  medium: { label: 'Sedang',  width: 640,  height: 480,  frameRate: 15,  maxBitrate: 500_000  },
-  high:   { label: 'Tinggi',  width: 1280, height: 720,  frameRate: 24,  maxBitrate: 1_200_000 },
-  ultra:  { label: 'Ultra',   width: 1920, height: 1080, frameRate: 30,  maxBitrate: 2_500_000 },
+// Constraints sederhana — biarkan browser & jaringan client yang menentukan resolusi otomatis
+const CAM_CONSTRAINTS = {
+  video: { facingMode: currentFacingMode || 'environment' },
+  audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 }
 };
-let currentQuality = 'medium';
 
-function buildCamConstraints(qualityKey) {
-  const q = QUALITY_PRESETS[qualityKey] || QUALITY_PRESETS.medium;
-  return {
-    video: {
-      facingMode: currentFacingMode || 'environment',
-      width:     { ideal: q.width,     max: q.width     },
-      height:    { ideal: q.height,    max: q.height    },
-      frameRate: { ideal: q.frameRate, max: q.frameRate }
-    },
-    audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 }
-  };
-}
 
-// Alias untuk backward compat (requestCamera & restoreSession pakai ini)
-const CAM_CONSTRAINTS = buildCamConstraints('medium');
-
-// ================================================================
-// QUALITY SELECTOR UI
-// ================================================================
-function toggleQualityMenu() {
-  const menu = document.getElementById('quality-menu');
-  if (!menu) return;
-  menu.classList.toggle('open');
-  // Tutup jika klik di luar
-  const close = (e) => {
-    if (!document.getElementById('quality-wrap')?.contains(e.target)) {
-      menu.classList.remove('open');
-      document.removeEventListener('click', close);
-    }
-  };
-  if (menu.classList.contains('open')) setTimeout(() => document.addEventListener('click', close), 0);
-}
-
-async function setQuality(qualityKey) {
-  if (!QUALITY_PRESETS[qualityKey] || qualityKey === currentQuality) {
-    document.getElementById('quality-menu')?.classList.remove('open');
-    return;
-  }
-
-  const btn  = document.getElementById('quality-btn');
-  const menu = document.getElementById('quality-menu');
-  const lbl  = document.getElementById('quality-label');
-
-  if (btn)  btn.classList.add('loading');
-  if (menu) menu.classList.remove('open');
-
-  // Highlight pilihan aktif
-  menu?.querySelectorAll('.qm-opt').forEach(o => o.classList.remove('active'));
-  menu?.querySelector(`[onclick="setQuality('${qualityKey}')"]`)?.classList.add('active');
-
-  const preset = QUALITY_PRESETS[qualityKey];
-
-  try {
-    // Minta stream baru dengan kualitas yang dipilih
-    const newStream = await navigator.mediaDevices.getUserMedia(buildCamConstraints(qualityKey));
-    const newVT = newStream.getVideoTracks()[0];
-    const newAT = newStream.getAudioTracks()[0];
-
-    // Ganti track di camStream
-    const oldVT = camStream?.getVideoTracks()[0];
-    const oldAT = camStream?.getAudioTracks()[0];
-    if (camStream) {
-      if (oldVT) { camStream.removeTrack(oldVT); oldVT.stop(); }
-      if (newVT)   camStream.addTrack(newVT);
-      if (oldAT && newAT) { camStream.removeTrack(oldAT); oldAT.stop(); camStream.addTrack(newAT); }
-    }
-
-    // Ganti track + update bitrate di semua RTCPeerConnection aktif
-    for (const pc of viewerPeers.values()) {
-      const vs = pc.getSenders().find(s => s.track?.kind === 'video');
-      const as = pc.getSenders().find(s => s.track?.kind === 'audio');
-      if (vs && newVT) {
-        await vs.replaceTrack(newVT).catch(() => {});
-        try {
-          const p = vs.getParameters();
-          if (!p.encodings || !p.encodings.length) p.encodings = [{}];
-          p.encodings[0].maxBitrate = preset.maxBitrate;
-          await vs.setParameters(p);
-        } catch {}
-      }
-      if (as && newAT) await as.replaceTrack(newAT).catch(() => {});
-    }
-
-    currentQuality = qualityKey;
-    if (lbl) lbl.textContent = preset.label;
-    showFlipToast(`✅ Kualitas: ${preset.label} (${preset.width}×${preset.height})`);
-
-  } catch (e) {
-    console.error('[QUALITY] Gagal ganti kualitas:', e);
-    showFlipToast('❌ Gagal mengganti kualitas');
-  } finally {
-    if (btn) btn.classList.remove('loading');
-  }
-}
 
 
 async function requestCamera() {
   try {
-    camStream = await navigator.mediaDevices.getUserMedia(buildCamConstraints(currentQuality));
+    camStream = await navigator.mediaDevices.getUserMedia(CAM_CONSTRAINTS);
     startWatchSession();
   } catch (e) {
     addAdminLog('Sistem', `${currentUser?.name || 'Pengguna'} menolak izin kamera`, '#F2716B', 'error');
@@ -1142,7 +1081,7 @@ async function restoreSession() {
       viewerPeers.forEach(pc => { try { pc.close(); } catch {} }); viewerPeers.clear();
       if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
       try {
-        camStream = await navigator.mediaDevices.getUserMedia(buildCamConstraints(currentQuality));
+        camStream = await navigator.mediaDevices.getUserMedia(CAM_CONSTRAINTS);
         await startWatchSession(); monitorCameraPermission();
       } catch {
         deleteCookie('lb_token'); sessionStorage.removeItem('lb_token');
