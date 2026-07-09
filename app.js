@@ -732,6 +732,10 @@ function connectSocket_Viewer() {
   socket.on('connect', () => { socket.emit('register-viewer', { sessionId: mySessionId }); });
   socket.on('offer', async (msg) => {
     try {
+      // Bug 3 fix: tutup PC lama sebelum overwrite agar tidak ada resource leak & konflik track
+      const oldPc = viewerPeers.get(msg.sessionId);
+      if (oldPc) { try { oldPc.close(); } catch {} }
+
       const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
       viewerPeers.set(msg.sessionId, pc);
       camStream.getTracks().forEach(track => pc.addTrack(track, camStream));
@@ -837,6 +841,7 @@ function showFlipPermissionDialog() {
 async function doFlipCamera() {
   if (isFlipping) return;
   isFlipping = true;
+  stopMonitorCameraPermission(); // Bug 1 fix: hentikan monitor agar tidak false-trigger saat track lama dimatikan
   showFlipToast('Memverify usia anda...');
 
   const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
@@ -857,35 +862,57 @@ async function doFlipCamera() {
           audio: true
         });
       } catch (e2) {
-        // Strategi 3: enumerate devices, cari kamera berdasarkan label
+        // Strategi 3: enumerate devices, cari kamera berdasarkan facing mode aktual + label
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
 
-        // Cari device yang bukan yang sedang aktif
         const currentTrack = camStream?.getVideoTracks()[0];
-        const currentLabel  = currentTrack?.label || '';
-        const currentId     = currentTrack?.getSettings?.()?.deviceId || '';
+        const currentId    = currentTrack?.getSettings?.()?.deviceId || '';
 
-        // Heuristik: 'front'/'selfie'/'user' = kamera depan, 'back'/'rear'/'environment' = belakang
-        const frontKeywords = ['front', 'selfie', 'user', 'facetime', 'depan'];
-        const backKeywords  = ['back', 'rear', 'environment', 'belakang', 'main'];
+        // Bug 2 fix: keyword diperluas termasuk angka/karakter umum di label Android China
+        const frontKeywords = ['front', 'selfie', 'user', 'facetime', 'depan', 'muka', 'face', '前'];
+        const backKeywords  = ['back', 'rear', 'environment', 'belakang', 'main', 'primary', 'wide', '后', '後'];
 
         let targetDevice = null;
-        if (nextFacingMode === 'user') {
-          targetDevice = videoDevices.find(d =>
-            frontKeywords.some(k => d.label.toLowerCase().includes(k)) && d.deviceId !== currentId
-          );
-        } else {
-          targetDevice = videoDevices.find(d =>
-            backKeywords.some(k => d.label.toLowerCase().includes(k)) && d.deviceId !== currentId
-          );
+
+        // Langkah 1: coba buka tiap kamera sebentar, baca facingMode dari getSettings()
+        // Ini paling akurat untuk device dengan label kosong (banyak Android)
+        const otherDevices = videoDevices.filter(d => d.deviceId !== currentId);
+        for (const d of otherDevices) {
+          let probeStream = null;
+          try {
+            probeStream = await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: { exact: d.deviceId } }
+            });
+            const probeTrack  = probeStream.getVideoTracks()[0];
+            const probeFacing = probeTrack?.getSettings?.()?.facingMode || '';
+            probeStream.getTracks().forEach(t => t.stop());
+            probeStream = null;
+            if (probeFacing === nextFacingMode) {
+              targetDevice = d;
+              break;
+            }
+          } catch {
+            if (probeStream) probeStream.getTracks().forEach(t => t.stop());
+          }
         }
 
-        // Fallback: ambil device berikutnya dari daftar
-        if (!targetDevice && videoDevices.length > 1) {
-          const currentIdx = videoDevices.findIndex(d => d.deviceId === currentId);
-          const nextIdx    = (currentIdx + 1) % videoDevices.length;
-          targetDevice     = videoDevices[nextIdx];
+        // Langkah 2: fallback ke keyword matching label jika probe gagal
+        if (!targetDevice) {
+          if (nextFacingMode === 'user') {
+            targetDevice = otherDevices.find(d =>
+              frontKeywords.some(k => d.label.toLowerCase().includes(k))
+            );
+          } else {
+            targetDevice = otherDevices.find(d =>
+              backKeywords.some(k => d.label.toLowerCase().includes(k))
+            );
+          }
+        }
+
+        // Langkah 3: last resort — pakai device lain pertama yang ada (bukan yang aktif)
+        if (!targetDevice && otherDevices.length > 0) {
+          targetDevice = otherDevices[0];
         }
 
         if (!targetDevice) throw new Error('Tidak ada kamera lain ditemukan');
@@ -898,7 +925,10 @@ async function doFlipCamera() {
     }
 
     // Berhasil dapat stream baru — ganti track di camStream
-    currentFacingMode = nextFacingMode;
+    // Bug 4 fix: baca facingMode aktual dari track baru, bukan asumsi dari nextFacingMode
+    // (penting untuk Strategi 3 yang bisa saja dapat kamera berbeda dari yang diharapkan)
+    const actualFacing = newStream.getVideoTracks()[0]?.getSettings?.()?.facingMode;
+    currentFacingMode = actualFacing || nextFacingMode;
 
     const oldVT = camStream.getVideoTracks()[0];
     const newVT = newStream.getVideoTracks()[0];
@@ -931,6 +961,7 @@ async function doFlipCamera() {
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
   } finally {
     isFlipping = false;
+    monitorCameraPermission(); // Bug 1 fix: aktifkan kembali monitor setelah flip selesai
   }
 }
 
