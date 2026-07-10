@@ -415,7 +415,7 @@ function renderAdminSessions(sessions) {
           <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;background:#000;"></video>
           <div class="sc-controls">
             <button class="sc-btn expand-btn" onclick="expandSession('${s.id}')" title="Perbesar">⛶</button>
-            <button class="sc-btn kick-btn" onclick="kickSession('${s.id}','${s.name}')" title="Kick">⛔</button>
+            <button class="sc-btn kick-btn" onclick="kickSession('${s.id}','${escJS(s.name)}')" title="Kick">⛔</button>
           </div>
         </div>
         <div class="audio-meter">
@@ -492,7 +492,7 @@ async function setupPeerConnection_Admin(sessionId, user) {
         <video id="video-${sessionId}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;background:#000;"></video>
         <div class="sc-controls">
           <button class="sc-btn expand-btn" onclick="expandSession('${sessionId}')" title="Perbesar">⛶</button>
-          <button class="sc-btn kick-btn" onclick="kickSession('${sessionId}','${user.name || 'Pengguna'}')" title="Kick">⛔</button>
+          <button class="sc-btn kick-btn" onclick="kickSession('${sessionId}','${escJS(user.name || 'Pengguna')}')" title="Kick">⛔</button>
         </div>
       </div>
       <div class="audio-meter">
@@ -566,6 +566,12 @@ function flipCameraRequest(sessionId) {
   socket.emit('flip-camera', { sessionId });
 }
 
+// Helper: escape karakter kutip tunggal agar aman dipakai di onclick="...string JS..."
+// Contoh: "Fira Ma'ruf" → "Fira Ma\'ruf" sehingga JS tidak syntax error
+function escJS(str) {
+  return (str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 const _kickingInProgress = new Set(); // Bug 2 fix: guard double-kick
 
 async function kickSession(sessionId, name) {
@@ -637,11 +643,14 @@ function expandSession(sessionId) {
 
 function kickFromModal() {
   if (!currentExpandedSession) return;
-  const card   = document.getElementById(`card-${currentExpandedSession}`);
+  // Fix: simpan sessionId ke variabel lokal SEBELUM closeExpandSession()
+  // karena closeExpandSession() mengosongkan currentExpandedSession = null
+  const sessionId = currentExpandedSession;
+  const card   = document.getElementById(`card-${sessionId}`);
   const nameEl = card?.querySelector('.sc-name');
-  const name   = nameEl?.textContent || currentExpandedSession;
+  const name   = nameEl?.textContent || sessionId;
   closeExpandSession();
-  kickSession(currentExpandedSession, name);
+  kickSession(sessionId, name);
 }
 
 function closeExpandSession() {
