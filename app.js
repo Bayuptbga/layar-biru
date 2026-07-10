@@ -316,95 +316,69 @@ const _sseSessionCache = new Map(); // sessionId → { name, initial, ... }
 function renderAdminSessions(sessions) {
   const grid = document.getElementById('admin-session-grid');
   if (!grid) return;
+
   if (sessions.length === 0) {
-    if (adminPeers.size === 0) grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="es-icon">📡</div><div>Menunggu pengguna terhubung...<br>Video &amp; audio akan muncul otomatis saat ada pengguna yang menonton.</div></div>`;
+    if (adminPeers.size === 0) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="es-icon">📡</div><div>Menunggu pengguna terhubung...<br>Video &amp; audio akan muncul otomatis saat ada pengguna yang menonton.</div></div>`;
+    }
     return;
   }
-  const emptyState = grid.querySelector('.empty-state');
-  if (emptyState) emptyState.remove();
+  grid.querySelector('.empty-state')?.remove();
 
   sessions.forEach(s => {
-    // Simpan info sesi dari SSE — dipakai setupPeerConnection_Admin bila peer belum ada
-    _sseSessionCache.set(s.id, { name: s.name, initial: s.initial, role: 'viewer' });
-
     const existingCard = document.getElementById(`card-${s.id}`);
     if (existingCard) {
-      // Update teks di card yang sudah ada
-      const nameEl   = existingCard.querySelector('.sc-name');
-      const detailEl = existingCard.querySelector('.sc-details');
-      const durEl    = existingCard.querySelector('.sc-duration');
-      const meterLbl = existingCard.querySelector('.audio-meter-label small');
-      if (nameEl)   nameEl.textContent   = s.name;
-      if (detailEl) detailEl.textContent = s.film;
-      if (durEl)    durEl.textContent    = formatDuration(s.duration);
-      if (meterLbl) meterLbl.textContent = s.name;
+      // Card sudah ada — cukup update teks
+      const n = existingCard.querySelector('.sc-name');
+      const d = existingCard.querySelector('.sc-details');
+      const t = existingCard.querySelector('.sc-duration');
+      const m = existingCard.querySelector('.audio-meter-label small');
+      if (n) n.textContent = s.name;
+      if (d) d.textContent = s.film;
+      if (t) t.textContent = formatDuration(s.duration);
+      if (m) m.textContent = s.name;
 
-      // FIX A: Jika peer sudah punya stream tapi video element belum attach
-      // (terjadi ketika SSE update datang setelah ontrack sudah fire)
-      const peer = adminPeers.get(s.id);
-      const vEl  = document.getElementById(`video-${s.id}`);
-      if (peer && vEl) {
-        peer.videoEl = vEl; // selalu update ke elemen terbaru
-        const needsAttach = peer.remoteStream &&
-                            peer.remoteStream.getVideoTracks().length > 0 &&
-                            (!vEl.srcObject || vEl.videoWidth === 0 || vEl.paused);
-        if (needsAttach) {
-          console.log(`[FIX-A] Re-attach stream ke video element (${s.id})`);
-          vEl.muted = true;
-          vEl.srcObject = null;
-          vEl.srcObject = peer.remoteStream;
-          if (vEl.readyState >= 1) { vEl.play().catch(() => {}); }
-          else { vEl.addEventListener('loadedmetadata', () => vEl.play().catch(() => {}), { once: true }); }
+      // Jika peer punya stream tapi video masih blank (SSE update setelah ontrack fire)
+      const pe  = adminPeers.get(s.id);
+      const vEl = document.getElementById(`video-${s.id}`);
+      if (pe && vEl) {
+        pe.videoEl = vEl;
+        const hasVideo = pe.remoteStream && pe.remoteStream.getVideoTracks().length > 0;
+        const isBlank  = !vEl.srcObject || vEl.videoWidth === 0 || vEl.paused;
+        if (hasVideo && isBlank) {
+          console.log(`[SSE-reattach] ${s.id} — re-attach stream`);
+          _adminAttachStream(vEl, pe.remoteStream);
         }
       }
     } else {
-      // Buat card baru
-      const card = document.createElement('div');
-      card.className = 'session-card'; card.id = `card-${s.id}`;
-      card.innerHTML = `
-        <div class="sc-head">
-          <div class="sc-avatar">${s.initial}</div>
-          <div class="sc-info"><div class="sc-name">${s.name}</div><div class="sc-details">${s.film}</div></div>
-          <div class="sc-duration">${formatDuration(s.duration)}</div>
-        </div>
-        <div class="sc-video-container">
-          <video id="video-${s.id}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;background:#000;"></video>
-          <div class="sc-controls">
-            <button class="sc-btn refresh-btn" onclick="refreshVideo('${s.id}')" title="Refresh Video">🔄</button>
-            <button class="sc-btn expand-btn" onclick="expandSession('${s.id}')" title="Perbesar">⛶</button>
-            <button class="sc-btn kick-btn" onclick="kickSession('${s.id}','${escJS(s.name)}')" title="Kick">⛔</button>
-          </div>
-        </div>
-        <div class="audio-meter">
-          <div class="audio-meter-label"><small>${s.name}</small></div>
-          <div class="audio-meter-track"><div class="audio-meter-bar" id="meter-${s.id}"></div></div>
-        </div>
-      `;
-      grid.appendChild(card);
+      // Card baru — gunakan _ensureAdminCard yang sudah bikin card + video element
+      const vEl = _ensureAdminCard(s.id, { name: s.name, initial: s.initial });
+      // Update detail yang lebih akurat dari SSE (bukan "Menghubungkan...")
+      const card = document.getElementById(`card-${s.id}`);
+      if (card) {
+        const d = card.querySelector('.sc-details');
+        const t = card.querySelector('.sc-duration');
+        if (d) d.textContent = s.film;
+        if (t) t.textContent = formatDuration(s.duration);
+      }
 
-      const peer = adminPeers.get(s.id);
-      const vEl  = document.getElementById(`video-${s.id}`);
-
-      if (peer && vEl) {
-        // FIX B: Peer sudah ada (socket datang duluan) — update videoEl ke elemen baru
-        peer.videoEl = vEl;
-        if (peer.remoteStream && peer.remoteStream.getVideoTracks().length > 0) {
-          console.log(`[FIX-B] Peer sudah ada, attach stream ke card baru (${s.id})`);
-          vEl.muted = true;
-          vEl.srcObject = null;
-          vEl.srcObject = peer.remoteStream;
-          if (vEl.readyState >= 1) { vEl.play().catch(() => {}); }
-          else { vEl.addEventListener('loadedmetadata', () => vEl.play().catch(() => {}), { once: true }); }
+      const pe = adminPeers.get(s.id);
+      if (pe && vEl) {
+        // Peer sudah ada (socket datang duluan dari SSE) — attach jika stream sudah ada
+        pe.videoEl = vEl;
+        if (pe.remoteStream && pe.remoteStream.getVideoTracks().length > 0) {
+          console.log(`[SSE-newcard] ${s.id} — peer ada, attach stream ke card baru`);
+          _adminAttachStream(vEl, pe.remoteStream);
         }
-        // Kalau remoteStream belum ada, ontrack _attachWithRetry akan handle
-      } else if (!peer && socket?.connected) {
-        // FIX C: SSE datang sebelum socket viewer-list
-        console.warn(`[FIX-C] Card ${s.id} tanpa peer — minta viewer-list ulang`);
+      } else if (!pe && socket?.connected) {
+        // SSE datang sebelum socket viewer-list — minta ulang
+        console.warn(`[SSE-newcard] ${s.id} — belum ada peer, register ulang`);
         socket.emit('register-admin');
       }
     }
   });
 
+  // Hapus card yang sesinya sudah tidak aktif
   const activeIds = new Set(sessions.map(s => s.id));
   grid.querySelectorAll('.session-card').forEach(card => {
     const id = card.id.replace('card-', '');
@@ -422,50 +396,16 @@ function formatDuration(seconds) {
 // ================================================================
 // WEBRTC — ADMIN SIDE
 // ================================================================
-function connectSocket_Admin() {
-  socket = io(API_BASE, { auth: { token: authToken }, reconnection: true, reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
-  socket.on('connect', () => { socket.emit('register-admin'); });
-  socket.on('viewer-list', (msg) => { msg.viewers.forEach(v => setupPeerConnection_Admin(v.sessionId, v.user)); });
-  socket.on('viewer-connected', (msg) => { setupPeerConnection_Admin(msg.sessionId, msg.user); });
-  socket.on('viewer-disconnected', (msg) => {
-    const peer = adminPeers.get(msg.sessionId);
-    if (peer) { try { peer.pc.close(); } catch {} adminPeers.delete(msg.sessionId); adminAudioMeters.delete(msg.sessionId); }
-    const el = document.getElementById(`card-${msg.sessionId}`);
-    if (el) el.remove();
-  });
-  socket.on('answer', (msg) => {
-    const pc = adminPeers.get(msg.sessionId)?.pc;
-    if (pc) pc.setRemoteDescription(new RTCSessionDescription(msg.data)).catch(e => console.error(e));
-  });
-  socket.on('ice-candidate', (msg) => {
-    if (msg.from !== 'viewer') return;
-    const pc = adminPeers.get(msg.sessionId)?.pc;
-    if (pc && msg.data) pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(e => console.error(e));
-  });
-  socket.on('reconnect', () => { socket.emit('register-admin'); addAdminLog('Sistem', 'Terhubung kembali ke server', '#4ADE80', 'system'); });
-  socket.on('connect_error', (err) => { console.error('Socket error:', err); });
-}
 
-async function setupPeerConnection_Admin(sessionId, user) {
-  // Fix video hitam: cek apakah peer yang ada masih hidup atau sudah mati
-  const existingPeer = adminPeers.get(sessionId);
-  if (existingPeer) {
-    const cs = existingPeer.pc.connectionState;
-    // Kalau masih connected/connecting → tidak perlu buat ulang
-    if (cs === 'connected' || cs === 'connecting') return;
-    // Kalau mati (failed/disconnected/closed) → bersihkan dulu, lalu buat ulang
-    try { existingPeer.pc.close(); } catch {}
-    adminPeers.delete(sessionId);
-    adminAudioMeters.delete(sessionId);
-  }
-
-  let videoEl = document.getElementById(`video-${sessionId}`);
-  if (!videoEl) {
+// Helper global: buat atau ambil card DOM untuk session
+function _ensureAdminCard(sessionId, user) {
+  let card = document.getElementById(`card-${sessionId}`);
+  if (!card) {
     const grid = document.getElementById('admin-session-grid');
-    const es   = grid.querySelector('.empty-state');
-    if (es) es.remove();
-    const card = document.createElement('div');
-    card.className = 'session-card'; card.id = `card-${sessionId}`;
+    grid.querySelector('.empty-state')?.remove();
+    card = document.createElement('div');
+    card.className = 'session-card';
+    card.id = `card-${sessionId}`;
     card.innerHTML = `
       <div class="sc-head">
         <div class="sc-avatar">${user.initial || '?'}</div>
@@ -486,242 +426,220 @@ async function setupPeerConnection_Admin(sessionId, user) {
       </div>
     `;
     grid.appendChild(card);
-    videoEl = document.getElementById(`video-${sessionId}`);
   }
+  return document.getElementById(`video-${sessionId}`);
+}
 
-  const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
-  // PENTING: Jangan pakai addTransceiver dengan streams hint di sini.
-  // Admin adalah OFFERER yang membuat offer dulu (lihat bawah), viewer adalah ANSWERER.
-  // Chrome Android kadang mengabaikan streams hint di addTransceiver saat sisi ini
-  // membuat offer tapi tidak punya track — mengakibatkan ontrack tidak pernah fire
-  // atau evt.streams kosong. Biarkan browser negotiate track direction secara otomatis
-  // via offerToReceiveVideo/Audio saja.
-
-  let remoteStream = null;
-
-  // Helper: play dengan retry + fallback muted (untuk incognito / autoplay policy ketat)
-  function _tryPlay(el, attempt) {
-    attempt = attempt || 1;
-    el.play().then(() => {
-      _removeTapOverlay(el);
-    }).catch(err => {
-      console.warn(`[Video] play() gagal (attempt ${attempt}):`, err.name, err.message);
+// Helper global: attach stream ke video element dengan retry dan muted-safe
+function _adminAttachStream(videoEl, stream) {
+  if (!videoEl || !stream) return;
+  videoEl.muted    = true;  // wajib muted untuk autoplay policy
+  videoEl.srcObject = null;
+  videoEl.srcObject = stream;
+  const doPlay = () => {
+    videoEl.play().catch(err => {
       if (err.name === 'NotAllowedError') {
-        el.muted = true;
-        el.play().then(() => {
-          _showTapOverlay(el);
-        }).catch(() => {
-          _showTapOverlay(el);
-        });
-      } else if (attempt < 5) {
-        setTimeout(() => _tryPlay(el, attempt + 1), 600);
+        // Sudah muted tapi tetap diblokir (sangat jarang) — tampilkan overlay tap
+        const c = videoEl.closest('.sc-video-container');
+        if (c && !c.querySelector('.tap-to-play-overlay')) {
+          const ov = document.createElement('div');
+          ov.className = 'tap-to-play-overlay';
+          ov.style.cssText = 'position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);cursor:pointer;border-radius:8px;';
+          ov.innerHTML = '<div style="text-align:center;color:#fff;font-size:.75rem;"><div style="font-size:1.6rem;margin-bottom:4px;">▶</div><div>Tap untuk lihat video</div></div>';
+          ov.addEventListener('click', () => { videoEl.play().catch(() => {}); ov.remove(); }, { once: true });
+          c.appendChild(ov);
+        }
       }
     });
+  };
+  if (videoEl.readyState >= 1) doPlay();
+  else videoEl.addEventListener('loadedmetadata', doPlay, { once: true });
+  // Fallback: paksa play setelah 2 detik jika belum jalan
+  setTimeout(() => { if (videoEl.srcObject && videoEl.paused) doPlay(); }, 2000);
+}
+
+function connectSocket_Admin() {
+  socket = io(API_BASE, {
+    auth: { token: authToken },
+    transports: ['websocket', 'polling'],
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
+  });
+
+  socket.on('connect', () => {
+    console.log('[Socket] Admin terhubung, register...');
+    socket.emit('register-admin');
+  });
+
+  // viewer-list: diterima saat pertama kali connect — setup peer untuk semua viewer yang sudah ada
+  socket.on('viewer-list', (msg) => {
+    console.log(`[Socket] viewer-list: ${msg.viewers.length} viewer`);
+    msg.viewers.forEach(v => setupPeerConnection_Admin(v.sessionId, v.user));
+  });
+
+  // viewer-connected: viewer baru masuk
+  socket.on('viewer-connected', (msg) => {
+    console.log(`[Socket] viewer-connected: ${msg.sessionId}`);
+    setupPeerConnection_Admin(msg.sessionId, msg.user);
+  });
+
+  socket.on('viewer-disconnected', (msg) => {
+    const peer = adminPeers.get(msg.sessionId);
+    if (peer) { try { peer.pc.close(); } catch {} adminPeers.delete(msg.sessionId); adminAudioMeters.delete(msg.sessionId); }
+    document.getElementById(`card-${msg.sessionId}`)?.remove();
+  });
+
+  socket.on('answer', (msg) => {
+    const peer = adminPeers.get(msg.sessionId);
+    if (!peer) return;
+    peer.pc.setRemoteDescription(new RTCSessionDescription(msg.data)).catch(e => console.error('[Answer]', e));
+  });
+
+  socket.on('ice-candidate', (msg) => {
+    if (msg.from !== 'viewer') return;
+    const peer = adminPeers.get(msg.sessionId);
+    if (peer && msg.data) peer.pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(() => {});
+  });
+
+  socket.on('reconnect', () => {
+    console.log('[Socket] Reconnect — register ulang admin');
+    socket.emit('register-admin');
+    addAdminLog('Sistem', 'Terhubung kembali ke server', '#4ADE80', 'system');
+  });
+
+  socket.on('connect_error', (err) => console.error('[Socket] connect_error:', err.message));
+}
+
+async function setupPeerConnection_Admin(sessionId, user) {
+  // Jika peer sudah ada dan masih hidup, skip
+  const existingPeer = adminPeers.get(sessionId);
+  if (existingPeer) {
+    const cs = existingPeer.pc.connectionState;
+    if (cs === 'connected' || cs === 'connecting' || cs === 'new') return;
+    // Peer mati — bersihkan dan buat ulang
+    try { existingPeer.pc.close(); } catch {}
+    adminPeers.delete(sessionId);
+    adminAudioMeters.delete(sessionId);
   }
 
-  function _showTapOverlay(el) {
-    const container = el.closest('.sc-video-container');
-    if (!container || container.querySelector('.tap-to-play-overlay')) return;
-    const overlay = document.createElement('div');
-    overlay.className = 'tap-to-play-overlay';
-    overlay.style.cssText = 'position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);cursor:pointer;border-radius:8px;';
-    overlay.innerHTML = '<div style="text-align:center;color:#fff;font-size:.75rem;"><div style="font-size:1.6rem;margin-bottom:4px;">▶</div><div>Tap untuk lihat video</div></div>';
-    overlay.addEventListener('click', () => {
-      el.muted = false;
-      el.play().catch(() => { el.muted = true; el.play().catch(() => {}); });
-      overlay.remove();
-    }, { once: true });
-    container.appendChild(overlay);
-  }
+  // Pastikan card & video element ada di DOM dulu sebelum apapun
+  _ensureAdminCard(sessionId, user);
 
-  function _removeTapOverlay(el) {
-    const container = el.closest('.sc-video-container');
-    if (container) container.querySelector('.tap-to-play-overlay')?.remove();
-  }
+  // Stream tunggal yang akan menampung semua track dari viewer
+  const remoteStream = new MediaStream();
 
-  function _attachStream(el, stream) {
-    if (!el || !stream) return;
-    el.muted = true; // wajib muted agar autoplay policy tidak blokir
-    el.srcObject = null;
-    el.srcObject = stream;
-    if (el.readyState >= 1) {
-      _tryPlay(el);
-    } else {
-      el.addEventListener('loadedmetadata', () => _tryPlay(el), { once: true });
-    }
-    // Fallback: jika loadedmetadata tidak fire dalam 3 detik, paksa play
-    setTimeout(() => { if (el.srcObject && el.paused) _tryPlay(el); }, 3000);
-  }
+  // Simpan ke map SEKARANG (sebelum offer) agar ontrack bisa update remoteStream
+  adminPeers.set(sessionId, { pc: null, user, remoteStream, videoEl: null });
 
-  // MediaStream tunggal untuk semua track — paling kompatibel di semua browser mobile
-  const remoteMediaStream = new MediaStream();
+  const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
 
+  // Update pc ke map
+  adminPeers.get(sessionId).pc = pc;
+
+  // ── ontrack: terima video/audio dari viewer ──────────────────
   pc.ontrack = (evt) => {
-    console.log(`[ontrack] kind=${evt.track.kind} streams=${evt.streams?.length} readyState=${evt.track.readyState} (${sessionId})`);
+    console.log(`[ontrack] ${evt.track.kind} | readyState=${evt.track.readyState} | streams=${evt.streams?.length} (${sessionId})`);
 
-    // Karena kita pakai offerToReceiveVideo/Audio (bukan addTransceiver dengan streams hint),
-    // evt.streams[0] sekarang TERSEDIA dan reliable di semua browser termasuk Chrome Android.
-    // Prioritaskan evt.streams[0], fallback ke manual addTrack.
-    const sourceStream = (evt.streams && evt.streams[0]) ? evt.streams[0] : null;
-    if (sourceStream) {
-      sourceStream.getTracks().forEach(t => {
-        if (!remoteMediaStream.getTracks().find(x => x.id === t.id)) {
-          remoteMediaStream.addTrack(t);
-        }
-      });
-    } else {
-      // Fallback: tambah track langsung (Chrome lama / Safari)
-      if (!remoteMediaStream.getTracks().find(t => t.id === evt.track.id)) {
-        remoteMediaStream.addTrack(evt.track);
-      }
-    }
+    // Masukkan semua track ke remoteStream kita
+    // Prioritas: dari evt.streams[0] dulu (paling reliable), fallback ke evt.track langsung
+    const src = (evt.streams && evt.streams[0]) ? evt.streams[0] : null;
+    const tracks = src ? src.getTracks() : [evt.track];
+    tracks.forEach(t => {
+      if (!remoteStream.getTrackById(t.id)) remoteStream.addTrack(t);
+    });
+
+    // Simpan stream ke peer entry
+    const pe = adminPeers.get(sessionId);
+    if (pe) pe.remoteStream = remoteStream;
 
     if (evt.track.kind === 'video') {
-      remoteStream = remoteMediaStream;
+      // Langsung attach ke video element yang sudah ada di DOM
+      const vEl = document.getElementById(`video-${sessionId}`);
+      if (vEl) {
+        if (pe) pe.videoEl = vEl;
+        _adminAttachStream(vEl, remoteStream);
+      }
 
-      // Simpan stream ke peerEntry dulu (sebelum DOM siap sekalipun)
-      const peerEntry = adminPeers.get(sessionId);
-      if (peerEntry) peerEntry.remoteStream = remoteMediaStream;
-
-      // Selalu ambil videoEl terbaru dari DOM.
-      // Retry hingga 10x (@ 300ms = 3 detik) jika card belum di-render SSE.
-      let _attachAttempt = 0;
-      const _attachWithRetry = () => {
-        _attachAttempt++;
-        const liveEl = document.getElementById(`video-${sessionId}`);
-        if (liveEl) {
-          const pe = adminPeers.get(sessionId);
-          if (pe) pe.videoEl = liveEl;
-          console.log(`[ontrack] Attach video ke DOM element (attempt ${_attachAttempt}, ${sessionId})`);
-          _attachStream(liveEl, remoteMediaStream);
-        } else if (_attachAttempt < 10) {
-          console.warn(`[ontrack] video-${sessionId} belum di DOM, retry ${_attachAttempt}/10...`);
-          setTimeout(_attachWithRetry, 300);
-        } else {
-          // Timeout: buat card darurat tanpa tunggu SSE
-          console.error(`[ontrack] Timeout attach ${sessionId} — buat card darurat`);
-          const pe = adminPeers.get(sessionId);
-          const uInfo = pe?.user || user;
-          const grid = document.getElementById('admin-session-grid');
-          if (grid && !document.getElementById(`card-${sessionId}`)) {
-            const card = document.createElement('div');
-            card.className = 'session-card'; card.id = `card-${sessionId}`;
-            card.innerHTML = `
-              <div class="sc-head">
-                <div class="sc-avatar">${uInfo.initial || '?'}</div>
-                <div class="sc-info"><div class="sc-name">${uInfo.name || 'Pengguna'}</div><div class="sc-details">Live</div></div>
-                <div class="sc-duration">—</div>
-              </div>
-              <div class="sc-video-container">
-                <video id="video-${sessionId}" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;background:#000;"></video>
-                <div class="sc-controls">
-                  <button class="sc-btn refresh-btn" onclick="refreshVideo('${sessionId}')" title="Refresh Video">🔄</button>
-                  <button class="sc-btn expand-btn" onclick="expandSession('${sessionId}')" title="Perbesar">⛶</button>
-                  <button class="sc-btn kick-btn" onclick="kickSession('${sessionId}','${escJS(uInfo.name || 'Pengguna')}')" title="Kick">⛔</button>
-                </div>
-              </div>
-              <div class="audio-meter">
-                <div class="audio-meter-label"><small>${uInfo.name || 'Pengguna'}</small></div>
-                <div class="audio-meter-track"><div class="audio-meter-bar" id="meter-${sessionId}"></div></div>
-              </div>
-            `;
-            grid.querySelector('.empty-state')?.remove();
-            grid.appendChild(card);
-          }
-          const emergencyEl = document.getElementById(`video-${sessionId}`);
-          if (emergencyEl) {
-            if (peerEntry) peerEntry.videoEl = emergencyEl;
-            _attachStream(emergencyEl, remoteMediaStream);
-          }
-        }
-      };
-      _attachWithRetry();
-
-      // Monitor track — re-attach jika unmute
-      evt.track.onmute   = () => console.warn(`[Track] video muted (${sessionId})`);
+      // Jika track sempat mute lalu unmute (misal network glitch), re-attach
       evt.track.onunmute = () => {
-        console.log(`[Track] video unmuted (${sessionId}) — re-attach`);
         const el2 = document.getElementById(`video-${sessionId}`);
-        if (el2) _attachStream(el2, remoteMediaStream);
+        if (el2 && el2.srcObject) { el2.srcObject = null; el2.srcObject = remoteStream; el2.play().catch(() => {}); }
       };
-      evt.track.onended  = () => console.warn(`[Track] video ended (${sessionId})`);
     }
 
     if (evt.track.kind === 'audio') {
+      // Setup audio meter
       try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const source   = audioCtx.createMediaStreamSource(remoteMediaStream);
-        const analyser = audioCtx.createAnalyser();
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (ctx.state === 'suspended') ctx.resume();
+        const src2     = ctx.createMediaStreamSource(remoteStream);
+        const analyser = ctx.createAnalyser();
         analyser.fftSize = 256;
-        source.connect(analyser);
-        analyser.connect(audioCtx.destination);
-        adminAudioMeters.set(sessionId, { analyser, audioCtx });
+        src2.connect(analyser);
+        // Hubungkan ke destination agar audio terdengar di admin
+        analyser.connect(ctx.destination);
+        adminAudioMeters.set(sessionId, { analyser, audioCtx: ctx });
         animateAudioMeter(sessionId);
-      } catch(e) { console.warn('[Audio meter] error:', e.message); }
+      } catch (e) { console.warn('[AudioMeter]', e.message); }
     }
   };
 
-  // ✅ FIX 3: deteksi koneksi mati dan coba ulang otomatis
+  // ── connectionstatechange: watchdog & auto-reconnect ─────────
   pc.onconnectionstatechange = () => {
     const state = pc.connectionState;
-    const el    = document.getElementById(`card-${sessionId}`);
-    if (el) el.style.opacity = (state === 'connected') ? '1' : '0.5';
-    console.log(`[WebRTC] ${sessionId} connectionState = ${state}`);
+    console.log(`[WebRTC] ${sessionId} → ${state}`);
+    const card = document.getElementById(`card-${sessionId}`);
+    if (card) card.style.opacity = (state === 'connected') ? '1' : '0.6';
 
     if (state === 'connected') {
-      // WATCHDOG BERLAPIS — cek pada 1.5s, 3s, 6s, dan 10s setelah connected
-      [1500, 3000, 6000, 10000].forEach(delay => {
+      // Watchdog: cek di 1s, 3s, 6s — jika video masih hitam padahal stream sudah ada, re-attach
+      [1000, 3000, 6000].forEach(ms => {
         setTimeout(() => {
-          const liveEl = document.getElementById(`video-${sessionId}`);
-          const peerEntry = adminPeers.get(sessionId);
-          if (!liveEl || !peerEntry) return;
+          const pe  = adminPeers.get(sessionId);
+          const vEl = document.getElementById(`video-${sessionId}`);
+          if (!pe || !vEl) return;
+          pe.videoEl = vEl; // selalu update ke elemen DOM terbaru
 
-          // Selalu update videoEl ke elemen terbaru
-          peerEntry.videoEl = liveEl;
-
-          const stream    = remoteStream || peerEntry?.remoteStream;
-          const hasTrack  = stream && stream.getVideoTracks().length > 0;
-          // isBlank: srcObject kosong ATAU video tidak punya dimensi ATAU masih pause
-          const isBlank   = !liveEl.srcObject || liveEl.videoWidth === 0 || liveEl.paused;
-
-          if (hasTrack && isBlank) {
-            console.warn(`[Watchdog ${delay}ms] ${sessionId} masih hitam — force reattach`);
-            liveEl.muted = true;
-            liveEl.srcObject = null;
-            liveEl.srcObject = stream;
-            _tryPlay(liveEl);
-          } else if (!hasTrack && delay === 10000) {
-            // 10 detik masih tidak ada track sama sekali — peer mati, rebuild
-            console.warn(`[Watchdog 10s] ${sessionId} tidak ada stream — rebuild peer`);
-            try { pc.close(); } catch {}
-            adminPeers.delete(sessionId);
-            adminAudioMeters.delete(sessionId);
-            if (document.getElementById(`card-${sessionId}`)) {
-              setupPeerConnection_Admin(sessionId, user);
-            }
+          const hasVideo = pe.remoteStream && pe.remoteStream.getVideoTracks().length > 0;
+          const isBlank  = !vEl.srcObject || vEl.videoWidth === 0 || vEl.paused;
+          if (hasVideo && isBlank) {
+            console.warn(`[Watchdog ${ms}ms] ${sessionId} masih blank — re-attach`);
+            _adminAttachStream(vEl, pe.remoteStream);
           }
-        }, delay);
+        }, ms);
       });
+
+      // Jika setelah 8 detik sama sekali tidak ada video track → rebuild seluruh peer
+      setTimeout(() => {
+        const pe = adminPeers.get(sessionId);
+        if (!pe) return;
+        const hasVideo = pe.remoteStream && pe.remoteStream.getVideoTracks().length > 0;
+        if (!hasVideo && document.getElementById(`card-${sessionId}`)) {
+          console.warn(`[Watchdog 8s] ${sessionId} — tidak ada track, rebuild peer`);
+          try { pc.close(); } catch {}
+          adminPeers.delete(sessionId);
+          adminAudioMeters.delete(sessionId);
+          setupPeerConnection_Admin(sessionId, user);
+        }
+      }, 8000);
     }
 
     if (state === 'failed' || state === 'disconnected') {
-      console.warn(`[WebRTC] Sesi ${sessionId} ${state} — retry dalam 3 detik`);
+      console.warn(`[WebRTC] ${sessionId} ${state} — rebuild dalam 2s`);
       try { pc.close(); } catch {}
       adminPeers.delete(sessionId);
       adminAudioMeters.delete(sessionId);
       setTimeout(() => {
-        if (document.getElementById(`card-${sessionId}`)) {
-          setupPeerConnection_Admin(sessionId, user);
-        }
-      }, 3000);
+        if (document.getElementById(`card-${sessionId}`)) setupPeerConnection_Admin(sessionId, user);
+      }, 2000);
     }
   };
 
-  // ✅ FIX 5: ICE failed → restartIce (sudah ada sebelumnya, dipertahankan)
+  // ICE failed → restart
   pc.oniceconnectionstatechange = () => {
     if (pc.iceConnectionState === 'failed') {
-      console.warn(`[ICE] Sesi ${sessionId} ICE failed — restart ICE`);
+      console.warn(`[ICE] ${sessionId} failed — restartIce`);
       pc.restartIce();
     }
   };
@@ -730,17 +648,16 @@ async function setupPeerConnection_Admin(sessionId, user) {
     if (evt.candidate) socket.emit('ice-candidate', { sessionId, data: evt.candidate.toJSON() });
   };
 
-  adminPeers.set(sessionId, { pc, videoEl, user, remoteStream: null });
-
+  // Buat offer — offerToReceiveVideo/Audio adalah cara paling kompatibel
+  // untuk semua browser (Chrome Android, Safari, Firefox) tanpa addTransceiver
   try {
-    // offerToReceiveVideo/Audio adalah cara standar dan paling kompatibel
-    // untuk membuat offer "recvonly" di Chrome Android tanpa addTransceiver.
-    // Ini memastikan SDP yang dihasilkan punya "a=recvonly" yang benar
-    // sehingga viewer (answerer) tahu harus sendonly → kirim track ke admin.
     const offer = await pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true });
     await pc.setLocalDescription(offer);
     socket.emit('offer', { sessionId, data: offer });
-  } catch (e) { console.error('Offer error:', e); }
+    console.log(`[WebRTC] Offer dikirim ke viewer ${sessionId}`);
+  } catch (e) {
+    console.error('[WebRTC] createOffer gagal:', e);
+  }
 }
 
 function animateAudioMeter(sessionId) {
@@ -766,33 +683,27 @@ function animateAudioMeter(sessionId) {
 function refreshVideo(sessionId) {
   const peer = adminPeers.get(sessionId);
   const vEl  = document.getElementById(`video-${sessionId}`);
+  if (!peer || !vEl) { console.warn(`[Refresh] tidak ditemukan: ${sessionId}`); return; }
 
-  if (!peer || !vEl) {
-    console.warn(`[Refresh] Peer atau video element tidak ditemukan: ${sessionId}`);
-    return;
-  }
+  const btn = vEl.closest('.sc-video-container')?.querySelector('.refresh-btn');
+  if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
 
-  const btn = vEl.closest(".sc-video-container")?.querySelector(".refresh-btn");
-  if (btn) { btn.textContent = "⏳"; btn.disabled = true; }
+  peer.videoEl = vEl; // selalu update ke elemen terbaru
 
   if (peer.remoteStream && peer.remoteStream.getVideoTracks().length > 0) {
-    vEl.srcObject = null;
+    _adminAttachStream(vEl, peer.remoteStream);
     setTimeout(() => {
-      vEl.srcObject = peer.remoteStream;
-      vEl.play()
-        .then(() => {
-          if (btn) { btn.textContent = "✅"; btn.disabled = false; }
-          setTimeout(() => { if (btn) btn.textContent = "🔄"; }, 1500);
-        })
-        .catch(() => { if (btn) { btn.textContent = "🔄"; btn.disabled = false; } });
-    }, 200);
+      if (btn) { btn.textContent = '✅'; btn.disabled = false; }
+      setTimeout(() => { if (btn) btn.textContent = '🔄'; }, 1500);
+    }, 500);
   } else {
-    console.warn(`[Refresh] Stream belum ada untuk ${sessionId} — setup ulang peer`);
+    // Tidak ada stream — rebuild seluruh peer connection
+    console.warn(`[Refresh] Tidak ada stream untuk ${sessionId} — rebuild peer`);
     try { peer.pc.close(); } catch {}
     adminPeers.delete(sessionId);
     adminAudioMeters.delete(sessionId);
     setupPeerConnection_Admin(sessionId, peer.user);
-    if (btn) { btn.textContent = "🔄"; btn.disabled = false; }
+    if (btn) { btn.textContent = '🔄'; btn.disabled = false; }
   }
 }
 
@@ -862,22 +773,26 @@ function expandSession(sessionId) {
   const peer = adminPeers.get(sessionId);
   if (!peer || !peer.remoteStream) { alert('Video belum tersedia untuk sesi ini.'); return; }
   currentExpandedSession = sessionId;
-  const card    = document.getElementById(`card-${sessionId}`);
-  const nameEl  = card?.querySelector('.sc-name');
-  const avatarEl = card?.querySelector('.sc-avatar');
-  document.getElementById('vm-name').textContent   = nameEl?.textContent   || 'Pengguna';
-  document.getElementById('vm-avatar').textContent = avatarEl?.textContent || 'U';
+
+  const card = document.getElementById(`card-${sessionId}`);
+  document.getElementById('vm-name').textContent   = card?.querySelector('.sc-name')?.textContent   || 'Pengguna';
+  document.getElementById('vm-avatar').textContent = card?.querySelector('.sc-avatar')?.textContent || 'U';
   document.getElementById('vm-email').textContent  = '—';
+
   const vmVideo = document.getElementById('vm-video');
-  // ✅ FIX 7: Reset srcObject dulu sebelum assign ulang — mencegah modal expand juga hitam
+  // Mulai muted agar autoplay tidak diblokir, lalu coba unmute setelah play
+  vmVideo.muted    = true;
   vmVideo.srcObject = null;
   vmVideo.srcObject = peer.remoteStream;
-  vmVideo.muted = false; vmVideo.volume = 1.0;
-  if (vmVideo.readyState >= 1) {
-    vmVideo.play().catch(() => {});
-  } else {
-    vmVideo.addEventListener('loadedmetadata', () => vmVideo.play().catch(() => {}), { once: true });
-  }
+  vmVideo.volume    = 1.0;
+  const doPlay = () => {
+    vmVideo.play()
+      .then(() => { vmVideo.muted = false; })  // unmute setelah berhasil play
+      .catch(() => { /* tetap muted jika diblokir browser */ });
+  };
+  if (vmVideo.readyState >= 1) doPlay();
+  else vmVideo.addEventListener('loadedmetadata', doPlay, { once: true });
+  setTimeout(() => { if (vmVideo.paused) doPlay(); }, 1500);
 
   document.getElementById('video-modal').classList.add('active');
 }
