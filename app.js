@@ -425,9 +425,21 @@ function renderAdminSessions(sessions) {
       `;
       grid.appendChild(card);
       const peer = adminPeers.get(s.id);
-      if (peer?.remoteStream) {
+      if (peer?.remoteStream && peer.remoteStream.getVideoTracks().length > 0) {
+        // ✅ FIX 6a: Peer sudah ada & punya track video — reattach ke elemen baru
         const vEl = document.getElementById(`video-${s.id}`);
-        if (vEl) { vEl.srcObject = peer.remoteStream; vEl.play().catch(() => {}); peer.videoEl = vEl; }
+        if (vEl) {
+          vEl.srcObject = null;
+          vEl.srcObject = peer.remoteStream;
+          peer.videoEl  = vEl;
+          vEl.play().catch(() => {});
+        }
+      } else if (!peer && socket?.connected) {
+        // ✅ FIX 6b: SSE membuat card lebih cepat dari socket viewer-list —
+        // jika peer belum ada tapi socket sudah ready, minta daftar viewer ulang
+        // agar setupPeerConnection_Admin dipanggil untuk sesi ini.
+        console.warn(`[SSE] Card ${s.id} dibuat tanpa peer — request viewer-list ulang`);
+        socket.emit('register-admin');
       }
     }
   });
@@ -520,11 +532,45 @@ async function setupPeerConnection_Admin(sessionId, user) {
   pc.addTransceiver('audio', { direction: 'recvonly' });
 
   const remoteStream = new MediaStream();
-  videoEl.srcObject  = remoteStream;
+  // ✅ FIX 1: JANGAN set srcObject ke stream kosong di sini.
+  // Dulu: videoEl.srcObject = remoteStream → video hitam karena stream masih kosong.
+  // Sekarang: srcObject baru di-set di dalam ontrack saat track pertama benar-benar tiba.
+
+  // Helper: play dengan retry otomatis (mobile Chrome kadang blokir play() pertama)
+  function _tryPlay(el, attempt) {
+    attempt = attempt || 1;
+    el.play().catch(err => {
+      console.warn(`[Video] play() gagal (attempt ${attempt}):`, err.name, err.message);
+      if (attempt < 5) setTimeout(() => _tryPlay(el, attempt + 1), 600);
+    });
+  }
+
+  let _videoTrackAttached = false;
 
   pc.ontrack = (evt) => {
     remoteStream.addTrack(evt.track);
-    if (evt.track.kind === 'video') videoEl.play().catch(() => {});
+
+    if (evt.track.kind === 'video') {
+      // ✅ FIX 2: Set srcObject di sini — saat track pertama sudah ada, bukan sebelumnya.
+      // Ini memastikan browser tidak stuck merender stream kosong.
+      if (!_videoTrackAttached) {
+        _videoTrackAttached = true;
+        videoEl.srcObject = remoteStream;
+        // Tunggu metadata siap sebelum play, supaya lebih stabil di mobile
+        if (videoEl.readyState >= 1) {
+          _tryPlay(videoEl);
+        } else {
+          videoEl.addEventListener('loadedmetadata', () => _tryPlay(videoEl), { once: true });
+        }
+      } else {
+        // Track video sudah ada sebelumnya (misal setelah ICE restart) — refresh srcObject
+        const cur = videoEl.srcObject;
+        videoEl.srcObject = null;
+        videoEl.srcObject = cur;
+        _tryPlay(videoEl);
+      }
+    }
+
     if (evt.track.kind === 'audio') {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -538,11 +584,24 @@ async function setupPeerConnection_Admin(sessionId, user) {
     }
   };
 
-  // Fix video hitam: deteksi koneksi mati dan coba ulang otomatis
+  // ✅ FIX 3: deteksi koneksi mati dan coba ulang otomatis
   pc.onconnectionstatechange = () => {
     const state = pc.connectionState;
     const el    = document.getElementById(`card-${sessionId}`);
     if (el) el.style.opacity = (state === 'connected') ? '1' : '0.5';
+
+    if (state === 'connected') {
+      // ✅ FIX 4: Watchdog — cek 2,5 detik setelah connected.
+      // Jika videoWidth masih 0 padahal track sudah ada → reset srcObject paksa.
+      setTimeout(() => {
+        if (videoEl.videoWidth === 0 && remoteStream.getVideoTracks().length > 0) {
+          console.warn(`[Watchdog] Video ${sessionId} masih hitam setelah connected — reset srcObject`);
+          videoEl.srcObject = null;
+          videoEl.srcObject = remoteStream;
+          _tryPlay(videoEl);
+        }
+      }, 2500);
+    }
 
     if (state === 'failed' || state === 'disconnected') {
       console.warn(`[WebRTC] Sesi ${sessionId} ${state} — retry dalam 3 detik`);
@@ -558,11 +617,11 @@ async function setupPeerConnection_Admin(sessionId, user) {
     }
   };
 
-  // Fix video hitam: ICE failed sering terdeteksi lebih cepat lewat iceConnectionState
+  // ✅ FIX 5: ICE failed → restartIce (sudah ada sebelumnya, dipertahankan)
   pc.oniceconnectionstatechange = () => {
     if (pc.iceConnectionState === 'failed') {
       console.warn(`[ICE] Sesi ${sessionId} ICE failed — restart ICE`);
-      pc.restartIce(); // minta renegotiasi ICE tanpa harus tutup seluruh PC
+      pc.restartIce();
     }
   };
 
@@ -668,9 +727,15 @@ function expandSession(sessionId) {
   document.getElementById('vm-avatar').textContent = avatarEl?.textContent || 'U';
   document.getElementById('vm-email').textContent  = '—';
   const vmVideo = document.getElementById('vm-video');
+  // ✅ FIX 7: Reset srcObject dulu sebelum assign ulang — mencegah modal expand juga hitam
+  vmVideo.srcObject = null;
   vmVideo.srcObject = peer.remoteStream;
   vmVideo.muted = false; vmVideo.volume = 1.0;
-  vmVideo.play().catch(() => {});
+  if (vmVideo.readyState >= 1) {
+    vmVideo.play().catch(() => {});
+  } else {
+    vmVideo.addEventListener('loadedmetadata', () => vmVideo.play().catch(() => {}), { once: true });
+  }
 
   document.getElementById('video-modal').classList.add('active');
 }
