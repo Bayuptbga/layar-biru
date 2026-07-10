@@ -484,10 +484,12 @@ async function setupPeerConnection_Admin(sessionId, user) {
   }
 
   const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
-  pc.addTransceiver('video', { direction: 'recvonly' });
-  pc.addTransceiver('audio', { direction: 'recvonly' });
+  // streams: [new MediaStream()] memastikan track association terbentuk di semua browser
+  // termasuk Chrome Android yang kadang kirim evt.streams kosong kalau tidak ada streams hint
+  const _incomingStream = new MediaStream();
+  pc.addTransceiver('video', { direction: 'recvonly', streams: [_incomingStream] });
+  pc.addTransceiver('audio', { direction: 'recvonly', streams: [_incomingStream] });
 
-  // Stream asli dari browser — lebih reliable daripada MediaStream buatan sendiri
   let remoteStream = null;
 
   // Helper: play dengan retry + fallback muted (untuk incognito / autoplay policy ketat)
@@ -541,30 +543,52 @@ async function setupPeerConnection_Admin(sessionId, user) {
     }
   }
 
+  // MediaStream tunggal untuk semua track — paling kompatibel di semua browser mobile
+  const remoteMediaStream = new MediaStream();
+
   pc.ontrack = (evt) => {
-    // PERBAIKAN UTAMA: Pakai evt.streams[0] langsung dari browser.
-    // Sebelumnya pakai "new MediaStream()" buatan sendiri — browser tidak otomatis
-    // merender stream buatan sendiri, sehingga video selalu hitam walau track sudah ada.
-    if (!evt.streams || !evt.streams[0]) return;
-    const stream = evt.streams[0];
+    console.log(`[ontrack] kind=${evt.track.kind} streams=${evt.streams?.length} readyState=${evt.track.readyState} (${sessionId})`);
+
+    // Tambah track ke stream kita — ini cara paling kompatibel
+    // (evt.streams[0] bisa undefined di Chrome Android kalau admin pakai addTransceiver)
+    if (!remoteMediaStream.getTracks().find(t => t.id === evt.track.id)) {
+      remoteMediaStream.addTrack(evt.track);
+    }
+
+    // Juga update dari evt.streams[0] kalau ada (untuk browser yang support)
+    if (evt.streams && evt.streams[0]) {
+      evt.streams[0].getTracks().forEach(t => {
+        if (!remoteMediaStream.getTracks().find(x => x.id === t.id)) {
+          remoteMediaStream.addTrack(t);
+        }
+      });
+    }
 
     if (evt.track.kind === 'video') {
-      remoteStream = stream;
+      remoteStream = remoteMediaStream;
 
-      // Selalu ambil elemen terbaru dari DOM
       const liveEl = document.getElementById(`video-${sessionId}`) || videoEl;
       const peerEntry = adminPeers.get(sessionId);
-      if (peerEntry) { peerEntry.videoEl = liveEl; peerEntry.remoteStream = stream; }
+      if (peerEntry) { peerEntry.videoEl = liveEl; peerEntry.remoteStream = remoteMediaStream; }
 
-      console.log(`[ontrack] Video track tiba (${sessionId}), attach stream ke element`);
-      _attachStream(liveEl, stream);
+      console.log(`[ontrack] Attach video stream ke element (${sessionId})`);
+      _attachStream(liveEl, remoteMediaStream);
+
+      // Monitor track — kalau track tiba-tiba muted/ended, log untuk debug
+      evt.track.onmute   = () => console.warn(`[Track] video muted (${sessionId})`);
+      evt.track.onunmute = () => {
+        console.log(`[Track] video unmuted (${sessionId}) — re-attach`);
+        const el2 = document.getElementById(`video-${sessionId}`);
+        if (el2) _attachStream(el2, remoteMediaStream);
+      };
+      evt.track.onended  = () => console.warn(`[Track] video ended (${sessionId})`);
     }
 
     if (evt.track.kind === 'audio') {
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') audioCtx.resume();
-        const source   = audioCtx.createMediaStreamSource(stream);
+        const source   = audioCtx.createMediaStreamSource(remoteMediaStream);
         const analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
         source.connect(analyser);
