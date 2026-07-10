@@ -254,8 +254,27 @@ io.on('connection', (socket) => {
     socket.on('register-viewer', ({ sessionId }) => {
       socket._sessionId = sessionId;
       socket.join(`viewer:${sessionId}`);
-      io.to('admins').emit('viewer-connected', { sessionId, user });
-      console.log(`[SIO] Viewer terhubung: ${user.name} (${sessionId})`);
+
+      // Validasi: sessionId harus cocok dengan activeSessions
+      // Kalau viewer konek sebelum /api/session/start selesai, coba tunggu sebentar
+      const tryEmitConnected = (attempt) => {
+        // Cari sesi berdasarkan sessionId (token.slice(-8))
+        let sessionFound = false;
+        for (const [, s] of activeSessions) {
+          if (s.id === sessionId) { sessionFound = true; break; }
+        }
+        if (sessionFound || attempt >= 5) {
+          io.to('admins').emit('viewer-connected', { sessionId, user });
+          console.log(`[SIO] Viewer terhubung: ${user.name} (${sessionId}) attempt=${attempt}`);
+        } else {
+          // Sesi belum ada di activeSessions — viewer konek sebelum /api/session/start
+          // Coba lagi setelah 400ms (maks 5x = 2 detik)
+          console.warn(`[SIO] SessionId ${sessionId} belum ada di activeSessions, retry ${attempt}/5`);
+          setTimeout(() => tryEmitConnected(attempt + 1), 400);
+        }
+      };
+      tryEmitConnected(1);
+
       addServerLog(user.name, 'terhubung ke dashboard streaming', '#4ADE80', 'connect');
     });
 
