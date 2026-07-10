@@ -523,14 +523,16 @@ async function setupPeerConnection_Admin(sessionId, user) {
     adminAudioMeters.delete(sessionId);
   }
 
-  // Pastikan card & video element ada di DOM dulu sebelum apapun
-  _ensureAdminCard(sessionId, user);
+  // FIX #4: Pastikan card & video element ada di DOM SEBELUM RTCPeerConnection dibuat
+  // Ini mencegah race condition di mana ontrack fire sebelum card DOM siap
+  const videoElEarly = _ensureAdminCard(sessionId, user);
 
   // Stream tunggal yang akan menampung semua track dari viewer
   const remoteStream = new MediaStream();
 
   // Simpan ke map SEKARANG (sebelum offer) agar ontrack bisa update remoteStream
-  adminPeers.set(sessionId, { pc: null, user, remoteStream, videoEl: null });
+  // FIX #4: simpan videoEl yang sudah pasti ada di DOM
+  adminPeers.set(sessionId, { pc: null, user, remoteStream, videoEl: videoElEarly });
 
   const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
 
@@ -554,8 +556,9 @@ async function setupPeerConnection_Admin(sessionId, user) {
     if (pe) pe.remoteStream = remoteStream;
 
     if (evt.track.kind === 'video') {
-      // Langsung attach ke video element yang sudah ada di DOM
-      const vEl = document.getElementById(`video-${sessionId}`);
+      // FIX #4: Gunakan videoEl dari peer map (sudah pasti ada karena _ensureAdminCard dipanggil duluan)
+      // Fallback ke getElementById jika perlu
+      const vEl = (pe && pe.videoEl) || document.getElementById(`video-${sessionId}`);
       if (vEl) {
         if (pe) pe.videoEl = vEl;
         _adminAttachStream(vEl, remoteStream);
@@ -648,10 +651,12 @@ async function setupPeerConnection_Admin(sessionId, user) {
     if (evt.candidate) socket.emit('ice-candidate', { sessionId, data: evt.candidate.toJSON() });
   };
 
-  // Buat offer — offerToReceiveVideo/Audio adalah cara paling kompatibel
-  // untuk semua browser (Chrome Android, Safari, Firefox) tanpa addTransceiver
+  // FIX #3: Gunakan addTransceiver (recvonly) — lebih reliable di Chrome Android & Safari mobile
+  // offerToReceiveVideo/Audio sudah deprecated dan bermasalah di mobile browsers
   try {
-    const offer = await pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true });
+    pc.addTransceiver('video', { direction: 'recvonly' });
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+    const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socket.emit('offer', { sessionId, data: offer });
     console.log(`[WebRTC] Offer dikirim ke viewer ${sessionId}`);
