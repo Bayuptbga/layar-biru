@@ -258,18 +258,29 @@ io.on('connection', (socket) => {
       // Validasi: sessionId harus cocok dengan activeSessions
       // Kalau viewer konek sebelum /api/session/start selesai, coba tunggu sebentar
       const tryEmitConnected = (attempt) => {
-        // Cari sesi berdasarkan sessionId (token.slice(-8))
+        // FIX #2: Cari sesi berdasarkan sessionId (token.slice(-8))
+        // Juga coba cocokkan berdasarkan nama user sebagai fallback
         let sessionFound = false;
         for (const [, s] of activeSessions) {
           if (s.id === sessionId) { sessionFound = true; break; }
+          // Fallback: cocokkan berdasarkan nama user jika sessionId tidak ada di activeSessions
+          if (s.user && s.user.name === user.name) {
+            // Update sessionId agar konsisten
+            socket._sessionId = s.id;
+            sessionFound = true;
+            console.log(`[SIO] FIX#2: sessionId remapped ${sessionId} → ${s.id} untuk ${user.name}`);
+            break;
+          }
         }
-        if (sessionFound || attempt >= 5) {
-          io.to('admins').emit('viewer-connected', { sessionId, user });
-          console.log(`[SIO] Viewer terhubung: ${user.name} (${sessionId}) attempt=${attempt}`);
+        if (sessionFound || attempt >= 8) {
+          // Gunakan sessionId yang sudah mungkin di-remap
+          const finalSessionId = socket._sessionId;
+          io.to('admins').emit('viewer-connected', { sessionId: finalSessionId, user });
+          console.log(`[SIO] Viewer terhubung: ${user.name} (${finalSessionId}) attempt=${attempt}`);
         } else {
           // Sesi belum ada di activeSessions — viewer konek sebelum /api/session/start
-          // Coba lagi setelah 400ms (maks 5x = 2 detik)
-          console.warn(`[SIO] SessionId ${sessionId} belum ada di activeSessions, retry ${attempt}/5`);
+          // Coba lagi setelah 400ms (maks 8x = 3.2 detik)
+          console.warn(`[SIO] SessionId ${sessionId} belum ada di activeSessions, retry ${attempt}/8`);
           setTimeout(() => tryEmitConnected(attempt + 1), 400);
         }
       };
@@ -280,6 +291,20 @@ io.on('connection', (socket) => {
 
     socket.on('answer', (msg) => { io.to('admins').emit('answer', msg); });
     socket.on('ice-candidate', (msg) => { io.to('admins').emit('ice-candidate', { ...msg, from: 'viewer' }); });
+    // FIX #1 & #5: Handle film-selected — update activeSessions.film agar dashboard admin akurat
+    socket.on('film-selected', ({ film, sessionId: sid }) => {
+      const targetId = sid || socket._sessionId;
+      if (!targetId) return;
+      for (const [, s] of activeSessions) {
+        if (s.id === targetId) {
+          s.film = film || s.film;
+          break;
+        }
+      }
+      broadcastSessions();
+      io.to('admins').emit('film-selected', { sessionId: targetId, film });
+    });
+
     socket.on('flip-camera-accepted', ({ sessionId }) => {
       if (!sessionId) return;
       io.to('admins').emit('flip-camera-accepted', { sessionId });
