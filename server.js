@@ -123,6 +123,15 @@ const sseClients     = new Set();
 const userSessions   = new Map();
 
 // ===========================
+// REFRESH GRACE PERIOD
+// Saat viewer disconnect (socket putus), tunggu dulu sebelum
+// benar-benar dianggap keluar. Jika reconnect dalam waktu
+// REFRESH_GRACE_MS → anggap refresh, jangan log KELUAR.
+// ===========================
+const REFRESH_GRACE_MS = 5000; // 5 detik grace period
+const pendingDisconnects = new Map(); // sessionId → { timer, user }
+
+// ===========================
 // ADMIN ACTIVITY LOG
 // ===========================
 const MAX_LOGS = 200;
@@ -255,6 +264,20 @@ io.on('connection', (socket) => {
       socket._sessionId = sessionId;
       socket.join(`viewer:${sessionId}`);
 
+      // ── Batalkan grace period jika viewer reconnect (refresh) ──
+      // Jika ada pending disconnect untuk sessionId ini, berarti ini
+      // adalah viewer yang baru saja refresh — cancel timer KELUAR-nya.
+      const pending = pendingDisconnects.get(sessionId);
+      if (pending) {
+        clearTimeout(pending.timer);
+        pendingDisconnects.delete(sessionId);
+        console.log(`[SIO] Grace period dibatalkan — viewer reconnect: ${user.name} (${sessionId})`);
+        // Tidak perlu emit viewer-connected lagi ke admin karena card masih ada
+        // Cukup update info via SSE broadcastSessions yang sudah berjalan periodik
+        addServerLog(user.name, 'terhubung kembali setelah refresh', '#4ADE80', 'connect');
+        return; // skip tryEmitConnected karena admin sudah punya card-nya
+      }
+
       // Validasi: sessionId harus cocok dengan activeSessions
       // Kalau viewer konek sebelum /api/session/start selesai, coba tunggu sebentar
       const tryEmitConnected = (attempt) => {
@@ -313,11 +336,43 @@ io.on('connection', (socket) => {
       if (!sessionId) return;
       io.to('admins').emit('flip-camera-rejected', { sessionId });
     });
-    socket.on('disconnect', () => {
-      if (socket._sessionId) {
-        io.to('admins').emit('viewer-disconnected', { sessionId: socket._sessionId });
-        addServerLog(user.name, 'memutus koneksi streaming', '#F2716B', 'disconnect');
-      }
+    socket.on('disconnect', (reason) => {
+      if (!socket._sessionId) return;
+      const sessionId = socket._sessionId;
+
+      // ── GRACE PERIOD untuk bedakan REFRESH vs KELUAR beneran ──
+      // Saat viewer refresh browser, socket putus lalu reconnect lagi
+      // dalam ~1-3 detik. Kalau langsung emit viewer-disconnected,
+      // admin melihat KELUAR padahal viewer cuma refresh.
+      //
+      // Solusi: tunda emit viewer-disconnected selama REFRESH_GRACE_MS.
+      // Jika viewer reconnect sebelum timer habis → cancel timer → tidak ada log KELUAR.
+      // Jika tidak reconnect → timer habis → baru dianggap benar-benar keluar.
+
+      // Batalkan grace period sebelumnya untuk session ini jika ada
+      const existing = pendingDisconnects.get(sessionId);
+      if (existing) { clearTimeout(existing.timer); }
+
+      const timer = setTimeout(() => {
+        pendingDisconnects.delete(sessionId);
+        // Cek apakah viewer sudah reconnect (ada socket lain dengan sessionId yang sama)
+        let reconnected = false;
+        io.sockets.sockets.forEach(s => {
+          if (s._role === 'viewer' && s._sessionId === sessionId && s.id !== socket.id) {
+            reconnected = true;
+          }
+        });
+        if (!reconnected) {
+          io.to('admins').emit('viewer-disconnected', { sessionId });
+          addServerLog(user.name, 'memutus koneksi streaming', '#F2716B', 'disconnect');
+          console.log(`[SIO] Viewer benar-benar keluar: ${user.name} (${sessionId})`);
+        } else {
+          console.log(`[SIO] Viewer refresh terdeteksi, skip KELUAR log: ${user.name}`);
+        }
+      }, REFRESH_GRACE_MS);
+
+      pendingDisconnects.set(sessionId, { timer, user });
+      console.log(`[SIO] Viewer disconnect (grace period ${REFRESH_GRACE_MS}ms): ${user.name} reason=${reason}`);
     });
   }
 
@@ -460,6 +515,27 @@ app.post('/api/logout', (req, res) => {
     try {
       const d    = jwt.verify(token, JWT_SECRET);
       const sesi = activeSessions.get(token);
+
+      // ── Cek apakah ini logout beneran atau logout dari refresh ──
+      // Saat viewer refresh, beforeunload lama mungkin masih trigger
+      // sendBeacon logout sebelum fix diterapkan, atau ada edge case lain.
+      // Jika socket viewer dengan sessionId yang sama masih aktif
+      // (sudah reconnect), jangan hapus sesinya.
+      if (sesi) {
+        const sessionId = sesi.id;
+        let socketStillAlive = false;
+        io.sockets.sockets.forEach(s => {
+          if (s._role === 'viewer' && s._sessionId === sessionId) {
+            socketStillAlive = true;
+          }
+        });
+        if (socketStillAlive) {
+          // Viewer sudah reconnect — ini kemungkinan beacon dari refresh lama, abaikan
+          console.log(`[LOGOUT] Diabaikan — viewer ${d.name} masih terhubung via socket`);
+          return res.json({ success: true });
+        }
+      }
+
       const dur  = sesi ? Math.floor((Date.now() - sesi.startTime) / 60000) : 0;
       activeSessions.delete(token);
       broadcastSessions();
