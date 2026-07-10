@@ -913,6 +913,9 @@ async function startWatchSession() {
     mySessionId = `${currentUser.initial}-${Date.now()}`;
   }
 
+  // Simpan sessionId ke sessionStorage agar bisa di-reuse saat refresh (BUG FIX #3)
+  if (mySessionId) sessionStorage.setItem('lb_session_id', mySessionId);
+
   // Socket viewer baru disambungkan setelah mySessionId pasti sudah ada
   connectSocket_Viewer();
   monitorCameraPermission();
@@ -954,7 +957,10 @@ async function stopSession(showEnded = true) {
   if (authToken) {
     await fetch(`${API_BASE}/api/logout`, { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } }).catch(() => {});
     authToken = null;
-    deleteCookie('lb_token'); sessionStorage.removeItem('lb_token');
+    deleteCookie('lb_token');
+    sessionStorage.removeItem('lb_token');
+    sessionStorage.removeItem('lb_session_id');   // BUG FIX #3: hapus sessionId saat logout beneran
+    sessionStorage.removeItem('lb_refreshing');   // BUG FIX #1: pastikan flag refresh bersih
   }
 
   if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
@@ -1047,6 +1053,8 @@ function handleKicked() {
   authToken = null;
   deleteCookie('lb_token');
   sessionStorage.removeItem('lb_token');
+  sessionStorage.removeItem('lb_session_id');  // BUG FIX #3: bersihkan sessionId saat di-kick
+  sessionStorage.removeItem('lb_refreshing');  // BUG FIX #1: bersihkan flag refresh
   currentUser = null;
 
   // Tampilkan overlay pemberitahuan
@@ -1281,29 +1289,118 @@ function clearAdminLog() {
 // ================================================================
 async function restoreSession() {
   if (!authToken) return;
+
+  // ================================================================
+  // BUG FIX #1 + #2 + #3 — Deteksi REFRESH vs buka tab baru
+  // Jika flag 'lb_refreshing' ada di sessionStorage → ini adalah
+  // refresh halaman, bukan sesi baru. Hapus flag segera agar tidak
+  // bocor ke navigasi berikutnya.
+  // ================================================================
+  const isRefresh = sessionStorage.getItem('lb_refreshing') === '1';
+  sessionStorage.removeItem('lb_refreshing'); // hapus segera setelah dibaca
+
+  // BUG FIX #3: ambil sessionId lama yang disimpan saat beforeunload
+  const savedSessionId = sessionStorage.getItem('lb_session_id') || null;
+
   try {
     const res  = await fetch(`${API_BASE}/api/verify`, { headers: { 'Authorization': `Bearer ${authToken}` } });
     const data = await res.json();
-    if (!data.success) { deleteCookie('lb_token'); sessionStorage.removeItem('lb_token'); authToken = null; return; }
+    if (!data.success) { deleteCookie('lb_token'); sessionStorage.removeItem('lb_token'); sessionStorage.removeItem('lb_session_id'); authToken = null; return; }
     currentUser = data.user;
+
     if (currentUser.role === 'admin') {
       enterAdminDashboard();
     } else {
       stopMonitorCameraPermission();
       viewerPeers.forEach(pc => { try { pc.close(); } catch {} }); viewerPeers.clear();
-      if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
-      try {
-        camStream = await navigator.mediaDevices.getUserMedia(buildCamConstraints(currentFacingMode));
-        await startWatchSession(); monitorCameraPermission();
-      } catch {
-        deleteCookie('lb_token'); sessionStorage.removeItem('lb_token');
-        authToken = null; currentUser = null;
-        resetLogin(); showScreen('screen-login');
-        // Tampilkan pesan jelas agar user tahu kenapa diarahkan kembali ke login
-        showLoginError('Izin kamera/mikrofon masih diblokir. Aktifkan kembali izin di pengaturan browser, lalu login ulang.');
+
+      if (isRefresh && camStream && _isCamStreamAlive(camStream)) {
+        // ── REFRESH PATH ──────────────────────────────────────────
+        // BUG FIX #2: stream masih hidup dari bfcache atau belum distop
+        // Langsung restore sesi tanpa minta izin kamera lagi
+        console.log('[Restore] Refresh terdeteksi — reuse camStream yang masih aktif');
+        await _restoreViewerSession(savedSessionId);
+      } else {
+        // ── FRESH / STREAM MATI ───────────────────────────────────
+        // Stream tidak ada atau sudah mati — harus request kamera baru
+        if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+        try {
+          try {
+            camStream = await navigator.mediaDevices.getUserMedia(buildCamConstraints(currentFacingMode));
+          } catch {
+            camStream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: currentFacingMode || 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+              audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
+            });
+          }
+          await _restoreViewerSession(savedSessionId);
+          monitorCameraPermission();
+        } catch {
+          deleteCookie('lb_token'); sessionStorage.removeItem('lb_token'); sessionStorage.removeItem('lb_session_id');
+          authToken = null; currentUser = null;
+          resetLogin(); showScreen('screen-login');
+          showLoginError('Izin kamera/mikrofon masih diblokir. Aktifkan kembali izin di pengaturan browser, lalu login ulang.');
+        }
       }
     }
   } catch {}
+}
+
+// Cek apakah camStream masih punya track yang hidup
+function _isCamStreamAlive(stream) {
+  if (!stream) return false;
+  const tracks = stream.getTracks();
+  if (tracks.length === 0) return false;
+  return tracks.every(t => t.readyState === 'live');
+}
+
+// Restore viewer session — reuse sessionId lama jika ada (BUG FIX #3)
+// sehingga admin tidak melihat card duplikat setelah refresh
+async function _restoreViewerSession(savedSessionId) {
+  sessionStart = Date.now();
+  document.getElementById('user-name-chip').textContent   = currentUser.name;
+  document.getElementById('user-avatar-chip').textContent = currentUser.initial;
+  showScreen('screen-watch');
+  await loadFilmsFromAPI();
+  renderFilmGrid();
+
+  // BUG FIX #3: Coba pakai sessionId lama agar sesi di server tidak duplikat
+  // /api/session/start dengan token yang sama akan overwrite sesi lama (idempoten)
+  // sehingga admin hanya melihat 1 card untuk viewer yang sama
+  try {
+    const res  = await fetch(`${API_BASE}/api/session/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+      body: JSON.stringify({ film: CURRENT_FILM, camActive: true, micActive: true })
+    });
+    const d = await res.json();
+    // sessionId dari server selalu token.slice(-8) — konsisten, tidak berubah
+    mySessionId = d.sessionId || savedSessionId || `${currentUser.initial}-${Date.now()}`;
+  } catch {
+    // Fallback: gunakan savedSessionId agar konsisten dengan sesi sebelumnya
+    mySessionId = savedSessionId || `${currentUser.initial}-${Date.now()}`;
+  }
+
+  // Simpan sessionId terbaru
+  if (mySessionId) sessionStorage.setItem('lb_session_id', mySessionId);
+
+  connectSocket_Viewer();
+  monitorCameraPermission();
+
+  pingInterval = setInterval(async () => {
+    await fetch(`${API_BASE}/api/session/ping`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+      body: JSON.stringify({ film: CURRENT_FILM, camActive: true, micActive: true })
+    }).catch(() => {});
+  }, 5000);
+
+  sessionTimerInterval = setInterval(() => {
+    const e = Math.floor((Date.now() - sessionStart) / 1000);
+    const h = Math.floor(e / 3600), m = Math.floor((e % 3600) / 60), s = e % 60;
+    document.getElementById('session-timer').textContent =
+      `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }, 1000);
 }
 
 // ================================================================
@@ -1704,14 +1801,37 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+// ================================================================
+// BUG FIX #1 — Bedakan REFRESH vs CLOSE TAB
+// Masalah: beforeunload selalu kirim /api/logout via sendBeacon
+// saat refresh → token dihapus server → sesi hilang → kamera
+// minta izin ulang di mobile. Solusi: pakai flag sessionStorage
+// 'lb_refreshing'. Jika flag ada saat load = refresh, skip logout.
+// ================================================================
 window.addEventListener('beforeunload', () => {
-  if (camStream) camStream.getTracks().forEach(t => t.stop());
+  // Tandai sebagai refresh agar restoreSession tahu ini bukan close tab
+  if (authToken && currentUser && currentUser.role === 'viewer') {
+    sessionStorage.setItem('lb_refreshing', '1');
+    // BUG FIX #3: simpan sessionId lama agar bisa di-reuse setelah refresh
+    if (mySessionId) sessionStorage.setItem('lb_session_id', mySessionId);
+  }
+
+  // Tutup WebRTC peers agar resource dibebaskan
   viewerPeers.forEach(pc => { try { pc.close(); } catch {} });
   adminPeers.forEach(e  => { try { e.pc.close(); } catch {} });
-  if (socket)    socket.disconnect();
-  if (authToken) navigator.sendBeacon(`${API_BASE}/api/logout`, '{}');
+
+  // Cabut listener disconnect dulu agar tidak trigger log ganda
+  if (socket) { socket.off('disconnect'); socket.disconnect(); }
+
+  // JANGAN stop camStream di sini — browser mobile akan minta izin kamera lagi
+  // JANGAN sendBeacon logout untuk viewer — sesi harus tetap hidup untuk restore
+  // Admin tidak punya sesi kamera, tetap logout normal
+  if (!currentUser || currentUser.role !== 'viewer') {
+    if (authToken) navigator.sendBeacon(`${API_BASE}/api/logout`, '{}');
+  }
 });
 
 window.addEventListener('pagehide', () => {
-  if (camStream) camStream.getTracks().forEach(t => t.stop());
+  // Jangan stop camStream di pagehide — browser mobile pakai bfcache,
+  // stream bisa di-reuse langsung tanpa request izin ulang
 });
