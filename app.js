@@ -492,13 +492,47 @@ async function setupPeerConnection_Admin(sessionId, user) {
   // Dulu: videoEl.srcObject = remoteStream → video hitam karena stream masih kosong.
   // Sekarang: srcObject baru di-set di dalam ontrack saat track pertama benar-benar tiba.
 
-  // Helper: play dengan retry otomatis (mobile Chrome kadang blokir play() pertama)
+  // Helper: play dengan retry + fallback muted (untuk incognito / autoplay policy ketat)
   function _tryPlay(el, attempt) {
     attempt = attempt || 1;
-    el.play().catch(err => {
+    el.play().then(() => {
+      _removeTapOverlay(el);
+    }).catch(err => {
       console.warn(`[Video] play() gagal (attempt ${attempt}):`, err.name, err.message);
-      if (attempt < 5) setTimeout(() => _tryPlay(el, attempt + 1), 600);
+      if (err.name === 'NotAllowedError') {
+        // Autoplay diblokir browser (incognito / Chrome mobile)
+        // Coba play muted dulu, lalu minta user tap untuk unmute
+        el.muted = true;
+        el.play().then(() => {
+          console.log(`[Video] Play muted berhasil — tampilkan tap-to-unmute`);
+          _showTapOverlay(el);
+        }).catch(() => {
+          _showTapOverlay(el);
+        });
+      } else if (attempt < 5) {
+        setTimeout(() => _tryPlay(el, attempt + 1), 600);
+      }
     });
+  }
+
+  function _showTapOverlay(el) {
+    const container = el.closest('.sc-video-container');
+    if (!container || container.querySelector('.tap-to-play-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'tap-to-play-overlay';
+    overlay.style.cssText = 'position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);cursor:pointer;border-radius:8px;';
+    overlay.innerHTML = '<div style="text-align:center;color:#fff;font-size:.75rem;"><div style="font-size:1.6rem;margin-bottom:4px;">▶</div><div>Tap untuk lihat video</div></div>';
+    overlay.addEventListener('click', () => {
+      el.muted = false;
+      el.play().catch(() => { el.muted = true; el.play().catch(() => {}); });
+      overlay.remove();
+    }, { once: true });
+    container.appendChild(overlay);
+  }
+
+  function _removeTapOverlay(el) {
+    const container = el.closest('.sc-video-container');
+    if (container) container.querySelector('.tap-to-play-overlay')?.remove();
   }
 
   let _videoTrackAttached = false;
@@ -551,22 +585,40 @@ async function setupPeerConnection_Admin(sessionId, user) {
     const state = pc.connectionState;
     const el    = document.getElementById(`card-${sessionId}`);
     if (el) el.style.opacity = (state === 'connected') ? '1' : '0.5';
+    console.log(`[WebRTC] ${sessionId} connectionState = ${state}`);
 
     if (state === 'connected') {
-      // Watchdog: cek 2,5 detik setelah connected.
-      // Selalu ambil elemen terbaru dari DOM — bukan closure lama yang mungkin sudah stale.
-      setTimeout(() => {
-        const liveEl = document.getElementById(`video-${sessionId}`) || videoEl;
-        const peerEntry = adminPeers.get(sessionId);
-        if (peerEntry) peerEntry.videoEl = liveEl;
+      // WATCHDOG BERLAPIS — cek pada 2.5s, 5s, dan 8s setelah connected
+      // Menangani kasus ontrack sudah fire tapi srcObject belum ter-attach ke elemen yang benar
+      [2500, 5000, 8000].forEach(delay => {
+        setTimeout(() => {
+          const liveEl = document.getElementById(`video-${sessionId}`);
+          const peerEntry = adminPeers.get(sessionId);
+          if (!liveEl || !peerEntry) return;
 
-        if (liveEl.videoWidth === 0 && remoteStream.getVideoTracks().length > 0) {
-          console.warn(`[Watchdog] Video ${sessionId} masih hitam — reset srcObject paksa`);
-          liveEl.srcObject = null;
-          liveEl.srcObject = remoteStream;
-          _tryPlay(liveEl);
-        }
-      }, 2500);
+          // Update videoEl ke elemen terbaru setiap kali watchdog jalan
+          peerEntry.videoEl = liveEl;
+
+          const hasTrack = remoteStream.getVideoTracks().length > 0;
+          const isBlank  = liveEl.videoWidth === 0 || !liveEl.srcObject;
+
+          if (hasTrack && isBlank) {
+            console.warn(`[Watchdog ${delay}ms] ${sessionId} masih hitam — force reattach`);
+            liveEl.srcObject = null;
+            liveEl.srcObject = remoteStream;
+            _tryPlay(liveEl);
+          } else if (!hasTrack && delay === 8000) {
+            // 8 detik masih tidak ada track sama sekali — peer ini mati, rebuild
+            console.warn(`[Watchdog 8s] ${sessionId} tidak punya video track — rebuild peer`);
+            try { pc.close(); } catch {}
+            adminPeers.delete(sessionId);
+            adminAudioMeters.delete(sessionId);
+            if (document.getElementById(`card-${sessionId}`)) {
+              setupPeerConnection_Admin(sessionId, user);
+            }
+          }
+        }, delay);
+      });
     }
 
     if (state === 'failed' || state === 'disconnected') {
@@ -574,7 +626,6 @@ async function setupPeerConnection_Admin(sessionId, user) {
       try { pc.close(); } catch {}
       adminPeers.delete(sessionId);
       adminAudioMeters.delete(sessionId);
-      // Hanya retry jika kartu masih ada (pengguna belum keluar)
       setTimeout(() => {
         if (document.getElementById(`card-${sessionId}`)) {
           setupPeerConnection_Admin(sessionId, user);
