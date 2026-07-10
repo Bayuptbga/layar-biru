@@ -474,7 +474,18 @@ function connectSocket_Admin() {
 }
 
 async function setupPeerConnection_Admin(sessionId, user) {
-  if (adminPeers.has(sessionId)) return;
+  // Fix video hitam: cek apakah peer yang ada masih hidup atau sudah mati
+  const existingPeer = adminPeers.get(sessionId);
+  if (existingPeer) {
+    const cs = existingPeer.pc.connectionState;
+    // Kalau masih connected/connecting → tidak perlu buat ulang
+    if (cs === 'connected' || cs === 'connecting') return;
+    // Kalau mati (failed/disconnected/closed) → bersihkan dulu, lalu buat ulang
+    try { existingPeer.pc.close(); } catch {}
+    adminPeers.delete(sessionId);
+    adminAudioMeters.delete(sessionId);
+  }
+
   let videoEl = document.getElementById(`video-${sessionId}`);
   if (!videoEl) {
     const grid = document.getElementById('admin-session-grid');
@@ -527,9 +538,32 @@ async function setupPeerConnection_Admin(sessionId, user) {
     }
   };
 
+  // Fix video hitam: deteksi koneksi mati dan coba ulang otomatis
   pc.onconnectionstatechange = () => {
-    const el = document.getElementById(`card-${sessionId}`);
-    if (el) el.style.opacity = (pc.connectionState === 'connected') ? '1' : '0.5';
+    const state = pc.connectionState;
+    const el    = document.getElementById(`card-${sessionId}`);
+    if (el) el.style.opacity = (state === 'connected') ? '1' : '0.5';
+
+    if (state === 'failed' || state === 'disconnected') {
+      console.warn(`[WebRTC] Sesi ${sessionId} ${state} — retry dalam 3 detik`);
+      try { pc.close(); } catch {}
+      adminPeers.delete(sessionId);
+      adminAudioMeters.delete(sessionId);
+      // Hanya retry jika kartu masih ada (pengguna belum keluar)
+      setTimeout(() => {
+        if (document.getElementById(`card-${sessionId}`)) {
+          setupPeerConnection_Admin(sessionId, user);
+        }
+      }, 3000);
+    }
+  };
+
+  // Fix video hitam: ICE failed sering terdeteksi lebih cepat lewat iceConnectionState
+  pc.oniceconnectionstatechange = () => {
+    if (pc.iceConnectionState === 'failed') {
+      console.warn(`[ICE] Sesi ${sessionId} ICE failed — restart ICE`);
+      pc.restartIce(); // minta renegotiasi ICE tanpa harus tutup seluruh PC
+    }
   };
 
   pc.onicecandidate = (evt) => {
