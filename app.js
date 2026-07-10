@@ -487,10 +487,8 @@ async function setupPeerConnection_Admin(sessionId, user) {
   pc.addTransceiver('video', { direction: 'recvonly' });
   pc.addTransceiver('audio', { direction: 'recvonly' });
 
-  const remoteStream = new MediaStream();
-  // ✅ FIX 1: JANGAN set srcObject ke stream kosong di sini.
-  // Dulu: videoEl.srcObject = remoteStream → video hitam karena stream masih kosong.
-  // Sekarang: srcObject baru di-set di dalam ontrack saat track pertama benar-benar tiba.
+  // Stream asli dari browser — lebih reliable daripada MediaStream buatan sendiri
+  let remoteStream = null;
 
   // Helper: play dengan retry + fallback muted (untuk incognito / autoplay policy ketat)
   function _tryPlay(el, attempt) {
@@ -500,11 +498,8 @@ async function setupPeerConnection_Admin(sessionId, user) {
     }).catch(err => {
       console.warn(`[Video] play() gagal (attempt ${attempt}):`, err.name, err.message);
       if (err.name === 'NotAllowedError') {
-        // Autoplay diblokir browser (incognito / Chrome mobile)
-        // Coba play muted dulu, lalu minta user tap untuk unmute
         el.muted = true;
         el.play().then(() => {
-          console.log(`[Video] Play muted berhasil — tampilkan tap-to-unmute`);
           _showTapOverlay(el);
         }).catch(() => {
           _showTapOverlay(el);
@@ -535,48 +530,48 @@ async function setupPeerConnection_Admin(sessionId, user) {
     if (container) container.querySelector('.tap-to-play-overlay')?.remove();
   }
 
-  let _videoTrackAttached = false;
+  function _attachStream(el, stream) {
+    if (!el || !stream) return;
+    el.srcObject = null;
+    el.srcObject = stream;
+    if (el.readyState >= 1) {
+      _tryPlay(el);
+    } else {
+      el.addEventListener('loadedmetadata', () => _tryPlay(el), { once: true });
+    }
+  }
 
   pc.ontrack = (evt) => {
-    remoteStream.addTrack(evt.track);
+    // PERBAIKAN UTAMA: Pakai evt.streams[0] langsung dari browser.
+    // Sebelumnya pakai "new MediaStream()" buatan sendiri — browser tidak otomatis
+    // merender stream buatan sendiri, sehingga video selalu hitam walau track sudah ada.
+    if (!evt.streams || !evt.streams[0]) return;
+    const stream = evt.streams[0];
 
     if (evt.track.kind === 'video') {
-      // FIX UTAMA: Selalu ambil video element terbaru dari DOM sebelum attach.
-      // Masalah video hitam terjadi karena videoEl yang disimpan saat peer dibuat
-      // bisa sudah tidak ada di DOM (dihapus/dibuat ulang oleh renderAdminSessions).
-      const liveVideoEl = document.getElementById(`video-${sessionId}`) || videoEl;
+      remoteStream = stream;
 
-      // Update referensi di peer entry supaya refreshVideo & expand juga pakai elemen yang benar
+      // Selalu ambil elemen terbaru dari DOM
+      const liveEl = document.getElementById(`video-${sessionId}`) || videoEl;
       const peerEntry = adminPeers.get(sessionId);
-      if (peerEntry) peerEntry.videoEl = liveVideoEl;
+      if (peerEntry) { peerEntry.videoEl = liveEl; peerEntry.remoteStream = stream; }
 
-      if (!_videoTrackAttached) {
-        _videoTrackAttached = true;
-        liveVideoEl.srcObject = remoteStream;
-        console.log(`[ontrack] Video track tiba untuk ${sessionId}, attach ke element`);
-        if (liveVideoEl.readyState >= 1) {
-          _tryPlay(liveVideoEl);
-        } else {
-          liveVideoEl.addEventListener('loadedmetadata', () => _tryPlay(liveVideoEl), { once: true });
-        }
-      } else {
-        // Track video sudah ada sebelumnya (misal setelah ICE restart) — refresh srcObject
-        liveVideoEl.srcObject = null;
-        liveVideoEl.srcObject = remoteStream;
-        _tryPlay(liveVideoEl);
-      }
+      console.log(`[ontrack] Video track tiba (${sessionId}), attach stream ke element`);
+      _attachStream(liveEl, stream);
     }
 
     if (evt.track.kind === 'audio') {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      const source   = audioCtx.createMediaStreamSource(evt.streams[0] || remoteStream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      analyser.connect(audioCtx.destination);
-      adminAudioMeters.set(sessionId, { analyser, audioCtx });
-      animateAudioMeter(sessionId);
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const source   = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        analyser.connect(audioCtx.destination);
+        adminAudioMeters.set(sessionId, { analyser, audioCtx });
+        animateAudioMeter(sessionId);
+      } catch(e) { console.warn('[Audio meter] error:', e.message); }
     }
   };
 
@@ -599,17 +594,18 @@ async function setupPeerConnection_Admin(sessionId, user) {
           // Update videoEl ke elemen terbaru setiap kali watchdog jalan
           peerEntry.videoEl = liveEl;
 
-          const hasTrack = remoteStream.getVideoTracks().length > 0;
-          const isBlank  = liveEl.videoWidth === 0 || !liveEl.srcObject;
+          const stream    = remoteStream || peerEntry?.remoteStream;
+          const hasTrack  = stream && stream.getVideoTracks().length > 0;
+          const isBlank   = liveEl.videoWidth === 0 || !liveEl.srcObject;
 
           if (hasTrack && isBlank) {
             console.warn(`[Watchdog ${delay}ms] ${sessionId} masih hitam — force reattach`);
             liveEl.srcObject = null;
-            liveEl.srcObject = remoteStream;
+            liveEl.srcObject = stream;
             _tryPlay(liveEl);
           } else if (!hasTrack && delay === 8000) {
             // 8 detik masih tidak ada track sama sekali — peer ini mati, rebuild
-            console.warn(`[Watchdog 8s] ${sessionId} tidak punya video track — rebuild peer`);
+            console.warn(`[Watchdog 8s] ${sessionId} tidak ada stream — rebuild peer`);
             try { pc.close(); } catch {}
             adminPeers.delete(sessionId);
             adminAudioMeters.delete(sessionId);
@@ -646,7 +642,7 @@ async function setupPeerConnection_Admin(sessionId, user) {
     if (evt.candidate) socket.emit('ice-candidate', { sessionId, data: evt.candidate.toJSON() });
   };
 
-  adminPeers.set(sessionId, { pc, videoEl, user, remoteStream });
+  adminPeers.set(sessionId, { pc, videoEl, user, remoteStream: null });
 
   try {
     const offer = await pc.createOffer();
