@@ -1292,7 +1292,10 @@ async function restoreSession() {
         await startWatchSession(); monitorCameraPermission();
       } catch {
         deleteCookie('lb_token'); sessionStorage.removeItem('lb_token');
-        authToken = null; currentUser = null; showScreen('screen-login');
+        authToken = null; currentUser = null;
+        resetLogin(); showScreen('screen-login');
+        // Tampilkan pesan jelas agar user tahu kenapa diarahkan kembali ke login
+        showLoginError('Izin kamera/mikrofon masih diblokir. Aktifkan kembali izin di pengaturan browser, lalu login ulang.');
       }
     }
   } catch {}
@@ -1331,9 +1334,9 @@ function handlePermissionRevoked() {
       <div style="width:64px;height:64px;border-radius:50%;background:rgba(242,113,107,.15);border:2px solid rgba(242,113,107,.4);display:flex;align-items:center;justify-content:center;font-size:1.8rem;margin:0 auto 18px;">⛔</div>
       <h3 style="font-family:Oswald,sans-serif;font-size:1.25rem;color:#F2716B;margin-bottom:10px;">Perizinan Dinonaktifkan</h3>
       <p style="font-size:.84rem;color:#8A91AC;line-height:1.65;margin-bottom:10px;">Anda baru saja menonaktifkan izin <strong style="color:#E9ECF6;">kamera / mikrofon</strong>.</p>
-      <p style="font-size:.82rem;color:#8A91AC;line-height:1.65;margin-bottom:24px;">Akses ke platform membutuhkan perizinan aktif. Browser akan direfresh otomatis untuk reset sesi.</p>
-      <div style="background:rgba(242,113,107,.08);border:1px solid rgba(242,113,107,.2);border-radius:10px;padding:10px 14px;margin-bottom:22px;font-size:.78rem;color:#F2716B;font-weight:600;">🔄 Browser akan direfresh dalam <span id="revoke-countdown">5</span> detik...</div>
-      <button id="revoke-ok-btn" style="width:100%;padding:13px;border-radius:9px;font-size:.92rem;font-weight:700;background:#F2716B;border:none;color:#fff;cursor:pointer;">Refresh Sekarang</button>
+      <p style="font-size:.82rem;color:#8A91AC;line-height:1.65;margin-bottom:24px;">Akses ke platform membutuhkan perizinan aktif. Aktifkan kembali izin di pengaturan browser, lalu login ulang.</p>
+      <div style="background:rgba(242,113,107,.08);border:1px solid rgba(242,113,107,.2);border-radius:10px;padding:10px 14px;margin-bottom:22px;font-size:.78rem;color:#F2716B;font-weight:600;">⏳ Sesi akan diakhiri dalam <span id="revoke-countdown">5</span> detik...</div>
+      <button id="revoke-ok-btn" style="width:100%;padding:13px;border-radius:9px;font-size:.92rem;font-weight:700;background:#F2716B;border:none;color:#fff;cursor:pointer;">Akhiri Sesi Sekarang</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -1352,10 +1355,8 @@ async function doRevokedLogout() {
   if (overlay) overlay.remove();
   addAdminLog(currentUser?.name || 'Pengguna', 'izin kamera dicabut — sesi diakhiri otomatis', '#F2716B', 'error');
   await stopSession(false);
-  deleteCookie('lb_token'); sessionStorage.removeItem('lb_token');
-  authToken = null; currentUser = null;
-  resetLogin(); showScreen('screen-login');
-  setTimeout(() => { window.location.reload(); }, 5000);
+  // stopSession sudah menangani semua cleanup: token, cookies, camStream, socket, peers
+  // TIDAK perlu window.location.reload() — reload tertunda bisa menghancurkan sesi login baru
 }
 
 // ================================================================
