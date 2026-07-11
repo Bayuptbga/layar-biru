@@ -61,17 +61,34 @@ async function fetchGDriveFilms() {
   }
 
   try {
-    const url = `https://www.googleapis.com/drive/v3/files?q='${GDRIVE_FOLDER_ID}'+in+parents+and+mimeType+contains+'video/'&fields=files(id,name,thumbnailLink,mimeType,size)&key=${GDRIVE_API_KEY}&pageSize=50`;
+    let allFiles  = [];
+    let pageToken = '';
 
-    const res  = await fetch(url);
-    const data = await res.json();
+    // Pagination — ambil semua file tanpa batas 50
+    do {
+      const pageParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+      const url = `https://www.googleapis.com/drive/v3/files?q='${GDRIVE_FOLDER_ID}'+in+parents+and+mimeType+contains+'video/'&fields=files(id,name,thumbnailLink,mimeType,size),nextPageToken&key=${GDRIVE_API_KEY}&pageSize=100${pageParam}`;
 
-    if (!res.ok || !data.files) {
-      console.error('[GDRIVE] Error fetch:', JSON.stringify(data));
-      return gdriveFilmsCache; // return cache lama jika ada
+      const res  = await fetch(url);
+      const data = await res.json();
+
+      if (!res.ok || !data.files) {
+        console.error('[GDRIVE] Error fetch halaman:', JSON.stringify(data));
+        break; // pakai cache lama jika ada error di tengah pagination
+      }
+
+      allFiles  = allFiles.concat(data.files);
+      pageToken = data.nextPageToken || '';
+      console.log(`[GDRIVE] Halaman selesai — total sementara: ${allFiles.length} file`);
+
+    } while (pageToken);
+
+    if (allFiles.length === 0) {
+      console.warn('[GDRIVE] Tidak ada file ditemukan, return cache lama');
+      return gdriveFilmsCache;
     }
 
-    const films = data.files.map((file, index) => {
+    const films = allFiles.map((file, index) => {
       // Bersihkan nama file dari ekstensi
       const title    = file.name.replace(/\.[^/.]+$/, '');
       const fileId   = file.id;
@@ -106,7 +123,7 @@ async function fetchGDriveFilms() {
 
     gdriveFilmsCache = films;
     gdriveCacheTime  = now;
-    console.log(`[GDRIVE] ${films.length} video ditemukan di folder`);
+    console.log(`[GDRIVE] ${films.length} video ditemukan di folder (pagination selesai)`);
     return films;
 
   } catch (err) {
