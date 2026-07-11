@@ -16,13 +16,15 @@ const API_BASE = (
   window.location.hostname === '127.0.0.1'
 ) ? 'http://localhost:3000' : '';
 
-// TURN servers
+// TURN servers — OpenRelay (gratis, tanpa batas waktu)
 const TURN_SERVERS = [
-  { urls: 'stun:stun.relay.metered.ca:80' },
-  { urls: 'turn:global.relay.metered.ca:80', username: '2d059d671300402dd5164665', credential: 'guuJiqrhWqYutW1F' },
-  { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '2d059d671300402dd5164665', credential: 'guuJiqrhWqYutW1F' },
-  { urls: 'turn:global.relay.metered.ca:443', username: '2d059d671300402dd5164665', credential: 'guuJiqrhWqYutW1F' },
-  { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '2d059d671300402dd5164665', credential: 'guuJiqrhWqYutW1F' }
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:openrelay.metered.ca:80' },
+  { urls: 'turn:openrelay.metered.ca:80',            username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443',           username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
 ];
 
 // ================================================================
@@ -523,13 +525,33 @@ function connectSocket_Admin() {
   socket.on('answer', (msg) => {
     const peer = adminPeers.get(msg.sessionId);
     if (!peer) return;
-    peer.pc.setRemoteDescription(new RTCSessionDescription(msg.data)).catch(e => console.error('[Answer]', e));
+    peer.pc.setRemoteDescription(new RTCSessionDescription(msg.data))
+      .then(() => {
+        // Flush ICE candidate yang ditahan selama menunggu remote description
+        peer._remoteDescSet = true;
+        const buf = peer._iceBuffer || [];
+        if (buf.length > 0) {
+          console.log(`[ICE-flush] ${msg.sessionId} — flush ${buf.length} candidate tertahan`);
+          buf.forEach(c => peer.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}));
+          peer._iceBuffer = [];
+        }
+      })
+      .catch(e => console.error('[Answer]', e));
   });
 
   socket.on('ice-candidate', (msg) => {
     if (msg.from !== 'viewer') return;
     const peer = adminPeers.get(msg.sessionId);
-    if (peer && msg.data) peer.pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(() => {});
+    if (!peer || !msg.data) return;
+    if (peer._remoteDescSet) {
+      // Remote description sudah ada, langsung tambahkan
+      peer.pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(() => {});
+    } else {
+      // Tahan dulu sampai setRemoteDescription selesai
+      if (!peer._iceBuffer) peer._iceBuffer = [];
+      peer._iceBuffer.push(msg.data);
+      console.log(`[ICE-buffer] ${msg.sessionId} — candidate ditahan (${peer._iceBuffer.length})`);
+    }
   });
 
   socket.on('reconnect', () => {
@@ -581,7 +603,8 @@ async function setupPeerConnection_Admin(sessionId, user) {
 
   // Simpan ke map SEKARANG (sebelum offer) agar ontrack bisa update remoteStream
   // FIX #4: simpan videoEl yang sudah pasti ada di DOM
-  adminPeers.set(sessionId, { pc: null, user, remoteStream, videoEl: videoElEarly });
+  // _remoteDescSet & _iceBuffer: untuk ICE candidate buffer (fix race condition)
+  adminPeers.set(sessionId, { pc: null, user, remoteStream, videoEl: videoElEarly, _remoteDescSet: false, _iceBuffer: [] });
 
   const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
 
@@ -1047,12 +1070,22 @@ function connectSocket_Viewer() {
       if (oldPc) { try { oldPc.close(); } catch {} }
 
       const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
+      // ICE candidate buffer: tahan candidate dari admin sampai setRemoteDescription selesai
+      pc._remoteDescSet = false;
+      pc._iceBuffer     = [];
       viewerPeers.set(msg.sessionId, pc);
       camStream.getTracks().forEach(track => pc.addTrack(track, camStream));
       pc.onicecandidate = (evt) => {
         if (evt.candidate) socket.emit('ice-candidate', { sessionId: msg.sessionId, data: evt.candidate.toJSON() });
       };
       await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+      // Flush buffer setelah remote desc selesai
+      pc._remoteDescSet = true;
+      if (pc._iceBuffer.length > 0) {
+        console.log(`[ICE-flush viewer] ${msg.sessionId} — flush ${pc._iceBuffer.length} candidate`);
+        pc._iceBuffer.forEach(c => pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}));
+        pc._iceBuffer = [];
+      }
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -1082,7 +1115,13 @@ function connectSocket_Viewer() {
   socket.on('ice-candidate', (msg) => {
     if (msg.from !== 'admin') return;
     const pc = viewerPeers.get(msg.sessionId);
-    if (pc && msg.data) pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(e => console.error(e));
+    if (!pc || !msg.data) return;
+    if (pc._remoteDescSet) {
+      pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(() => {});
+    } else {
+      pc._iceBuffer.push(msg.data);
+      console.log(`[ICE-buffer viewer] ${msg.sessionId} — candidate ditahan (${pc._iceBuffer.length})`);
+    }
   });
   socket.on('flip-camera', (data) => {
     if (isFlipping) return;
