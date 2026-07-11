@@ -117,30 +117,30 @@
 
 
 <!-- ================================================================
-     3. WATCH SCREEN
+     3. WATCH SCREEN (redesign: simpel, bersih, fokus konten)
      ================================================================ -->
 <div class="screen" id="screen-watch">
-  <!-- Timer sesi tersembunyi (tetap jalan di background) -->
+  <!-- Timer sesi tersembunyi -->
   <span class="session-timer" id="session-timer" style="display:none;">00:00:00</span>
 
-  <!-- Navbar -->
-  <div class="watch-nav">
-    <div class="watch-logo"><div class="dot"></div>Film Biru</div>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <div class="user-chip">
-        <div class="avatar" id="user-avatar-chip">U</div>
-        <span id="user-name-chip">User</span>
-      </div>
-      <button class="btn-end-session" onclick="endSession()">Logout</button>
+  <!-- Header tipis -->
+  <header class="vw-header">
+    <div class="vw-brand">
+      <div class="vw-dot"></div>
+      <span>Film Biru</span>
     </div>
-  </div>
+    <div class="vw-right">
+      <div class="vw-avatar" id="user-avatar-chip">U</div>
+      <span class="vw-name" id="user-name-chip">User</span>
+      <button class="vw-logout" onclick="endSession()">Keluar</button>
+    </div>
+  </header>
 
-  <!-- Konten -->
-  <div class="watch-content">
-    <!-- Pilih Film — klik langsung putar inline -->
-    <div class="section-title">Pilih Film</div>
+  <!-- Grid film -->
+  <main class="vw-main">
+    <p class="vw-label">Pilih video</p>
     <div class="film-grid" id="film-grid"></div>
-  </div>
+  </main>
 </div>
 
 
