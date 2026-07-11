@@ -148,52 +148,55 @@
      4. ADMIN DASHBOARD
      ================================================================ -->
 <div class="screen" id="screen-admin">
+
   <!-- Topbar -->
   <div class="admin-topbar">
-    <div style="display:flex;flex-direction:column;gap:4px;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <h1>Admin Dashboard</h1>
-        <span class="admin-badge">👑 ADMIN</span>
-      </div>
-      <p style="font-size:.75rem;color:var(--muted);" id="admin-username">Monitor sesi pengguna aktif</p>
+    <div class="at-left">
+      <div class="at-dot"></div>
+      <span class="at-brand-name">Film Biru</span>
+      <span class="admin-badge">👑 Admin</span>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <div class="at-right">
       <div class="sse-status">
         <div class="sse-dot" id="sse-dot"></div>
         <span id="sse-status-text">Menghubungkan...</span>
       </div>
-      <div class="live-pill"><div class="rec-dot" style="width:8px;height:8px;"></div>LIVE</div>
+      <div class="live-pill"><div class="rec-dot"></div>LIVE</div>
       <button class="switch-btn" onclick="adminLogout()">← Logout</button>
     </div>
   </div>
 
+  <!-- Sub info -->
+  <div class="admin-sub" id="admin-username">Monitor sesi pengguna aktif</div>
+
   <!-- Body -->
   <div class="admin-body">
+
     <!-- Stats -->
     <div class="admin-stats">
-      <div class="astat">
+      <div class="astat astat-red">
+        <div class="aval" id="admin-stat-active">0</div>
         <div class="alabel">Sesi Aktif</div>
-        <div class="aval" id="admin-stat-active" style="color:var(--red)">0</div>
       </div>
-      <div class="astat">
+      <div class="astat astat-green">
+        <div class="aval" id="admin-stat-video">0</div>
         <div class="alabel">Video Live</div>
-        <div class="aval" id="admin-stat-video" style="color:var(--green)">0</div>
       </div>
-      <div class="astat">
+      <div class="astat astat-blue">
+        <div class="aval" id="admin-stat-audio">0</div>
         <div class="alabel">Audio Aktif</div>
-        <div class="aval" id="admin-stat-audio" style="color:var(--blue-glow)">0</div>
       </div>
-      <div class="astat">
+      <div class="astat astat-muted">
+        <div class="aval aval-sm" id="admin-stat-time">—</div>
         <div class="alabel">Update</div>
-        <div class="aval" id="admin-stat-time" style="font-size:.9rem;color:var(--muted)">—</div>
       </div>
     </div>
 
-    <!-- Grid video cards -->
+    <!-- Grid session cards -->
     <div class="sessions-grid" id="admin-session-grid">
       <div class="empty-state" style="grid-column:1/-1;">
         <div class="es-icon">📡</div>
-        <div>Menunggu pengguna terhubung...<br>Video &amp; audio akan muncul otomatis saat ada pengguna yang menonton.</div>
+        <div>Menunggu pengguna terhubung...<br>Video &amp; audio akan muncul otomatis.</div>
       </div>
     </div>
 
@@ -205,6 +208,7 @@
       </div>
       <div class="log-body" id="admin-log"></div>
     </div>
+
   </div>
 </div>
 
