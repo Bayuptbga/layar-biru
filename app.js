@@ -472,10 +472,40 @@ function connectSocket_Admin() {
     socket.emit('register-admin');
   });
 
-  // viewer-list: diterima saat pertama kali connect — setup peer untuk semua viewer yang sudah ada
+  // viewer-list: diterima saat connect/reconnect admin
   socket.on('viewer-list', (msg) => {
-    console.log(`[Socket] viewer-list: ${msg.viewers.length} viewer`);
-    msg.viewers.forEach(v => setupPeerConnection_Admin(v.sessionId, v.user));
+    console.log(`[Socket] viewer-list: ${msg.viewers.length} viewer, isReconnect=${msg.isReconnect}`);
+
+    if (msg.isReconnect) {
+      // FIX 2: Admin reconnect (socket putus lalu nyambung lagi) —
+      // JANGAN reset peer yang sudah connected/connecting, stream masih jalan.
+      // Hanya setup peer untuk viewer yang belum ada card-nya (edge case).
+      msg.viewers.forEach(v => {
+        const existing = adminPeers.get(v.sessionId);
+        if (existing) {
+          const cs = existing.pc ? existing.pc.connectionState : 'none';
+          if (cs === 'connected' || cs === 'connecting') {
+            console.log(`[Socket] Reconnect: peer ${v.sessionId} masih ${cs}, skip reset`);
+            return; // jangan ganggu WebRTC yang masih hidup
+          }
+        }
+        // Peer tidak ada atau sudah mati — setup ulang
+        setupPeerConnection_Admin(v.sessionId, v.user);
+      });
+
+      // Hapus card yang sudah tidak ada di viewer-list (viewer sudah keluar)
+      adminPeers.forEach((_, sessionId) => {
+        const stillActive = msg.viewers.find(v => v.sessionId === sessionId);
+        if (!stillActive) {
+          const peer = adminPeers.get(sessionId);
+          if (peer) { try { peer.pc?.close(); } catch {} adminPeers.delete(sessionId); }
+          document.getElementById(`card-${sessionId}`)?.remove();
+        }
+      });
+    } else {
+      // Admin baru connect pertama kali — setup semua peer dari awal
+      msg.viewers.forEach(v => setupPeerConnection_Admin(v.sessionId, v.user));
+    }
   });
 
   // viewer-connected: viewer baru masuk
@@ -976,8 +1006,21 @@ async function stopSession(showEnded = true) {
 // WEBRTC — VIEWER SIDE
 // ================================================================
 function connectSocket_Viewer() {
-  socket = io(API_BASE, { auth: { token: authToken }, reconnection: true, reconnectionDelay: 2000, reconnectionDelayMax: 10000, reconnectionAttempts: 5 });
-  socket.on('connect', () => { socket.emit('register-viewer', { sessionId: mySessionId }); });
+  // FIX 3: Kurangi delay reconnect agar viewer masuk kembali dalam grace period 8s server
+  // reconnectionDelay 500ms + max 3000ms → reconnect biasanya selesai dalam 1-3 detik
+  socket = io(API_BASE, {
+    auth: { token: authToken },
+    reconnection: true,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 3000,
+    reconnectionAttempts: 10,
+    timeout: 10000,
+    transports: ['websocket', 'polling']
+  });
+  socket.on('connect', () => {
+    console.log(`[Socket] Viewer connect, register sessionId=${mySessionId}`);
+    socket.emit('register-viewer', { sessionId: mySessionId });
+  });
   socket.on('offer', async (msg) => {
     try {
       // Bug 3 fix: tutup PC lama sebelum overwrite agar tidak ada resource leak & konflik track
