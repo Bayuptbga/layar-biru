@@ -128,7 +128,9 @@ const userSessions   = new Map();
 // benar-benar dianggap keluar. Jika reconnect dalam waktu
 // REFRESH_GRACE_MS → anggap refresh, jangan log KELUAR.
 // ===========================
-const REFRESH_GRACE_MS = 5000; // 5 detik grace period
+// Railway/cloud hosting sering punya transport timeout 5-7 detik
+// Naikkan ke 8 detik agar refresh di koneksi lambat tetap tercover
+const REFRESH_GRACE_MS = 8000; // 8 detik grace period
 const pendingDisconnects = new Map(); // sessionId → { timer, user }
 
 // ===========================
@@ -280,30 +282,33 @@ io.on('connection', (socket) => {
 
       // Validasi: sessionId harus cocok dengan activeSessions
       // Kalau viewer konek sebelum /api/session/start selesai, coba tunggu sebentar
+      // FIX: guard agar tryEmitConnected tidak fire lebih dari sekali
+      // (mencegah log "Viewer terhubung" duplikat dari retry loop)
+      let _emitConnectedDone = false;
+
       const tryEmitConnected = (attempt) => {
-        // FIX #2: Cari sesi berdasarkan sessionId (token.slice(-8))
-        // Juga coba cocokkan berdasarkan nama user sebagai fallback
+        if (_emitConnectedDone) return; // sudah berhasil, stop retry
+        if (!socket.connected) return;  // socket sudah putus, stop retry
+
         let sessionFound = false;
         for (const [, s] of activeSessions) {
           if (s.id === sessionId) { sessionFound = true; break; }
-          // Fallback: cocokkan berdasarkan nama user jika sessionId tidak ada di activeSessions
+          // Fallback: cocokkan berdasarkan nama user jika sessionId belum ada
           if (s.user && s.user.name === user.name) {
-            // Update sessionId agar konsisten
             socket._sessionId = s.id;
             sessionFound = true;
-            console.log(`[SIO] FIX#2: sessionId remapped ${sessionId} → ${s.id} untuk ${user.name}`);
+            console.log(`[SIO] sessionId remapped ${sessionId} → ${s.id} untuk ${user.name}`);
             break;
           }
         }
+
         if (sessionFound || attempt >= 8) {
-          // Gunakan sessionId yang sudah mungkin di-remap
+          _emitConnectedDone = true; // tandai sudah selesai — stop semua retry berikutnya
           const finalSessionId = socket._sessionId;
           io.to('admins').emit('viewer-connected', { sessionId: finalSessionId, user });
           console.log(`[SIO] Viewer terhubung: ${user.name} (${finalSessionId}) attempt=${attempt}`);
         } else {
-          // Sesi belum ada di activeSessions — viewer konek sebelum /api/session/start
-          // Coba lagi setelah 400ms (maks 8x = 3.2 detik)
-          console.warn(`[SIO] SessionId ${sessionId} belum ada di activeSessions, retry ${attempt}/8`);
+          console.warn(`[SIO] SessionId ${sessionId} belum ada, retry ${attempt}/8`);
           setTimeout(() => tryEmitConnected(attempt + 1), 400);
         }
       };
@@ -379,13 +384,27 @@ io.on('connection', (socket) => {
   if (role === 'admin') {
     socket.join('admins');
     socket.on('register-admin', () => {
+      // FIX 2: Tandai admin sudah pernah register, agar reconnect bisa dibedakan
+      const isReconnect = socket._wasAdmin === true;
+      socket._wasAdmin = true;
+
       const viewers = [];
       io.sockets.sockets.forEach(s => {
         if (s._role === 'viewer' && s._sessionId) {
           viewers.push({ sessionId: s._sessionId, user: s._user });
         }
       });
-      socket.emit('viewer-list', { viewers });
+
+      // Kirim flag isReconnect ke client — jika true, client TIDAK reset WebRTC
+      // yang sudah connected, cukup sync card UI saja agar stream tidak hitam
+      socket.emit('viewer-list', { viewers, isReconnect });
+
+      if (isReconnect) {
+        addServerLog('Admin', 'terhubung kembali ke dashboard streaming', '#4ADE80', 'connect');
+      } else {
+        addServerLog('Admin', 'terhubung ke dashboard streaming', '#4ADE80', 'connect');
+      }
+      console.log(`[SIO] Admin ${isReconnect ? 'reconnect' : 'baru'}: ${user.name}`);
     });
     socket.on('offer', ({ sessionId, data }) => { io.to(`viewer:${sessionId}`).emit('offer', { sessionId, data }); });
     socket.on('ice-candidate', (msg) => { io.to(`viewer:${msg.sessionId}`).emit('ice-candidate', { ...msg, from: 'admin' }); });
