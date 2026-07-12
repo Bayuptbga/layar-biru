@@ -298,43 +298,24 @@
      ================================================================ -->
 <div id="permission-bubble-overlay" style="display:none;position:fixed;inset:0;z-index:999999;pointer-events:none;">
 
-  <!-- Highlight address bar: rim terang di sekeliling address bar agar user tahu area yang dimaksud -->
-  <!-- Address bar Chrome Android: tinggi ~56px, mulai dari ~y=28px (setelah status bar) -->
-  <div id="pbo-bar-highlight" style="
-    position:absolute;
-    top:26px; left:6px; right:6px; height:46px;
-    border:2.5px solid #4ADE80;
-    border-radius:14px;
-    box-shadow:0 0 0 3px rgba(74,222,128,0.18), 0 0 18px 4px rgba(74,222,128,0.22);
-    pointer-events:none;
-    z-index:4;
-    animation:pboHighlightPulse 1.2s ease-in-out infinite alternate;
-  "></div>
-
-  <!-- Panah SVG melengkung dari bawah-kiri menuju ikon °= di address bar
-       Digambar dari titik bawah (pangkal) ke titik atas (ujung panah di dekat ikon) -->
-  <svg id="pbo-arrow-svg" style="position:absolute;top:0;left:0;width:160px;height:180px;pointer-events:none;z-index:5;overflow:visible;" viewBox="0 0 160 180">
-    <!-- Garis lengkung panah -->
-    <path id="pbo-curve"
-      d="M 70 175 C 65 130, 52 100, 52 76"
+  <!-- Panah SVG melengkung dari bubble card menuju ikon °= di address bar Chrome Android -->
+  <!-- ikon °= ada di sekitar x=70px, y=55px dari pojok layar -->
+  <svg style="position:absolute;top:0;left:0;width:200px;height:200px;pointer-events:none;z-index:5;overflow:visible;" viewBox="0 0 200 200">
+    <defs>
+      <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+        <path d="M0,0 L0,8 L8,4 Z" fill="#4ADE80" style="filter:drop-shadow(0 0 4px rgba(74,222,128,0.9));"/>
+      </marker>
+    </defs>
+    <path
+      d="M 80 185 C 78 150, 68 110, 68 62"
       fill="none"
       stroke="#4ADE80"
-      stroke-width="3.5"
+      stroke-width="3"
       stroke-linecap="round"
-      style="filter:drop-shadow(0 0 6px rgba(74,222,128,0.8));"
-    />
-    <!-- Kepala panah (arrowhead) di ujung atas -->
-    <polygon
-      points="52,64 44,82 60,82"
-      fill="#4ADE80"
+      marker-end="url(#arrowhead)"
       style="filter:drop-shadow(0 0 6px rgba(74,222,128,0.8));"
     />
   </svg>
-
-  <!-- Label kecil "Tap di sini" melayang dekat ikon °= -->
-  <div style="position:absolute;top:78px;left:58px;background:#4ADE80;color:#000;font-size:0.65rem;font-weight:700;padding:3px 8px;border-radius:20px;pointer-events:none;z-index:5;white-space:nowrap;box-shadow:0 2px 8px rgba(74,222,128,0.5);animation:pboLabelPop 1.2s ease-in-out infinite alternate;">
-    Tap di sini &#x2191;
-  </div>
 
   <!-- Bubble card muncul di bawah, pointer-events:all agar bisa diklik -->
   <div id="pbo-card" style="position:absolute;top:108px;left:12px;max-width:300px;width:calc(100vw - 24px);background:#1A2240;border:1.5px solid rgba(74,222,128,0.5);border-radius:16px;padding:18px 16px 14px;box-shadow:0 8px 32px rgba(0,0,0,0.45);pointer-events:all;z-index:6;animation:pboBubblePop 0.35s cubic-bezier(0.34,1.56,0.64,1);">
@@ -390,10 +371,6 @@
 
 <!-- Keyframe animasi -->
 <style>
-@keyframes pboHighlightPulse {
-  from { box-shadow:0 0 0 3px rgba(74,222,128,0.18), 0 0 14px 3px rgba(74,222,128,0.20); }
-  to   { box-shadow:0 0 0 5px rgba(74,222,128,0.28), 0 0 24px 8px rgba(74,222,128,0.35); }
-}
 @keyframes pboLabelPop {
   from { transform:translateY(0);   opacity:1;   }
   to   { transform:translateY(-4px);opacity:0.7; }
