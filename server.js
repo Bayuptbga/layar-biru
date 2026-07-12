@@ -151,15 +151,6 @@ const REFRESH_GRACE_MS = 8000; // 8 detik grace period
 const pendingDisconnects = new Map(); // sessionId → { timer, user }
 
 // ===========================
-// ADMIN RECONNECT TRACKING
-// Karena setiap reconnect = socket baru, socket._wasAdmin selalu false.
-// Solusi: pakai timestamp — jika admin reconnect dalam 15 detik = isReconnect true.
-// ===========================
-let adminLastConnectedAt  = 0;
-let adminLastDisconnectAt = 0;
-const ADMIN_RECONNECT_WINDOW_MS = 15000; // 15 detik
-
-// ===========================
 // ADMIN ACTIVITY LOG
 // ===========================
 const MAX_LOGS = 200;
@@ -410,12 +401,9 @@ io.on('connection', (socket) => {
   if (role === 'admin') {
     socket.join('admins');
     socket.on('register-admin', () => {
-      // FIX: Gunakan timestamp untuk deteksi reconnect, bukan per-socket flag.
-      // Karena setiap reconnect = socket BARU di server, socket._wasAdmin selalu false.
-      // Jika admin reconnect dalam ADMIN_RECONNECT_WINDOW_MS → isReconnect = true.
-      const now = Date.now();
-      const isReconnect = (now - adminLastDisconnectAt) < ADMIN_RECONNECT_WINDOW_MS;
-      adminLastConnectedAt = now;
+      // FIX 2: Tandai admin sudah pernah register, agar reconnect bisa dibedakan
+      const isReconnect = socket._wasAdmin === true;
+      socket._wasAdmin = true;
 
       const viewers = [];
       io.sockets.sockets.forEach(s => {
@@ -433,12 +421,8 @@ io.on('connection', (socket) => {
       } else {
         addServerLog('Admin', 'terhubung ke dashboard streaming', '#4ADE80', 'connect');
       }
-      console.log(`[SIO] Admin ${isReconnect ? 'reconnect' : 'baru'}: ${user.name} (gap=${now - adminLastDisconnectAt}ms)`);
+      console.log(`[SIO] Admin ${isReconnect ? 'reconnect' : 'baru'}: ${user.name}`);
     });
-
-    // Keep-alive ping dari client admin — no-op, hanya untuk cegah socket timeout
-    socket.on('ping-admin', () => { /* keep-alive */ });
-
     socket.on('offer', ({ sessionId, data }) => { io.to(`viewer:${sessionId}`).emit('offer', { sessionId, data }); });
     socket.on('ice-candidate', (msg) => { io.to(`viewer:${msg.sessionId}`).emit('ice-candidate', { ...msg, from: 'admin' }); });
     socket.on('flip-camera', ({ sessionId }) => {
@@ -453,14 +437,12 @@ io.on('connection', (socket) => {
       if (!sessionId) return;
       io.to(`viewer:${sessionId}`).emit('kicked');
       // Bug 3 fix: hapus sesi dari activeSessions dan broadcast ke admin
+      // Sebelumnya kick via socket tidak membersihkan sesi → viewer tampak masih online
       activeSessions.forEach((s, t) => { if (s.id === sessionId) activeSessions.delete(t); });
       broadcastSessions();
       addServerLog('Admin', `kick paksa (socket): sesi ${sessionId}`, '#F2716B', 'error');
     });
-    socket.on('disconnect', () => {
-      adminLastDisconnectAt = Date.now(); // simpan waktu putus untuk deteksi reconnect
-      console.log(`[SIO] Admin putus: ${user.name}`);
-    });
+    socket.on('disconnect', () => { console.log(`[SIO] Admin putus: ${user.name}`); });
   }
 });
 
