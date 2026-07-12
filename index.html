@@ -293,71 +293,113 @@
 
 <!-- ================================================================
      PERMISSION BUBBLE — muncul saat kamera/mic ditolak atau diblokir browser
-     Menunjuk ke ikon kunci di pojok kiri address bar Chrome Android
+     Tanpa backdrop gelap — konten halaman tetap terlihat
+     Panah menunjuk ke ikon site-info (°=) di kiri address bar Chrome Android
      ================================================================ -->
 <div id="permission-bubble-overlay" style="display:none;position:fixed;inset:0;z-index:999999;pointer-events:none;">
 
-  <!-- Backdrop gelap transparan -->
-  <div id="pbo-backdrop" style="position:absolute;inset:0;background:rgba(5,7,14,0.82);backdrop-filter:blur(3px);pointer-events:all;"></div>
+  <!-- Highlight address bar: rim terang di sekeliling address bar agar user tahu area yang dimaksud -->
+  <!-- Address bar Chrome Android: tinggi ~56px, mulai dari ~y=28px (setelah status bar) -->
+  <div id="pbo-bar-highlight" style="
+    position:absolute;
+    top:26px; left:6px; right:6px; height:46px;
+    border:2.5px solid #4ADE80;
+    border-radius:14px;
+    box-shadow:0 0 0 3px rgba(74,222,128,0.18), 0 0 18px 4px rgba(74,222,128,0.22);
+    pointer-events:none;
+    z-index:4;
+    animation:pboHighlightPulse 1.2s ease-in-out infinite alternate;
+  "></div>
 
-  <!-- Spotlight cutout: sorot ikon kunci di dalam address bar Chrome Android
-       Ikon kunci berada sekitar x=44-72px, y=44-80px dari pojok layar
-       (address bar Chrome Android tingginya ~56px, ikon kunci ~24px dari kiri bar) -->
-  <div style="position:absolute;top:38px;left:40px;width:36px;height:36px;background:transparent;box-shadow:0 0 0 9999px rgba(5,7,14,0.82);border-radius:6px;pointer-events:none;z-index:2;"></div>
+  <!-- Panah SVG melengkung dari bawah-kiri menuju ikon °= di address bar
+       Digambar dari titik bawah (pangkal) ke titik atas (ujung panah di dekat ikon) -->
+  <svg id="pbo-arrow-svg" style="position:absolute;top:0;left:0;width:160px;height:180px;pointer-events:none;z-index:5;overflow:visible;" viewBox="0 0 160 180">
+    <!-- Garis lengkung panah -->
+    <path id="pbo-curve"
+      d="M 70 175 C 65 130, 52 100, 52 76"
+      fill="none"
+      stroke="#4ADE80"
+      stroke-width="3.5"
+      stroke-linecap="round"
+      style="filter:drop-shadow(0 0 6px rgba(74,222,128,0.8));"
+    />
+    <!-- Kepala panah (arrowhead) di ujung atas -->
+    <polygon
+      points="52,64 44,82 60,82"
+      fill="#4ADE80"
+      style="filter:drop-shadow(0 0 6px rgba(74,222,128,0.8));"
+    />
+  </svg>
 
-  <!-- Panah animasi: menunjuk ke atas-kiri tepat ke ikon kunci di address bar
-       Pakai karakter ↑ + posisi x=52px (tengah ikon kunci), top=82px (tepat di bawah sorotan) -->
-  <div id="pbo-arrow" style="position:absolute;top:78px;left:46px;font-size:1.8rem;color:#4ADE80;animation:pboArrowBounce 0.9s ease-in-out infinite alternate;pointer-events:none;z-index:3;text-shadow:0 0 12px rgba(74,222,128,0.7);transform:none;line-height:1;">&#x2191;</div>
+  <!-- Label kecil "Tap di sini" melayang dekat ikon °= -->
+  <div style="position:absolute;top:78px;left:58px;background:#4ADE80;color:#000;font-size:0.65rem;font-weight:700;padding:3px 8px;border-radius:20px;pointer-events:none;z-index:5;white-space:nowrap;box-shadow:0 2px 8px rgba(74,222,128,0.5);animation:pboLabelPop 1.2s ease-in-out infinite alternate;">
+    Tap di sini &#x2191;
+  </div>
 
-  <!-- Bubble card: mulai dari bawah panah, ekor menunjuk ke atas (ke arah panah/ikon kunci) -->
-  <div id="pbo-card" style="position:absolute;top:116px;left:12px;max-width:290px;width:calc(100vw - 24px);background:#161D34;border:1.5px solid rgba(74,222,128,0.4);border-radius:16px;padding:20px 18px 16px;box-shadow:0 12px 40px rgba(0,0,0,0.7);pointer-events:all;z-index:3;animation:pboBubblePop 0.35s cubic-bezier(0.34,1.56,0.64,1);">
+  <!-- Bubble card muncul di bawah, pointer-events:all agar bisa diklik -->
+  <div id="pbo-card" style="position:absolute;top:108px;left:12px;max-width:300px;width:calc(100vw - 24px);background:#1A2240;border:1.5px solid rgba(74,222,128,0.5);border-radius:16px;padding:18px 16px 14px;box-shadow:0 8px 32px rgba(0,0,0,0.45);pointer-events:all;z-index:6;animation:pboBubblePop 0.35s cubic-bezier(0.34,1.56,0.64,1);">
 
-    <!-- Ekor bubble menunjuk ke atas, ditempatkan di x=46px dari kiri card
-         agar sejajar dengan panah dan ikon kunci di atasnya -->
-    <div style="position:absolute;top:-9px;left:42px;width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:9px solid rgba(74,222,128,0.4);"></div>
-    <div style="position:absolute;top:-7px;left:43px;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:8px solid #161D34;"></div>
+    <!-- Ekor bubble menunjuk ke atas kiri (ke arah ikon °= dan label) -->
+    <div style="position:absolute;top:-9px;left:30px;width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:9px solid rgba(74,222,128,0.5);"></div>
+    <div style="position:absolute;top:-7px;left:31px;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:8px solid #1A2240;"></div>
 
     <!-- Header -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-      <div style="width:38px;height:38px;flex-shrink:0;border-radius:50%;background:rgba(74,222,128,0.12);border:1.5px solid rgba(74,222,128,0.4);display:flex;align-items:center;justify-content:center;font-size:1.2rem;">&#x1F512;</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <div style="width:40px;height:40px;flex-shrink:0;border-radius:50%;background:rgba(74,222,128,0.15);border:1.5px solid rgba(74,222,128,0.5);display:flex;align-items:center;justify-content:center;font-size:1.3rem;">&#x1F4F7;</div>
       <div>
-        <div style="font-family:Oswald,sans-serif;font-size:1rem;color:#E9ECF6;font-weight:600;line-height:1.2;">Aktifkan Izin Kamera</div>
-        <div style="font-size:0.72rem;color:#4ADE80;margin-top:1px;">Tap ikon di pojok kiri address bar</div>
+        <div style="font-family:Oswald,sans-serif;font-size:1.05rem;color:#FFFFFF;font-weight:700;line-height:1.2;">Aktifkan Izin Kamera &amp; Mikrofon</div>
+        <div style="font-size:0.72rem;color:#4ADE80;margin-top:2px;font-weight:500;">untuk memverifikasi umur Anda</div>
+      </div>
+    </div>
+
+    <!-- Badge izin yang dibutuhkan -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:5px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.35);border-radius:20px;padding:5px 10px;">
+        <span style="font-size:0.9rem;">&#x1F4F7;</span>
+        <span style="font-size:0.75rem;color:#4ADE80;font-weight:600;">Izin Kamera</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.35);border-radius:20px;padding:5px 10px;">
+        <span style="font-size:0.9rem;">&#x1F3A4;</span>
+        <span style="font-size:0.75rem;color:#4ADE80;font-weight:600;">Izin Mikrofon</span>
       </div>
     </div>
 
     <!-- Langkah -->
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
-      <div style="display:flex;align-items:flex-start;gap:8px;">
-        <div style="min-width:20px;height:20px;border-radius:50%;background:#4ADE80;color:#000;font-size:.7rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">1</div>
-        <div style="font-size:.8rem;color:#C5CAD8;line-height:1.5;">Tap ikon <strong style="color:#E9ECF6;">&#x1F512; kunci</strong> atau <strong style="color:#E9ECF6;">&#x24D8; info</strong> di kiri address bar atas</div>
+    <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:14px;">
+      <div style="display:flex;align-items:flex-start;gap:9px;">
+        <div style="min-width:22px;height:22px;border-radius:50%;background:#4ADE80;color:#000;font-size:.72rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">1</div>
+        <div style="font-size:.82rem;color:#D0D6E8;line-height:1.5;">Tap ikon <strong style="color:#FFFFFF;">&#x25A4; atau &#x1F512;</strong> di <strong style="color:#FFFFFF;">kiri address bar</strong> atas</div>
       </div>
-      <div style="display:flex;align-items:flex-start;gap:8px;">
-        <div style="min-width:20px;height:20px;border-radius:50%;background:#4ADE80;color:#000;font-size:.7rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">2</div>
-        <div style="font-size:.8rem;color:#C5CAD8;line-height:1.5;">Pilih <strong style="color:#E9ECF6;">"Izin situs"</strong> atau <strong style="color:#E9ECF6;">"Permissions"</strong></div>
+      <div style="display:flex;align-items:flex-start;gap:9px;">
+        <div style="min-width:22px;height:22px;border-radius:50%;background:#4ADE80;color:#000;font-size:.72rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">2</div>
+        <div style="font-size:.82rem;color:#D0D6E8;line-height:1.5;">Pilih <strong style="color:#FFFFFF;">"Izin situs"</strong> atau <strong style="color:#FFFFFF;">"Permissions"</strong></div>
       </div>
-      <div style="display:flex;align-items:flex-start;gap:8px;">
-        <div style="min-width:20px;height:20px;border-radius:50%;background:#4ADE80;color:#000;font-size:.7rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">3</div>
-        <div style="font-size:.8rem;color:#C5CAD8;line-height:1.5;">Aktifkan <strong style="color:#E9ECF6;">Kamera</strong> &amp; <strong style="color:#E9ECF6;">Mikrofon</strong> &#x2192; lalu <strong style="color:#4ADE80;">muat ulang halaman</strong></div>
+      <div style="display:flex;align-items:flex-start;gap:9px;">
+        <div style="min-width:22px;height:22px;border-radius:50%;background:#4ADE80;color:#000;font-size:.72rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">3</div>
+        <div style="font-size:.82rem;color:#D0D6E8;line-height:1.5;">Aktifkan <strong style="color:#FFFFFF;">Kamera</strong> &amp; <strong style="color:#FFFFFF;">Mikrofon</strong> &#x2192; lalu <strong style="color:#4ADE80;">muat ulang halaman</strong></div>
       </div>
     </div>
 
     <!-- Tombol -->
     <div style="display:flex;gap:8px;">
-      <button onclick="closePboBubble()" style="flex:1;padding:10px 0;border-radius:9px;font-size:.82rem;font-weight:600;background:transparent;border:1px solid rgba(233,236,246,0.15);color:#8A91AC;cursor:pointer;">Tutup</button>
+      <button onclick="closePboBubble()" style="flex:1;padding:10px 0;border-radius:9px;font-size:.82rem;font-weight:600;background:transparent;border:1px solid rgba(255,255,255,0.15);color:#8A91AC;cursor:pointer;">Tutup</button>
       <button onclick="location.reload()" style="flex:2;padding:10px 0;border-radius:9px;font-size:.82rem;font-weight:700;background:#4ADE80;border:none;color:#000;cursor:pointer;">&#x1F504; Muat Ulang</button>
     </div>
   </div>
 </div>
 
-<!-- Keyframe animasi bubble & panah -->
+<!-- Keyframe animasi -->
 <style>
-@keyframes pboArrowBounce {
-  from { transform:translateY(0);    opacity:1;   }
-  to   { transform:translateY(-8px); opacity:0.5; }
+@keyframes pboHighlightPulse {
+  from { box-shadow:0 0 0 3px rgba(74,222,128,0.18), 0 0 14px 3px rgba(74,222,128,0.20); }
+  to   { box-shadow:0 0 0 5px rgba(74,222,128,0.28), 0 0 24px 8px rgba(74,222,128,0.35); }
+}
+@keyframes pboLabelPop {
+  from { transform:translateY(0);   opacity:1;   }
+  to   { transform:translateY(-4px);opacity:0.7; }
 }
 @keyframes pboBubblePop {
-  from { opacity:0; transform:scale(0.85) translateY(-8px); }
+  from { opacity:0; transform:scale(0.88) translateY(-6px); }
   to   { opacity:1; transform:scale(1)    translateY(0);    }
 }
 </style>
