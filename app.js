@@ -462,14 +462,49 @@ function connectSocket_Admin() {
     auth: { token: authToken },
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000
+    reconnectionDelay: 500,          // lebih cepat reconnect (was 1000)
+    reconnectionDelayMax: 3000,      // max delay lebih pendek (was 5000)
+    reconnectionAttempts: Infinity
   });
+
+  // Keep-alive: kirim ping ke server setiap 10 detik
+  // Mencegah Socket.IO timeout saat layar HP mati / tab background
+  let _adminKeepAlive = null;
 
   socket.on('connect', () => {
     console.log('[Socket] Admin terhubung, register...');
     socket.emit('register-admin');
+
+    // Reset dan mulai ulang keep-alive setiap connect/reconnect
+    if (_adminKeepAlive) clearInterval(_adminKeepAlive);
+    _adminKeepAlive = setInterval(() => {
+      if (socket && socket.connected) {
+        socket.emit('ping-admin');
+      }
+    }, 10000);
   });
+
+  socket.on('disconnect', () => {
+    if (_adminKeepAlive) { clearInterval(_adminKeepAlive); _adminKeepAlive = null; }
+  });
+
+  // Saat layar HP aktif kembali (dari sleep/background) → reconnect jika perlu
+  const _onVisibilityChange = () => {
+    if (document.visibilityState === 'visible' && socket) {
+      if (!socket.connected) {
+        console.log('[Socket] Layar aktif — paksa reconnect admin');
+        socket.connect();
+      } else {
+        // Sudah konek tapi mungkin missed events — register ulang
+        console.log('[Socket] Layar aktif — register ulang admin');
+        socket.emit('register-admin');
+      }
+    }
+  };
+  // Hapus listener lama jika ada (mencegah duplikat saat admin re-enter dashboard)
+  document.removeEventListener('visibilitychange', connectSocket_Admin._visHandler);
+  connectSocket_Admin._visHandler = _onVisibilityChange;
+  document.addEventListener('visibilitychange', _onVisibilityChange);
 
   // viewer-list: diterima saat connect/reconnect admin
   socket.on('viewer-list', (msg) => {
