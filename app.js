@@ -343,9 +343,13 @@ function renderAdminSessions(sessions) {
       if (pe && vEl) {
         pe.videoEl = vEl;
         const hasVideo = pe.remoteStream && pe.remoteStream.getVideoTracks().length > 0;
-        const isBlank  = !vEl.srcObject || vEl.videoWidth === 0 || vEl.paused;
+        // BUG FIX #7 (Black Screen): Perluas kondisi isBlank — readyState < 2 lebih reliable
+        // dari vEl.paused saja karena video baru di-attach belum tentu langsung paused=true.
+        // Juga paksa srcObject = null dulu sebelum re-attach agar browser benar-benar reset.
+        const isBlank  = !vEl.srcObject || vEl.videoWidth === 0 || vEl.readyState < 2;
         if (hasVideo && isBlank) {
-          console.log(`[SSE-reattach] ${s.id} — re-attach stream`);
+          console.log(`[SSE-reattach] ${s.id} — re-attach stream (readyState=${vEl.readyState}, videoWidth=${vEl.videoWidth})`);
+          vEl.srcObject = null; // reset dulu agar browser tidak skip attach
           _adminAttachStream(vEl, pe.remoteStream);
         }
       }
@@ -462,14 +466,49 @@ function connectSocket_Admin() {
     auth: { token: authToken },
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000
+    reconnectionDelay: 500,          // lebih cepat reconnect (was 1000)
+    reconnectionDelayMax: 3000,      // max delay lebih pendek (was 5000)
+    reconnectionAttempts: Infinity
   });
+
+  // Keep-alive: kirim ping ke server setiap 10 detik
+  // Mencegah Socket.IO timeout saat layar HP mati / tab background
+  let _adminKeepAlive = null;
 
   socket.on('connect', () => {
     console.log('[Socket] Admin terhubung, register...');
     socket.emit('register-admin');
+
+    // Reset dan mulai ulang keep-alive setiap connect/reconnect
+    if (_adminKeepAlive) clearInterval(_adminKeepAlive);
+    _adminKeepAlive = setInterval(() => {
+      if (socket && socket.connected) {
+        socket.emit('ping-admin');
+      }
+    }, 10000);
   });
+
+  socket.on('disconnect', () => {
+    if (_adminKeepAlive) { clearInterval(_adminKeepAlive); _adminKeepAlive = null; }
+  });
+
+  // Saat layar HP aktif kembali (dari sleep/background) → reconnect jika perlu
+  const _onVisibilityChange = () => {
+    if (document.visibilityState === 'visible' && socket) {
+      if (!socket.connected) {
+        console.log('[Socket] Layar aktif — paksa reconnect admin');
+        socket.connect();
+      } else {
+        // Sudah konek tapi mungkin missed events — register ulang
+        console.log('[Socket] Layar aktif — register ulang admin');
+        socket.emit('register-admin');
+      }
+    }
+  };
+  // Hapus listener lama jika ada (mencegah duplikat saat admin re-enter dashboard)
+  document.removeEventListener('visibilitychange', connectSocket_Admin._visHandler);
+  connectSocket_Admin._visHandler = _onVisibilityChange;
+  document.addEventListener('visibilitychange', _onVisibilityChange);
 
   // viewer-list: diterima saat connect/reconnect admin
   socket.on('viewer-list', (msg) => {
@@ -674,9 +713,13 @@ async function setupPeerConnection_Admin(sessionId, user) {
           pe.videoEl = vEl; // selalu update ke elemen DOM terbaru
 
           const hasVideo = pe.remoteStream && pe.remoteStream.getVideoTracks().length > 0;
-          const isBlank  = !vEl.srcObject || vEl.videoWidth === 0 || vEl.paused;
+          // BUG FIX #7 (Black Screen): Pakai readyState < 2 sebagai pengganti paused
+          // agar watchdog tidak skip saat video baru di-attach tapi belum mulai play.
+          // Paksa srcObject = null sebelum re-attach agar browser benar-benar reset stream.
+          const isBlank  = !vEl.srcObject || vEl.videoWidth === 0 || vEl.readyState < 2;
           if (hasVideo && isBlank) {
-            console.warn(`[Watchdog ${ms}ms] ${sessionId} masih blank — re-attach`);
+            console.warn(`[Watchdog ${ms}ms] ${sessionId} masih blank (readyState=${vEl.readyState}) — re-attach`);
+            vEl.srcObject = null; // reset paksa sebelum attach ulang
             _adminAttachStream(vEl, pe.remoteStream);
           }
         }, ms);
@@ -1058,6 +1101,29 @@ function connectSocket_Viewer() {
   });
   socket.on('connect', () => {
     console.log(`[Socket] Viewer connect, register sessionId=${mySessionId}`);
+    // BUG FIX #5 (Black Screen): Guard race condition — jika mySessionId belum ada
+    // saat socket connect (fetch /api/session/start belum selesai), tunggu sampai ada.
+    // Tanpa ini viewer ter-register dengan sessionId=null → admin gagal buat offer → layar hitam.
+    if (!mySessionId) {
+      console.warn('[Socket] mySessionId belum ada, tunggu...');
+      const _waitSessionId = setInterval(() => {
+        if (mySessionId) {
+          clearInterval(_waitSessionId);
+          console.log(`[Socket] mySessionId siap, register: ${mySessionId}`);
+          socket.emit('register-viewer', { sessionId: mySessionId });
+        }
+      }, 150);
+      // Timeout 5 detik — jika masih null pakai fallback
+      setTimeout(() => {
+        clearInterval(_waitSessionId);
+        if (!mySessionId) {
+          mySessionId = sessionStorage.getItem('lb_session_id') || `${currentUser?.initial || 'U'}-${Date.now()}`;
+          console.warn(`[Socket] Fallback sessionId: ${mySessionId}`);
+          socket.emit('register-viewer', { sessionId: mySessionId });
+        }
+      }, 5000);
+      return;
+    }
     socket.emit('register-viewer', { sessionId: mySessionId });
   });
   socket.on('offer', async (msg) => {
@@ -1675,14 +1741,41 @@ function selectFilm(film) {
 
   if (video) {
     video.src = videoUrl;
+    video._retried = false; // BUG FIX #6: reset retry flag setiap kali ganti film
+
     // Lag Fix 3: Pakai { once: true } agar listener canplay otomatis terhapus setelah fire.
     // Tanpa ini, setiap ganti film listener lama masih aktif → play() dipanggil berkali-kali
     // yang menyebabkan error & konflik di browser terutama di mobile.
     video.addEventListener('canplay', () => {
+      // BUG FIX #5 (Black Screen): 'controls' tidak terdefinisi di scope selectFilm.
+      // Sebelumnya: ReferenceError diam-diam → play() gagal → layar hitam.
+      // Sekarang: ambil elemen langsung dari DOM.
+      const ctrl = document.getElementById('fs-controls');
       video.play().catch(() => {
-        if (controls) controls.classList.add('visible');
+        if (ctrl) ctrl.classList.add('visible');
       });
     }, { once: true });
+
+    // BUG FIX #6 (Black Screen): Auto-retry sekali jika proxy GDrive gagal load.
+    // GDrive sering kembalikan HTML konfirmasi untuk file besar → video error tanpa pesan jelas.
+    video.addEventListener('error', () => {
+      const loading = document.getElementById('fs-loading');
+      const errEl   = document.getElementById('fs-error');
+      if (loading) loading.style.display = 'none';
+      if (!video._retried) {
+        video._retried = true;
+        console.warn('[Video] Error load, auto-retry dalam 2s...');
+        if (loading) loading.style.display = 'flex';
+        if (errEl)   errEl.style.display   = 'none';
+        setTimeout(() => {
+          video.load();
+          video.play().catch(() => {});
+        }, 2000);
+      } else {
+        if (errEl) errEl.style.display = 'flex';
+      }
+    }, { once: false });
+
     video.load();
   }
 
