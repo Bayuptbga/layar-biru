@@ -16,15 +16,12 @@ const API_BASE = (
   window.location.hostname === '127.0.0.1'
 ) ? 'http://localhost:3000' : '';
 
-// TURN servers — OpenRelay (gratis, tanpa batas waktu)
+// TURN servers — ExpressTURN (kredensial pribadi)
 const TURN_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'stun:openrelay.metered.ca:80' },
-  { urls: 'turn:openrelay.metered.ca:80',            username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443',           username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+  { urls: 'turn:free.expressturn.com:3478',               username: '000000002099123036', credential: 'mLhN+5+xpLZ66vPq8W0V0X2uMqU=' },
+  { urls: 'turn:free.expressturn.com:3478?transport=tcp', username: '000000002099123036', credential: 'mLhN+5+xpLZ66vPq8W0V0X2uMqU=' }
 ];
 
 // ================================================================
