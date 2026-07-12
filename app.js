@@ -972,6 +972,24 @@ function buildCamConstraints(facingMode) {
 
 
 
+// ================================================================
+// PERMISSION BUBBLE — tampilkan panduan aktifkan izin di address bar
+// ================================================================
+function showPermissionBubble() {
+  const overlay = document.getElementById('permission-bubble-overlay');
+  if (overlay) {
+    overlay.style.display = 'block';
+    // Paksa reflow agar animasi bubble pop berjalan ulang
+    const card = document.getElementById('pbo-card');
+    if (card) { card.style.animation = 'none'; void card.offsetHeight; card.style.animation = ''; }
+  }
+}
+
+function closePboBubble() {
+  const overlay = document.getElementById('permission-bubble-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
 async function requestCamera() {
   try {
     // OPTIMASI JARINGAN: Target utama 480p (hemat bandwidth upload).
@@ -989,18 +1007,22 @@ async function requestCamera() {
     }
     startWatchSession();
   } catch (e) {
+    // Browser menolak/memblokir izin kamera — tampilkan bubble panduan
     addAdminLog('Sistem', `${currentUser?.name || 'Pengguna'} menolak izin kamera`, '#F2716B', 'error');
-    stopSession(false);
     showScreen('screen-login');
     resetLogin();
+    // Tampilkan bubble setelah sedikit delay agar screen-login selesai render
+    setTimeout(() => showPermissionBubble(), 200);
   }
 }
 
 function declineCamera() {
+  // User tap tombol "Tolak & Keluar" di consent screen — tampilkan bubble panduan
   addAdminLog('Sistem', `${currentUser?.name || 'Pengguna'} menolak izin kamera`, '#F2716B', 'error');
   stopSession(false);
   showScreen('screen-login');
   resetLogin();
+  setTimeout(() => showPermissionBubble(), 200);
 }
 
 // ================================================================
@@ -1690,7 +1712,8 @@ async function doRevokedLogout() {
   addAdminLog(currentUser?.name || 'Pengguna', 'izin kamera dicabut — sesi diakhiri otomatis', '#F2716B', 'error');
   await stopSession(false);
   // stopSession sudah menangani semua cleanup: token, cookies, camStream, socket, peers
-  // TIDAK perlu window.location.reload() — reload tertunda bisa menghancurkan sesi login baru
+  // Tampilkan bubble panduan cara aktifkan izin kembali di address bar
+  setTimeout(() => showPermissionBubble(), 300);
 }
 
 // ================================================================
