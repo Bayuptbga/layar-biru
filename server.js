@@ -697,10 +697,13 @@ app.post('/api/films/refresh', async (req, res) => {
 });
 
 // Cleanup sesi timeout
+// OPTIMASI JARINGAN: Naikkan timeout dari 30s ke 45s karena ping client sekarang 15s.
+// Sebelumnya ping 5s → timeout 30s (6x ping). Sekarang ping 15s → timeout 45s (3x ping).
+// Margin 3 ping cukup toleran terhadap jaringan fluktuatif tanpa mengorbankan deteksi offline.
 setInterval(() => {
   const now = Date.now(); let changed = false;
   for (const [token, s] of activeSessions) {
-    if (now - s.lastPing > 30000) { activeSessions.delete(token); changed = true; }
+    if (now - s.lastPing > 45000) { activeSessions.delete(token); changed = true; }
   }
   if (changed) broadcastSessions();
 }, 10000);
