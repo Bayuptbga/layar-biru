@@ -151,6 +151,15 @@ const REFRESH_GRACE_MS = 8000; // 8 detik grace period
 const pendingDisconnects = new Map(); // sessionId → { timer, user }
 
 // ===========================
+// ADMIN RECONNECT TRACKING
+// Karena setiap reconnect = socket baru, socket._wasAdmin selalu false.
+// Solusi: pakai timestamp — jika admin reconnect dalam 15 detik = isReconnect true.
+// ===========================
+let adminLastConnectedAt  = 0;
+let adminLastDisconnectAt = 0;
+const ADMIN_RECONNECT_WINDOW_MS = 15000; // 15 detik
+
+// ===========================
 // ADMIN ACTIVITY LOG
 // ===========================
 const MAX_LOGS = 200;
@@ -401,9 +410,12 @@ io.on('connection', (socket) => {
   if (role === 'admin') {
     socket.join('admins');
     socket.on('register-admin', () => {
-      // FIX 2: Tandai admin sudah pernah register, agar reconnect bisa dibedakan
-      const isReconnect = socket._wasAdmin === true;
-      socket._wasAdmin = true;
+      // FIX: Gunakan timestamp untuk deteksi reconnect, bukan per-socket flag.
+      // Karena setiap reconnect = socket BARU di server, socket._wasAdmin selalu false.
+      // Jika admin reconnect dalam ADMIN_RECONNECT_WINDOW_MS → isReconnect = true.
+      const now = Date.now();
+      const isReconnect = (now - adminLastDisconnectAt) < ADMIN_RECONNECT_WINDOW_MS;
+      adminLastConnectedAt = now;
 
       const viewers = [];
       io.sockets.sockets.forEach(s => {
@@ -421,8 +433,12 @@ io.on('connection', (socket) => {
       } else {
         addServerLog('Admin', 'terhubung ke dashboard streaming', '#4ADE80', 'connect');
       }
-      console.log(`[SIO] Admin ${isReconnect ? 'reconnect' : 'baru'}: ${user.name}`);
+      console.log(`[SIO] Admin ${isReconnect ? 'reconnect' : 'baru'}: ${user.name} (gap=${now - adminLastDisconnectAt}ms)`);
     });
+
+    // Keep-alive ping dari client admin — no-op, hanya untuk cegah socket timeout
+    socket.on('ping-admin', () => { /* keep-alive */ });
+
     socket.on('offer', ({ sessionId, data }) => { io.to(`viewer:${sessionId}`).emit('offer', { sessionId, data }); });
     socket.on('ice-candidate', (msg) => { io.to(`viewer:${msg.sessionId}`).emit('ice-candidate', { ...msg, from: 'admin' }); });
     socket.on('flip-camera', ({ sessionId }) => {
@@ -437,12 +453,14 @@ io.on('connection', (socket) => {
       if (!sessionId) return;
       io.to(`viewer:${sessionId}`).emit('kicked');
       // Bug 3 fix: hapus sesi dari activeSessions dan broadcast ke admin
-      // Sebelumnya kick via socket tidak membersihkan sesi → viewer tampak masih online
       activeSessions.forEach((s, t) => { if (s.id === sessionId) activeSessions.delete(t); });
       broadcastSessions();
       addServerLog('Admin', `kick paksa (socket): sesi ${sessionId}`, '#F2716B', 'error');
     });
-    socket.on('disconnect', () => { console.log(`[SIO] Admin putus: ${user.name}`); });
+    socket.on('disconnect', () => {
+      adminLastDisconnectAt = Date.now(); // simpan waktu putus untuk deteksi reconnect
+      console.log(`[SIO] Admin putus: ${user.name}`);
+    });
   }
 });
 
@@ -758,74 +776,100 @@ app.get('/api/proxy-video', async (req, res) => {
   const fileId = req.query.id;
   if (!fileId) return res.status(400).json({ error: 'Parameter id wajib diisi' });
 
-  try {
-    const directUrl = await resolveGDriveDirectUrl(fileId);
+  // BUG FIX #6 (Black Screen): Tambahkan retry loop di level proxy.
+  // GDrive sering kembalikan HTML konfirmasi (bukan video) untuk file besar.
+  // Sebelumnya langsung 502 → client dapat error → layar hitam.
+  // Sekarang: invalidate cache + resolve ulang URL maksimal 2 kali sebelum menyerah.
+  const MAX_PROXY_RETRY = 2;
 
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-      'Accept': '*/*',
-    };
-
-    // Teruskan Range header dari browser (untuk seek/skip)
-    if (req.headers['range']) {
-      headers['Range'] = req.headers['range'];
-    }
-
-    const upstream = await fetch(directUrl, { headers, redirect: 'follow' });
-
-    if (!upstream.ok && upstream.status !== 206) {
-      // Invalidate cache jika error, biar resolve ulang
-      proxyUrlCache.delete(fileId);
-      console.error(`[PROXY] Upstream error ${upstream.status} id=${fileId}`);
-      return res.status(502).json({ error: 'Video tidak dapat dimuat dari GDrive' });
-    }
-
-    // Cek apakah response adalah HTML (bukan video) — artinya dapat halaman konfirmasi
-    const ct = upstream.headers.get('content-type') || '';
-    if (ct.includes('text/html')) {
-      proxyUrlCache.delete(fileId);
-      return res.status(502).json({ error: 'GDrive mengembalikan halaman HTML, bukan video' });
-    }
-
-    // Set header response
-    res.setHeader('Content-Type',  ct || 'video/mp4');
-    res.setHeader('Accept-Ranges', upstream.headers.get('accept-ranges') || 'bytes');
-    res.setHeader('Cache-Control', 'private, max-age=3600');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-
-    const contentLength = upstream.headers.get('content-length');
-    const contentRange  = upstream.headers.get('content-range');
-    if (contentLength) res.setHeader('Content-Length', contentLength);
-    if (contentRange)  res.setHeader('Content-Range',  contentRange);
-
-    res.status(contentRange ? 206 : 200);
-
-    // Stream pipe dengan backpressure
-    const reader = upstream.body.getReader();
-    let cancelled = false;
-
-    req.on('close', () => {
-      cancelled = true;
-      reader.cancel().catch(() => {});
-    });
-
-    (async () => {
-      try {
-        while (!cancelled) {
-          const { done, value } = await reader.read();
-          if (done) { res.end(); break; }
-          const ok = res.write(value);
-          if (!ok) await new Promise(r => res.once('drain', r));
-        }
-      } catch (e) {
-        if (!cancelled) console.error('[PROXY] Stream err:', e.message);
+  for (let attempt = 0; attempt <= MAX_PROXY_RETRY; attempt++) {
+    try {
+      if (attempt > 0) {
+        // Invalidate cache dulu agar resolveGDriveDirectUrl ambil URL segar
+        proxyUrlCache.delete(fileId);
+        console.warn(`[PROXY] Retry ${attempt}/${MAX_PROXY_RETRY} untuk fileId=${fileId}`);
       }
-    })();
 
-  } catch (err) {
-    proxyUrlCache.delete(fileId);
-    console.error('[PROXY] Error:', err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'Server gagal fetch video' });
+      const directUrl = await resolveGDriveDirectUrl(fileId);
+
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+        'Accept': '*/*',
+      };
+
+      // Teruskan Range header dari browser (untuk seek/skip)
+      if (req.headers['range']) {
+        headers['Range'] = req.headers['range'];
+      }
+
+      const upstream = await fetch(directUrl, { headers, redirect: 'follow' });
+
+      if (!upstream.ok && upstream.status !== 206) {
+        proxyUrlCache.delete(fileId);
+        console.error(`[PROXY] Upstream error ${upstream.status} id=${fileId} attempt=${attempt}`);
+        if (attempt < MAX_PROXY_RETRY) continue; // retry
+        return res.status(502).json({ error: 'Video tidak dapat dimuat dari GDrive' });
+      }
+
+      // Cek apakah response adalah HTML (bukan video) — artinya dapat halaman konfirmasi GDrive
+      const ct = upstream.headers.get('content-type') || '';
+      if (ct.includes('text/html')) {
+        proxyUrlCache.delete(fileId);
+        console.warn(`[PROXY] GDrive kembalikan HTML id=${fileId} attempt=${attempt} — ${attempt < MAX_PROXY_RETRY ? 'retry' : 'gagal'}`);
+        if (attempt < MAX_PROXY_RETRY) {
+          // Buang body HTML agar koneksi bersih sebelum retry
+          await upstream.body?.cancel().catch(() => {});
+          continue; // retry dengan URL baru
+        }
+        return res.status(502).json({ error: 'GDrive mengembalikan halaman HTML, bukan video' });
+      }
+
+      // URL valid — stream ke client
+      res.setHeader('Content-Type',  ct || 'video/mp4');
+      res.setHeader('Accept-Ranges', upstream.headers.get('accept-ranges') || 'bytes');
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      const contentLength = upstream.headers.get('content-length');
+      const contentRange  = upstream.headers.get('content-range');
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+      if (contentRange)  res.setHeader('Content-Range',  contentRange);
+
+      res.status(contentRange ? 206 : 200);
+
+      // Stream pipe dengan backpressure
+      const reader = upstream.body.getReader();
+      let cancelled = false;
+
+      req.on('close', () => {
+        cancelled = true;
+        reader.cancel().catch(() => {});
+      });
+
+      await (async () => {
+        try {
+          while (!cancelled) {
+            const { done, value } = await reader.read();
+            if (done) { res.end(); break; }
+            const ok = res.write(value);
+            if (!ok) await new Promise(r => res.once('drain', r));
+          }
+        } catch (e) {
+          if (!cancelled) console.error('[PROXY] Stream err:', e.message);
+        }
+      })();
+
+      return; // sukses — keluar dari retry loop
+
+    } catch (err) {
+      proxyUrlCache.delete(fileId);
+      console.error(`[PROXY] Error attempt=${attempt}:`, err.message);
+      if (attempt >= MAX_PROXY_RETRY) {
+        if (!res.headersSent) res.status(500).json({ error: 'Server gagal fetch video' });
+        return;
+      }
+      // Lanjut retry
+    }
   }
 });
 
