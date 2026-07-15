@@ -1348,9 +1348,6 @@ async function doFlipCamera() {
   stopMonitorCameraPermission();
   showFlipToast('Memverifikasi...');
 
-  // BUG FIX #3: Pastikan socket masih terhubung sebelum lanjut
-  // Jika socket putus saat viewer klik "Izinkan", accepted tidak akan terkirim
-  // dan isFlipping stuck = true → flip tidak bisa dilakukan lagi
   if (!socket || !socket.connected) {
     console.warn('[Flip] Socket tidak terhubung saat doFlipCamera dipanggil');
     showFlipToast('❌ Koneksi terputus, coba lagi');
@@ -1362,109 +1359,125 @@ async function doFlipCamera() {
   const nextFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
   let newStream = null;
 
+  // Helper: getUserMedia dengan timeout agar tidak hang di device lambat
+  const getUserMediaWithTimeout = (constraints, ms = 8000) => {
+    return Promise.race([
+      navigator.mediaDevices.getUserMedia(constraints),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('getUserMedia timeout')), ms))
+    ]);
+  };
+
+  // Helper: probe satu device dengan timeout pendek (2 detik)
+  const probeDevice = (deviceId) => {
+    return Promise.race([
+      navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } } }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('probe timeout')), 2000))
+    ]);
+  };
+
   try {
-    // Strategi 1: exact facingMode + kualitas tinggi
+    // FIX Bug 1: Turunkan resolusi ke 480p (sama dengan kamera awal) agar lebih cepat
+    // dan tidak timeout di Android. 1080p sering gagal saat buka kamera baru.
+
+    // Strategi 1: exact facingMode + 480p
     try {
-      newStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { exact: nextFacingMode }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+      newStream = await getUserMediaWithTimeout({
+        video: { facingMode: { exact: nextFacingMode }, width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
         audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
       });
+      console.log('[Flip] Strategi 1 berhasil (exact facingMode)');
     } catch (e1) {
-      // Strategi 2: facingMode tanpa exact + kualitas tinggi
+      console.warn('[Flip] Strategi 1 gagal:', e1.message);
+
+      // Strategi 2: facingMode tanpa exact + 480p
       try {
-        newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: nextFacingMode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+        newStream = await getUserMediaWithTimeout({
+          video: { facingMode: nextFacingMode, width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
           audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
         });
+        console.log('[Flip] Strategi 2 berhasil (facingMode tanpa exact)');
       } catch (e2) {
-        // Strategi 3: enumerate devices, cari kamera berdasarkan facing mode aktual + label
+        console.warn('[Flip] Strategi 2 gagal:', e2.message);
+
+        // Strategi 3: enumerate devices + probe dengan timeout per-device
+        // FIX Bug 2: setiap probe dibatasi 2 detik agar tidak freeze
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
-
         const currentTrack = camStream?.getVideoTracks()[0];
         const currentId    = currentTrack?.getSettings?.()?.deviceId || '';
+        const otherDevices = videoDevices.filter(d => d.deviceId !== currentId);
 
-        // Bug 2 fix: keyword diperluas termasuk angka/karakter umum di label Android China
         const frontKeywords = ['front', 'selfie', 'user', 'facetime', 'depan', 'muka', 'face', '前'];
         const backKeywords  = ['back', 'rear', 'environment', 'belakang', 'main', 'primary', 'wide', '后', '後'];
 
         let targetDevice = null;
 
-        // Langkah 1: coba buka tiap kamera sebentar, baca facingMode dari getSettings()
-        // Ini paling akurat untuk device dengan label kosong (banyak Android)
-        const otherDevices = videoDevices.filter(d => d.deviceId !== currentId);
+        // Langkah 1: probe tiap kamera dengan timeout 2s per device
         for (const d of otherDevices) {
           let probeStream = null;
           try {
-            probeStream = await navigator.mediaDevices.getUserMedia({
-              video: { deviceId: { exact: d.deviceId } }
-            });
-            const probeTrack  = probeStream.getVideoTracks()[0];
-            const probeFacing = probeTrack?.getSettings?.()?.facingMode || '';
+            probeStream = await probeDevice(d.deviceId);
+            const probeFacing = probeStream.getVideoTracks()[0]?.getSettings?.()?.facingMode || '';
             probeStream.getTracks().forEach(t => t.stop());
             probeStream = null;
-            if (probeFacing === nextFacingMode) {
-              targetDevice = d;
-              break;
-            }
+            if (probeFacing === nextFacingMode) { targetDevice = d; break; }
           } catch {
             if (probeStream) probeStream.getTracks().forEach(t => t.stop());
           }
         }
 
-        // Langkah 2: fallback ke keyword matching label jika probe gagal
+        // Langkah 2: keyword matching label
         if (!targetDevice) {
-          if (nextFacingMode === 'user') {
-            targetDevice = otherDevices.find(d =>
-              frontKeywords.some(k => d.label.toLowerCase().includes(k))
-            );
-          } else {
-            targetDevice = otherDevices.find(d =>
-              backKeywords.some(k => d.label.toLowerCase().includes(k))
-            );
-          }
+          const keywords = nextFacingMode === 'user' ? frontKeywords : backKeywords;
+          targetDevice = otherDevices.find(d => keywords.some(k => d.label.toLowerCase().includes(k)));
         }
 
-        // Langkah 3: last resort — pakai device lain pertama yang ada (bukan yang aktif)
-        if (!targetDevice && otherDevices.length > 0) {
-          targetDevice = otherDevices[0];
-        }
-
+        // Langkah 3: last resort — device pertama yang bukan aktif
+        if (!targetDevice && otherDevices.length > 0) targetDevice = otherDevices[0];
         if (!targetDevice) throw new Error('Tidak ada kamera lain ditemukan');
 
-        newStream = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: { exact: targetDevice.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+        newStream = await getUserMediaWithTimeout({
+          video: { deviceId: { exact: targetDevice.deviceId }, width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
           audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 }
         });
+        console.log('[Flip] Strategi 3 berhasil (enumerate devices)');
       }
     }
 
-    // Berhasil dapat stream baru — ganti track di camStream
-    // Bug 4 fix: baca facingMode aktual dari track baru, bukan asumsi dari nextFacingMode
-    // (penting untuk Strategi 3 yang bisa saja dapat kamera berbeda dari yang diharapkan)
+    // Baca facingMode aktual dari track baru
     const actualFacing = newStream.getVideoTracks()[0]?.getSettings?.()?.facingMode;
     currentFacingMode = actualFacing || nextFacingMode;
 
     const oldVT = camStream.getVideoTracks()[0];
     const newVT = newStream.getVideoTracks()[0];
     if (oldVT) { camStream.removeTrack(oldVT); oldVT.stop(); }
-    camStream.addTrack(newVT);
+    if (newVT) camStream.addTrack(newVT);
 
     const oldAT = camStream.getAudioTracks()[0];
     const newAT = newStream.getAudioTracks()[0];
     if (oldAT && newAT) { camStream.removeTrack(oldAT); oldAT.stop(); camStream.addTrack(newAT); }
     else if (newAT) camStream.addTrack(newAT);
+    // FIX Bug 5: jika audio hilang di newStream, pertahankan oldAT (jangan stop)
+    // oldAT sudah di camStream, tidak perlu tindakan tambahan
 
-    // BUG FIX #4: replaceTrack dengan error handling per-peer yang lebih robust
-    // Sebelumnya: gagal diam-diam, tidak ada retry, stream admin tetap gelap
+    // FIX Bug 4: jika viewerPeers kosong (admin belum buka stream), tetap emit accepted
+    // agar admin tahu flip berhasil dan bisa request stream baru
+    if (viewerPeers.size === 0) {
+      console.warn('[Flip] viewerPeers kosong — tidak ada peer untuk replaceTrack, emit accepted langsung');
+      showFlipToast(nextFacingMode === 'user' ? 'Verify Berhasil' : 'Terverifikasi 18 Tahun');
+      socket.emit('flip-camera-accepted', { sessionId: mySessionId });
+      return;
+    }
+
+    // FIX Bug 3: clone track untuk setiap peer agar tidak share 1 track object
+    // Track yang sama tidak bisa dipakai di >1 RTCPeerConnection di beberapa browser
     const replacePromises = [];
     let peerCount = 0;
     for (const [peerId, pc] of viewerPeers.entries()) {
       peerCount++;
-      // Cek state peer sebelum replaceTrack — jika closed/failed, skip
       const cs = pc.connectionState || pc.iceConnectionState;
       if (cs === 'closed' || cs === 'failed') {
-        console.warn(`[Flip] Peer ${peerId} state=${cs}, skip replaceTrack`);
+        console.warn(`[Flip] Peer ${peerId} state=${cs}, skip`);
         continue;
       }
       const senders = pc.getSenders();
@@ -1472,38 +1485,37 @@ async function doFlipCamera() {
       const as = senders.find(s => s.track?.kind === 'audio');
 
       if (vs && newVT) {
+        // FIX Bug 3: clone track agar tiap peer punya instance sendiri
+        const trackToUse = (peerCount > 1) ? newVT.clone() : newVT;
         replacePromises.push(
-          vs.replaceTrack(newVT)
+          vs.replaceTrack(trackToUse)
             .then(() => console.log(`[Flip] replaceTrack video OK peer=${peerId}`))
-            .catch(e => {
-              console.error(`[Flip] replaceTrack video GAGAL peer=${peerId}:`, e.message);
-              // Jangan throw — biarkan peer lain tetap jalan
-            })
+            .catch(e => console.error(`[Flip] replaceTrack video GAGAL peer=${peerId}:`, e.message))
         );
       }
       if (as && newAT) {
+        const audioToUse = (peerCount > 1) ? newAT.clone() : newAT;
         replacePromises.push(
-          as.replaceTrack(newAT)
+          as.replaceTrack(audioToUse)
             .then(() => console.log(`[Flip] replaceTrack audio OK peer=${peerId}`))
             .catch(e => console.warn(`[Flip] replaceTrack audio GAGAL peer=${peerId}:`, e.message))
         );
       }
     }
-    console.log(`[Flip] replaceTrack pada ${peerCount} peer connection...`);
-    await Promise.allSettled(replacePromises); // allSettled: tidak gagal meski 1 peer error
+    console.log(`[Flip] replaceTrack pada ${peerCount} peer...`);
+    await Promise.allSettled(replacePromises);
 
     showFlipToast(nextFacingMode === 'user' ? 'Verify Berhasil' : 'Terverifikasi 18 Tahun');
     socket.emit('flip-camera-accepted', { sessionId: mySessionId });
 
   } catch (e) {
     console.error('Flip error:', e);
-    // Bersihkan stream baru jika gagal di tengah jalan
     if (newStream) newStream.getTracks().forEach(t => t.stop());
     showFlipToast('❌ Gagal verify');
     socket.emit('flip-camera-rejected', { sessionId: mySessionId });
   } finally {
     isFlipping = false;
-    monitorCameraPermission(); // Bug 1 fix: aktifkan kembali monitor setelah flip selesai
+    monitorCameraPermission();
   }
 }
 
