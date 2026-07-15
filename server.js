@@ -506,7 +506,9 @@ app.post('/api/login', async (req, res) => {
 
   const initial = generateInitial(trimmedName);
   for (const [oldToken, s] of activeSessions) {
-    if (s.name && s.name.toLowerCase() === trimmedNameLower) activeSessions.delete(oldToken);
+    // FIX Bug 5: field yang benar adalah s.user.name, bukan s.name
+    // Sebelumnya sesi lama tidak pernah dihapus → pengguna sama bisa punya 2 sesi aktif
+    if (s.user && s.user.name.toLowerCase() === trimmedNameLower) activeSessions.delete(oldToken);
   }
 
   const token = jwt.sign({ name: trimmedName, initial, role: 'viewer' }, JWT_SECRET, { expiresIn: '8h' });
