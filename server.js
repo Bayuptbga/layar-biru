@@ -173,8 +173,8 @@ function addServerLog(user, action, color = '#5B8CFF', type = '') {
     action,
     color,
     type,
-    time:      now.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit', timeZone:'Asia/Jakarta' }),
-    date:      now.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric', timeZone:'Asia/Jakarta' }),
+    time:      now.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit', timeZone:'Asia/Makassar' }),
+    date:      now.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric', timeZone:'Asia/Makassar' }),
     timestamp: now.getTime()
   };
   serverLogs.unshift(entry);
@@ -517,10 +517,10 @@ app.post('/api/login', async (req, res) => {
   // tapi karena login dan session/start terpisah, kita hitung activeSessions.size + 1
   // sebagai estimasi (pengguna ini belum terdaftar di activeSessions saat login).
   // Notifikasi di-await agar error tidak diam-diam terlewat.
-  const waktu     = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' });
+  const waktu     = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Makassar' });
   const totalSesi = activeSessions.size + 1; // +1 karena pengguna ini belum masuk activeSessions
   sendTelegramNotif(
-`🟢 <b>Pengguna Baru Masuk</b>\n\n👤 <b>Nama</b>    : ${trimmedName}\n🕐 <b>Waktu</b>   : ${waktu} WIB\n📊 <b>Sesi aktif</b>: ${totalSesi} pengguna\n\n— <i>Layar Biru Dashboard</i>`
+`🟢 <b>Pengguna Baru Masuk</b>\n\n👤 <b>Nama</b>    : ${trimmedName}\n🕐 <b>Waktu</b>   : ${waktu} WITA\n📊 <b>Sesi aktif</b>: ${totalSesi} pengguna\n\n— <i>Layar Biru Dashboard</i>`
   ).catch(e => console.error('[TELEGRAM] Login notif gagal:', e.message));
 
   res.json({ success: true, token, user: { name: trimmedName, initial, role: 'viewer' } });
@@ -603,9 +603,9 @@ app.post('/api/logout', (req, res) => {
       broadcastSessions();
       addServerLog(d.name, 'logout / mengakhiri sesi', '#F2A93B', 'logout');
       if (d.role === 'viewer') {
-        const waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' });
+        const waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Makassar' });
         sendTelegramNotif(
-`🔴 <b>Pengguna Keluar</b>\n\n👤 <b>Nama</b>    : ${d.name}\n🕐 <b>Waktu</b>   : ${waktu} WIB\n⏱ <b>Durasi</b>  : ${dur} menit\n\n— <i>Layar Biru Dashboard</i>`
+`🔴 <b>Pengguna Keluar</b>\n\n👤 <b>Nama</b>    : ${d.name}\n🕐 <b>Waktu</b>   : ${waktu} WITA\n⏱ <b>Durasi</b>  : ${dur} menit\n\n— <i>Layar Biru Dashboard</i>`
         );
       }
     } catch {}
