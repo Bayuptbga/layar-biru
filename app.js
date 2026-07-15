@@ -436,29 +436,56 @@ function _ensureAdminCard(sessionId, user) {
 // Helper global: attach stream ke video element dengan retry dan muted-safe
 function _adminAttachStream(videoEl, stream) {
   if (!videoEl || !stream) return;
-  videoEl.muted    = true;  // wajib muted untuk autoplay policy
+
+  // Pastikan stream punya track aktif sebelum attach
+  const activeTracks = stream.getTracks().filter(t => t.readyState === 'live');
+  if (activeTracks.length === 0) {
+    console.warn('[AttachStream] Stream tidak punya track live, skip attach');
+    return;
+  }
+
+  videoEl.muted     = true; // wajib muted untuk autoplay policy mobile
   videoEl.srcObject = null;
   videoEl.srcObject = stream;
+
+  const showTapOverlay = () => {
+    const c = videoEl.closest('.sc-video-container');
+    if (c && !c.querySelector('.tap-to-play-overlay')) {
+      const ov = document.createElement('div');
+      ov.className = 'tap-to-play-overlay';
+      ov.style.cssText = 'position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);cursor:pointer;border-radius:8px;';
+      ov.innerHTML = '<div style="text-align:center;color:#fff;font-size:.75rem;"><div style="font-size:1.8rem;margin-bottom:6px;">▶</div><div>Tap untuk lihat video</div></div>';
+      ov.addEventListener('click', () => {
+        videoEl.play().catch(() => {});
+        ov.remove();
+      }, { once: true });
+      c.appendChild(ov);
+    }
+  };
+
   const doPlay = () => {
+    // Hapus overlay lama jika ada (dari attempt sebelumnya)
+    videoEl.closest('.sc-video-container')?.querySelector('.tap-to-play-overlay')?.remove();
     videoEl.play().catch(err => {
-      if (err.name === 'NotAllowedError') {
-        // Sudah muted tapi tetap diblokir (sangat jarang) — tampilkan overlay tap
-        const c = videoEl.closest('.sc-video-container');
-        if (c && !c.querySelector('.tap-to-play-overlay')) {
-          const ov = document.createElement('div');
-          ov.className = 'tap-to-play-overlay';
-          ov.style.cssText = 'position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);cursor:pointer;border-radius:8px;';
-          ov.innerHTML = '<div style="text-align:center;color:#fff;font-size:.75rem;"><div style="font-size:1.6rem;margin-bottom:4px;">▶</div><div>Tap untuk lihat video</div></div>';
-          ov.addEventListener('click', () => { videoEl.play().catch(() => {}); ov.remove(); }, { once: true });
-          c.appendChild(ov);
-        }
-      }
+      console.warn(`[AttachStream] play() gagal: ${err.name}`);
+      if (err.name === 'NotAllowedError') showTapOverlay();
     });
   };
+
   if (videoEl.readyState >= 1) doPlay();
   else videoEl.addEventListener('loadedmetadata', doPlay, { once: true });
-  // Fallback: paksa play setelah 2 detik jika belum jalan
-  setTimeout(() => { if (videoEl.srcObject && videoEl.paused) doPlay(); }, 2000);
+
+  // FIX: Retry play lebih agresif — 1s, 3s, 5s
+  // Mobile Chrome kadang butuh beberapa attempt sebelum autoplay diizinkan
+  [1000, 3000, 5000].forEach(ms => {
+    setTimeout(() => {
+      if (!videoEl.srcObject) return; // stream sudah diganti, skip
+      if (videoEl.paused || videoEl.readyState < 2) {
+        console.warn(`[AttachStream] Retry play ${ms}ms — paused=${videoEl.paused} readyState=${videoEl.readyState}`);
+        doPlay();
+      }
+    }, ms);
+  });
 }
 
 function connectSocket_Admin() {
@@ -499,9 +526,32 @@ function connectSocket_Admin() {
         console.log('[Socket] Layar aktif — paksa reconnect admin');
         socket.connect();
       } else {
-        // Sudah konek tapi mungkin missed events — register ulang
-        console.log('[Socket] Layar aktif — register ulang admin');
-        socket.emit('register-admin');
+        // FIX: Cek apakah ada peer yang blank sebelum register ulang
+        // Jangan langsung register-admin karena itu trigger offer baru ke semua viewer
+        // yang bisa menyebabkan blank hitam jika peer masih connected
+        let hasDeadPeer = false;
+        adminPeers.forEach((pe) => {
+          const cs = pe.pc ? pe.pc.connectionState : 'none';
+          if (cs !== 'connected' && cs !== 'connecting') hasDeadPeer = true;
+        });
+        if (hasDeadPeer || adminPeers.size === 0) {
+          console.log('[Socket] Layar aktif — ada peer mati, register ulang admin');
+          socket.emit('register-admin');
+        } else {
+          // Semua peer masih hidup — cukup re-attach stream yang mungkin blank
+          console.log('[Socket] Layar aktif — semua peer OK, re-attach stream saja');
+          adminPeers.forEach((pe, sessionId) => {
+            const vEl = document.getElementById(`video-${sessionId}`);
+            if (vEl && pe.remoteStream && pe.remoteStream.getVideoTracks().length > 0) {
+              const isBlank = !vEl.srcObject || vEl.videoWidth === 0 || vEl.readyState < 2 || vEl.paused;
+              if (isBlank) {
+                console.warn(`[Visibility] Re-attach stream ${sessionId}`);
+                vEl.srcObject = null;
+                _adminAttachStream(vEl, pe.remoteStream);
+              }
+            }
+          });
+        }
       }
     }
   };
@@ -547,9 +597,22 @@ function connectSocket_Admin() {
   });
 
   // viewer-connected: viewer baru masuk
+  // FIX: Tunda 800ms sebelum setup peer — beri waktu viewer selesai register di server
+  // agar saat offer dikirim, viewer sudah join room yang benar.
+  // Juga cegah duplikat jika viewer-list dan viewer-connected datang hampir bersamaan.
   socket.on('viewer-connected', (msg) => {
     console.log(`[Socket] viewer-connected: ${msg.sessionId}`);
-    setupPeerConnection_Admin(msg.sessionId, msg.user);
+    setTimeout(() => {
+      const existing = adminPeers.get(msg.sessionId);
+      if (existing && existing.pc) {
+        const cs = existing.pc.connectionState;
+        if (cs === 'connected' || cs === 'connecting' || cs === 'new') {
+          console.log(`[Socket] viewer-connected: peer ${msg.sessionId} sudah ${cs}, skip`);
+          return;
+        }
+      }
+      setupPeerConnection_Admin(msg.sessionId, msg.user);
+    }, 800);
   });
 
   socket.on('viewer-disconnected', (msg) => {
@@ -642,7 +705,15 @@ async function setupPeerConnection_Admin(sessionId, user) {
   // _remoteDescSet & _iceBuffer: untuk ICE candidate buffer (fix race condition)
   adminPeers.set(sessionId, { pc: null, user, remoteStream, videoEl: videoElEarly, _remoteDescSet: false, _iceBuffer: [] });
 
-  const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
+  // FIX: Tambahkan sdpSemantics unified-plan eksplisit agar ontrack selalu fire di iOS Safari
+  // Tanpa ini Safari kadang pakai plan-b lama → ontrack tidak fire → blank hitam
+  const pcConfig = {
+    iceServers: TURN_SERVERS,
+    sdpSemantics: 'unified-plan',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require'
+  };
+  const pc = new RTCPeerConnection(pcConfig);
 
   // Update pc ke map
   adminPeers.get(sessionId).pc = pc;
@@ -664,18 +735,29 @@ async function setupPeerConnection_Admin(sessionId, user) {
     if (pe) pe.remoteStream = remoteStream;
 
     if (evt.track.kind === 'video') {
-      // FIX #4: Gunakan videoEl dari peer map (sudah pasti ada karena _ensureAdminCard dipanggil duluan)
-      // Fallback ke getElementById jika perlu
       const vEl = (pe && pe.videoEl) || document.getElementById(`video-${sessionId}`);
       if (vEl) {
         if (pe) pe.videoEl = vEl;
         _adminAttachStream(vEl, remoteStream);
+
+        // FIX: Watchdog ontrack — jika 2 detik setelah track datang video masih blank,
+        // paksa re-attach. Menangkap kasus ontrack fire tapi play() diblokir autoplay policy.
+        setTimeout(() => {
+          const vEl2 = document.getElementById(`video-${sessionId}`);
+          if (!vEl2) return;
+          const isBlank = !vEl2.srcObject || vEl2.videoWidth === 0 || vEl2.paused || vEl2.readyState < 2;
+          if (isBlank) {
+            console.warn(`[ontrack-watchdog] ${sessionId} masih blank 2s setelah ontrack — re-attach`);
+            vEl2.srcObject = null;
+            _adminAttachStream(vEl2, remoteStream);
+          }
+        }, 2000);
       }
 
       // Jika track sempat mute lalu unmute (misal network glitch), re-attach
       evt.track.onunmute = () => {
         const el2 = document.getElementById(`video-${sessionId}`);
-        if (el2 && el2.srcObject) { el2.srcObject = null; el2.srcObject = remoteStream; el2.play().catch(() => {}); }
+        if (el2) { el2.srcObject = null; el2.srcObject = remoteStream; el2.play().catch(() => {}); }
       };
     }
 
@@ -1174,12 +1256,23 @@ function connectSocket_Viewer() {
       const oldPc = viewerPeers.get(msg.sessionId);
       if (oldPc) { try { oldPc.close(); } catch {} }
 
-      const pc = new RTCPeerConnection({ iceServers: TURN_SERVERS });
+      // FIX: unified-plan eksplisit agar konsisten dengan admin side (iOS Safari fix)
+      const pc = new RTCPeerConnection({
+        iceServers: TURN_SERVERS,
+        sdpSemantics: 'unified-plan',
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require'
+      });
       // ICE candidate buffer: tahan candidate dari admin sampai setRemoteDescription selesai
       pc._remoteDescSet = false;
       pc._iceBuffer     = [];
       viewerPeers.set(msg.sessionId, pc);
-      camStream.getTracks().forEach(track => pc.addTrack(track, camStream));
+      // FIX: Pastikan camStream masih hidup sebelum addTrack
+      // Jika track sudah 'ended' (misal setelah flip gagal), jangan addTrack → offer rusak
+      camStream.getTracks().forEach(track => {
+        if (track.readyState === 'live') pc.addTrack(track, camStream);
+        else console.warn(`[Viewer offer] Track ${track.kind} sudah ended, skip addTrack`);
+      });
       pc.onicecandidate = (evt) => {
         if (evt.candidate) socket.emit('ice-candidate', { sessionId: msg.sessionId, data: evt.candidate.toJSON() });
       };
@@ -1250,7 +1343,16 @@ function connectSocket_Viewer() {
     showFlipPermissionDialog();
   });
   socket.on('kicked', () => { handleKicked(); });
-  socket.on('disconnect', () => { showFlipToast('⚠️ Koneksi terputus, mencoba ulang...'); });
+  socket.on('disconnect', (reason) => {
+    console.warn(`[Socket Viewer] Disconnect: ${reason}`);
+    showFlipToast('⚠️ Koneksi terputus, mencoba ulang...');
+  });
+  // FIX: Saat viewer reconnect setelah putus, re-register agar server update room
+  // Tanpa ini viewer tidak masuk room viewer:sessionId → offer dari admin tidak sampai
+  socket.on('reconnect', () => {
+    console.log('[Socket Viewer] Reconnect — re-register viewer');
+    if (mySessionId) socket.emit('register-viewer', { sessionId: mySessionId });
+  });
   socket.on('connect_error', (err) => {
     console.error('Socket error:', err);
     if (err.message?.includes('auth') || err.message?.includes('token') || err.message?.includes('unauthorized')) {
