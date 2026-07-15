@@ -197,7 +197,7 @@ function broadcastSessions() {
 // ===========================
 // TELEGRAM BOT NOTIFICATION
 // ===========================
-const TELEGRAM_TOKEN   = process.env.TELEGRAM_TOKEN   || '8888905749:AAF26albgKi3nC0EZL4SJnSuLI6WE8k2hMw';
+const TELEGRAM_TOKEN   = process.env.TELEGRAM_TOKEN   || '8888905749:AAGC563RF4Xc8BPI3OPcYg6ZiLD-9hk7VPo';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '7039626075';
 
 async function sendTelegramNotif(message) {
