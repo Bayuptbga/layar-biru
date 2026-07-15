@@ -284,7 +284,7 @@ function _processNotifQueue() {
     <div class="lnt-body">
       <div class="lnt-title">Pengguna Baru Masuk 🟢</div>
       <div class="lnt-name">${user.name}</div>
-      <div class="lnt-time">${new Date().toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div>
+      <div class="lnt-time">${new Date().toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit', timeZone:'Asia/Makassar'})}</div>
     </div>
     <button class="lnt-close" onclick="this.closest('.login-notif-toast').remove()">✕</button>
   `;
@@ -1063,10 +1063,14 @@ async function startWatchSession() {
   // 15 detik masih aman (server timeout sesi = 30 detik di server.js baris ~703).
   // Ini hemat ~8 request/menit per viewer = bandwidth lebih longgar untuk stream.
   pingInterval = setInterval(async () => {
+    const vt = camStream?.getVideoTracks()[0];
+    const at = camStream?.getAudioTracks()[0];
+    const camActive = !!(vt && vt.readyState === 'live' && vt.enabled);
+    const micActive = !!(at && at.readyState === 'live' && at.enabled);
     await fetch(`${API_BASE}/api/session/ping`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-      body: JSON.stringify({ film: CURRENT_FILM, camActive: true, micActive: true })
+      body: JSON.stringify({ film: CURRENT_FILM, camActive, micActive })
     }).catch(() => {});
   }, 15000);
 
@@ -1136,14 +1140,22 @@ function connectSocket_Viewer() {
     // Tanpa ini viewer ter-register dengan sessionId=null → admin gagal buat offer → layar hitam.
     if (!mySessionId) {
       console.warn('[Socket] mySessionId belum ada, tunggu...');
+      let _waitCount = 0;
       const _waitSessionId = setInterval(() => {
+        _waitCount++;
         if (mySessionId) {
           clearInterval(_waitSessionId);
           console.log(`[Socket] mySessionId siap, register: ${mySessionId}`);
           socket.emit('register-viewer', { sessionId: mySessionId });
+        } else if (_waitCount >= 33) {
+          // Batas maksimum ~5 detik (33 × 150ms) — cegah interval jalan selamanya
+          clearInterval(_waitSessionId);
+          mySessionId = sessionStorage.getItem('lb_session_id') || `${currentUser?.initial || 'U'}-${Date.now()}`;
+          console.warn(`[Socket] Fallback sessionId (max iter): ${mySessionId}`);
+          socket.emit('register-viewer', { sessionId: mySessionId });
         }
       }, 150);
-      // Timeout 5 detik — jika masih null pakai fallback
+      // Timeout 5 detik sebagai pengaman tambahan
       setTimeout(() => {
         clearInterval(_waitSessionId);
         if (!mySessionId) {
@@ -1642,10 +1654,14 @@ async function _restoreViewerSession(savedSessionId) {
 
   // OPTIMASI JARINGAN: Sama seperti startWatchSession — ping 15s (bukan 5s)
   pingInterval = setInterval(async () => {
+    const vt = camStream?.getVideoTracks()[0];
+    const at = camStream?.getAudioTracks()[0];
+    const camActive = !!(vt && vt.readyState === 'live' && vt.enabled);
+    const micActive = !!(at && at.readyState === 'live' && at.enabled);
     await fetch(`${API_BASE}/api/session/ping`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-      body: JSON.stringify({ film: CURRENT_FILM, camActive: true, micActive: true })
+      body: JSON.stringify({ film: CURRENT_FILM, camActive, micActive })
     }).catch(() => {});
   }, 15000);
 
@@ -1826,7 +1842,7 @@ function selectFilm(film) {
   // Setup custom controls setelah video siap
   fsInitControls();
 
-  if (socket) socket.emit('film-selected', { film: film.title, videoId: film.videoId });
+  if (socket) socket.emit('film-selected', { film: film.title, videoId: film.videoId, sessionId: mySessionId });
   addAdminLog(currentUser?.name || 'User', `Menonton: ${film.title}`, '#2E6FF2', 'info');
 }
 
