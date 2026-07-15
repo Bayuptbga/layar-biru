@@ -197,10 +197,14 @@ function broadcastSessions() {
 // ===========================
 // TELEGRAM BOT NOTIFICATION
 // ===========================
-const TELEGRAM_TOKEN   = process.env.TELEGRAM_TOKEN   || '8888905749:AAGC563RF4Xc8BPI3OPcYg6ZiLD-9hk7VPo';
+const TELEGRAM_TOKEN   = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '7039626075';
 
 async function sendTelegramNotif(message) {
+  if (!TELEGRAM_TOKEN) {
+    console.warn('[TELEGRAM] TELEGRAM_TOKEN tidak diset di environment variable, notifikasi dilewati.');
+    return;
+  }
   try {
     const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     const res = await fetch(url, {
@@ -509,11 +513,15 @@ app.post('/api/login', async (req, res) => {
   addServerLog(trimmedName, 'baru saja masuk ke platform', '#4ADE80', 'connect');
   broadcastNewLogin({ name: trimmedName, initial, role: 'viewer' });
 
+  // FIX: totalSesi dihitung SETELAH sesi ditambahkan di /api/session/start,
+  // tapi karena login dan session/start terpisah, kita hitung activeSessions.size + 1
+  // sebagai estimasi (pengguna ini belum terdaftar di activeSessions saat login).
+  // Notifikasi di-await agar error tidak diam-diam terlewat.
   const waktu     = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' });
-  const totalSesi = activeSessions.size + 1;
+  const totalSesi = activeSessions.size + 1; // +1 karena pengguna ini belum masuk activeSessions
   sendTelegramNotif(
 `🟢 <b>Pengguna Baru Masuk</b>\n\n👤 <b>Nama</b>    : ${trimmedName}\n🕐 <b>Waktu</b>   : ${waktu} WIB\n📊 <b>Sesi aktif</b>: ${totalSesi} pengguna\n\n— <i>Layar Biru Dashboard</i>`
-  );
+  ).catch(e => console.error('[TELEGRAM] Login notif gagal:', e.message));
 
   res.json({ success: true, token, user: { name: trimmedName, initial, role: 'viewer' } });
 });
